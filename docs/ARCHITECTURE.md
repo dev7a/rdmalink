@@ -101,7 +101,10 @@ geometry reference for the real model.
   in commits of their own; R20 keeps the note if that fails too. Proven at
   11:36:42: a stored list that already had `en5` (left by a refused
   restore) was rewritten in two commits 275 ms apart, and configd added the
-  member 14 ms after the second apply.
+  member 14 ms after the second apply. At 11:38:01 a restore with the
+  service present went through first time: deletion applied, IPv6 detached
+  47 ms later, the port quiet within 470 ms, membership applied, member
+  added 35 ms after that.
 
 ## Layout
 
