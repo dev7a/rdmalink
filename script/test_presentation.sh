@@ -198,7 +198,7 @@ let farRight = PreflightPort(id: "en6", positionName: "Back, far right")
 var findings = PreflightFindings()
 findings.mountedThunderboltVolumes = []
 findings.route = .wiFi
-findings.notesWritability = .writable(availableBytes: nil)
+findings.notesWritability = .writable
 findings.portsLoopedBack = [farLeft, farRight]
 let looped = PreflightReport(findings)
 check(looped.rows[0].state == .unsatisfied, "R2 row is unsatisfied")

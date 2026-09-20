@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 /// Why a note could not be written, found or read. R14 is raised from
-/// ``BaselineStoreError/cannotWrite(_:)`` and the writability probe; R19 from
+/// ``BaselineStoreError/cannotWrite(_:)``; R19 from
 /// ``BaselineStoreError/missing(_:)``, ``BaselineStoreError/unreadable(_:)``,
 /// ``BaselineStoreError/malformed(_:)`` and
 /// ``BaselineStoreError/unsupportedVersion(_:)``.
@@ -33,14 +33,11 @@ public enum BaselineStoreError: Error, Sendable, Equatable, CustomStringConverti
 }
 
 /// Whether the notes folder can take a note right now, and what to say if not.
+/// Preflight answers it from ``Refusals/baselineWritable(_:)``.
 public enum BaselineWritability: Sendable, Equatable {
-    /// A note can be written. The free space is reported when the volume says.
-    case writable(availableBytes: Int64?)
-    /// There is not enough room. R14's detail line reads
-    /// "2 KB is all it needs. There's 0 bytes free on Macintosh HD."
-    case outOfSpace(availableBytes: Int64, volumeName: String?)
-    /// The folder will not take a file. R14's detail line reads
-    /// "The folder isn't writable."
+    /// A note can be written.
+    case writable
+    /// The folder will not take a file. `reason` is R14's detail line.
     case notWritable(reason: String)
 
     /// True when a note can be written.
@@ -62,8 +59,6 @@ public struct BaselineStore: Sendable {
     public static let applicationFolderName = "RDMALink"
     /// The notes folder inside it.
     public static let notesFolderName = "baselines"
-    /// What one note needs, and what R14's copy quotes: "2 KB is all it needs."
-    public static let requiredBytes: Int64 = 2048
     /// A note larger than this is not a note.
     public static let maximumNoteBytes = 1024 * 1024
 
@@ -199,57 +194,7 @@ public struct BaselineStore: Sendable {
         flushDirectory()
     }
 
-    // MARK: - R14
-
-    /// Can a note be written right now? Asked at preflight and again
-    /// immediately before the first write, because this is the promise every
-    /// other promise in the app rests on.
-    ///
-    /// The probe creates the folder if it has to, writes a small file, flushes
-    /// it and removes it again. It never touches an existing note.
-    public func checkWritable() -> BaselineWritability {
-        do {
-            try makeDirectory()
-        } catch {
-            return .notWritable(reason: "\(error)")
-        }
-        let space = freeSpace()
-        if let available = space.availableBytes, available < Self.requiredBytes {
-            return .outOfSpace(availableBytes: available, volumeName: space.volumeName)
-        }
-
-        var template = Array(directory.appending(path: ".writable.XXXXXX").path.utf8CString)
-        let descriptor = mkstemp(&template)
-        guard descriptor >= 0 else {
-            return failure(errno, space: space)
-        }
-        let path = CBuffer.string(template)
-        defer {
-            close(descriptor)
-            unlink(path)
-        }
-        let probe = Data(repeating: 0x20, count: Int(Self.requiredBytes))
-        if let code = write(probe, to: descriptor) { return failure(code, space: space) }
-        guard fsync(descriptor) == 0 else { return failure(errno, space: space) }
-        return .writable(availableBytes: space.availableBytes)
-    }
-
     // MARK: - Private
-
-    private func failure(_ code: Int32, space: (availableBytes: Int64?, volumeName: String?)) -> BaselineWritability {
-        if code == ENOSPC || code == EDQUOT {
-            return .outOfSpace(availableBytes: space.availableBytes ?? 0, volumeName: space.volumeName)
-        }
-        return .notWritable(reason: "\(directory.path) will not take a file (\(code))")
-    }
-
-    private func freeSpace() -> (availableBytes: Int64?, volumeName: String?) {
-        let values = try? directory.resourceValues(forKeys: [
-            .volumeAvailableCapacityForImportantUsageKey,
-            .volumeNameKey,
-        ])
-        return (values?.volumeAvailableCapacityForImportantUsage, values?.volumeName)
-    }
 
     private func makeDirectory() throws {
         do {

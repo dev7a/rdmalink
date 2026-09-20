@@ -18,7 +18,7 @@ public struct OperationEnvironment: Sendable {
     /// of time *before* `SCPreferencesCommitChanges` fails on a destroyed
     /// credential rather than after.
     public var burstBudget: Duration
-    /// When the credential was taken — ``AuthorizedSession/begin(clientName:mode:)``
+    /// When the credential was taken — ``AuthorizedSession/begin(clientName:)``
     /// returning. The default is "now", which is right for a burst that starts
     /// immediately after it, and that is the only kind the app runs (§S6).
     public var startedAt: ContinuousClock.Instant
@@ -131,8 +131,8 @@ public struct SetUpPortResult: Sendable, Equatable {
     public var bsdName: String
     public var positionName: String
     public var serviceName: String
-    /// The identifier of the service that was created, or `nil` in a dry run.
-    public var createdServiceID: String?
+    /// The identifier of the service that was created.
+    public var createdServiceID: String
     /// The bridges the port left, as System Settings names them.
     public var leftBridges: [String]
     /// What it took for the kernel to agree the port is out of every bridge.
@@ -188,7 +188,7 @@ public struct SetUpPortsResult: Sendable, Equatable {
 /// own service, IPv4 off and IPv6 link-local only.
 ///
 /// One password, one burst. Every write happens inside the credential window
-/// that opens when ``AuthorizedSession/begin(clientName:mode:)`` returns, and
+/// that opens when ``AuthorizedSession/begin(clientName:)`` returns, and
 /// nothing in here ever asks the user anything — there is no control the app
 /// cannot honour once the burst has started (UX_SPEC §S6).
 public struct SetUpPorts: Sendable {
@@ -452,8 +452,7 @@ public struct SetUpPorts: Sendable {
             // before it were committed and read back from the kernel, and
             // undoing work that landed to report a failure that did not would
             // be the half-done state R10 promises there isn't.
-            if !results.isEmpty, !writer.isDryRun,
-                environment.remainingBudget <= environment.policy.budget {
+            if !results.isEmpty, environment.remainingBudget <= environment.policy.budget {
                 // Not enough of the credential left to write this port and
                 // verify it, and discovering that at `commit` is how a port
                 // ends up in neither place (R11). Nothing was written for it.
@@ -529,13 +528,13 @@ public struct SetUpPorts: Sendable {
         // all" includes the note: the return record is what lets the row still
         // read "Back in the bridge" after a set-up that never got going.
         var changedSomething = false
-        let previous = writer.isDryRun ? nil : try? environment.store.load(port: port.bsdName)
+        let previous = try? environment.store.load(port: port.bsdName)
         do {
             return try write(
                 plan, writer: writer, world: world, environment: environment,
                 progress: progress, changedSomething: &changedSomething)
         } catch {
-            if !changedSomething, !writer.isDryRun {
+            if !changedSomething {
                 if let previous {
                     try? environment.store.save(previous)
                 } else {
@@ -562,7 +561,7 @@ public struct SetUpPorts: Sendable {
         // Step 1. The undo note is step 1 and not step 5: if it cannot be
         // written, nothing is changed at all (R14).
         progress(.saveUndoNote, .running)
-        let token = try writeNote(recorder: recorder, port: port, writer: writer)
+        let token = try writeNote(recorder: recorder, port: port)
         progress(.saveUndoNote, .done)
 
         // Step 2. Out of every bridge, including one that is down.
@@ -612,25 +611,23 @@ public struct SetUpPorts: Sendable {
 
         // The created service goes into the note **before** the commit, so a
         // crash mid-burst still leaves something that can find it again.
-        if !writer.isDryRun {
-            do {
-                try recorder.recordCreatedService(created, token)
-            } catch {
-                guard !left.isEmpty else { throw Refusals.baselineUnwritable(detail: "\(error)") }
-                // §6.1 rule 7 wants the rollback stated first and the spec has
-                // no sentence for "the note wouldn't take the service", so the
-                // rollback runs and R14 is what the user is told.
-                changedSomething = true
-                try? rollBackQuietly(port: port, created: created, left: left,
-                                     serviceName: plan.serviceName, writer: writer,
-                                     policy: environment.policy, progress: progress)
-                throw Refusals.baselineUnwritable(detail: "\(error)")
-            }
+        do {
+            try recorder.recordCreatedService(created, token)
+        } catch {
+            guard !left.isEmpty else { throw Refusals.baselineUnwritable(detail: "\(error)") }
+            // §6.1 rule 7 wants the rollback stated first and the spec has
+            // no sentence for "the note wouldn't take the service", so the
+            // rollback runs and R14 is what the user is told.
+            changedSomething = true
+            try? rollBackQuietly(port: port, created: created, left: left,
+                                 serviceName: plan.serviceName, writer: writer,
+                                 policy: environment.policy, progress: progress)
+            throw Refusals.baselineUnwritable(detail: "\(error)")
         }
 
         do {
             try writer.commitAndApply()
-            changedSomething = changedSomething || !writer.isDryRun
+            changedSomething = true
         } catch let error as NetworkConfigurationError {
             // Another writer holding the configuration is R12, and nothing was
             // committed or applied, so there is nothing to put back.
@@ -646,56 +643,45 @@ public struct SetUpPorts: Sendable {
         // Step 5. Never an assumption: a port must be out of every bridge, and
         // only the kernel can say so.
         progress(.checkOutOfEveryBridge, .running)
-        var agreement = KernelAgreement(agreed: true, settledOnItsOwn: true,
-                                        retriedMembership: false, settledAfterRetry: false,
-                                        reads: 0)
-        if !writer.isDryRun {
-            // Both sources, and both have to agree: a kernel that has let go
-            // while the preferences still list the port is a port
-            // `SCNetworkServiceCreate` would refuse, and the honest answer is
-            // that the removal has not landed.
-            agreement = try KernelVerification.wait(
-                writer: writer, policy: environment.policy,
-                budget: environment.remainingBudget) { reading in
-                    reading.isOutOfEveryBridge(port.bsdName)
-                }
-            guard agreement.agreed else {
-                // Out of credential rather than out of patience: the honest
-                // reason is R8's, and the port goes back either way.
-                changedSomething = true
-                try rollBack(port: port, created: created, left: left,
-                             cause: "macOS didn't actually let go of the port",
-                             serviceName: plan.serviceName,
-                             expired: agreement.ranOutOfTime,
-                             writer: writer, environment: environment, progress: progress)
+        // Both sources, and both have to agree: a kernel that has let go while
+        // the preferences still list the port is a port
+        // `SCNetworkServiceCreate` would refuse, and the honest answer is that
+        // the removal has not landed.
+        let agreement = try KernelVerification.wait(
+            writer: writer, policy: environment.policy,
+            budget: environment.remainingBudget) { reading in
+                reading.isOutOfEveryBridge(port.bsdName)
             }
-            // The log is a record, not a gate: a log that will not take a line
-            // does not undo a port that is genuinely set up.
-            try? environment.log.append(
-                .setUp(port: port.bsdName, positionName: port.positionName))
+        guard agreement.agreed else {
+            // Out of credential rather than out of patience: the honest
+            // reason is R8's, and the port goes back either way.
+            changedSomething = true
+            try rollBack(port: port, created: created, left: left,
+                         cause: "macOS didn't actually let go of the port",
+                         serviceName: plan.serviceName,
+                         expired: agreement.ranOutOfTime,
+                         writer: writer, environment: environment, progress: progress)
         }
+        // The log is a record, not a gate: a log that will not take a line
+        // does not undo a port that is genuinely set up.
+        try? environment.log.append(
+            .setUp(port: port.bsdName, positionName: port.positionName))
         progress(.checkOutOfEveryBridge, .done)
 
         return SetUpPortResult(
             bsdName: port.bsdName,
             positionName: port.positionName,
             serviceName: plan.serviceName,
-            createdServiceID: writer.isDryRun ? nil : created.identifier,
+            createdServiceID: created.identifier,
             leftBridges: left.map(\.name),
             agreement: agreement)
     }
 
-    /// Writes the note, or refuses. A dry run proves R14 rather than using it:
-    /// a note left behind would claim a port is managed that nothing touched.
+    /// Writes the note, or refuses (R14).
     private func writeNote(
         recorder: BaselineRecorder,
-        port: OperationPort,
-        writer: NetworkWriter
+        port: OperationPort
     ) throws -> BaselineToken {
-        guard !writer.isDryRun else {
-            if let refusal = recorder.checkWritable() { throw refusal }
-            return BaselineToken(portBSDName: port.bsdName)
-        }
         do {
             let token = try recorder.record(port.bsdName)
             guard token.portBSDName == port.bsdName else {
@@ -736,30 +722,26 @@ public struct SetUpPorts: Sendable {
             let rewroteAtAddTime = try undo(
                 port: port, created: created, left: left, serviceName: serviceName,
                 writer: writer, policy: environment.policy, progress: progress)
-            if writer.isDryRun {
-                succeeded = true
-            } else {
-                // A membership the stored list already had was rewritten on
-                // the way back in; that is the retry, whether or not the
-                // verification had to run one of its own.
-                let agreement = try KernelVerification.wait(
-                    writer: writer, policy: environment.policy,
-                    budget: environment.remainingBudget,
-                    retry: {
-                        for entry in left.reversed() {
-                            try BridgeRejoin.toggle(
-                                port.bsdName, in: entry.membership,
-                                at: entry.membership.members.firstIndex(of: port.bsdName),
-                                writer: writer, policy: environment.policy)
-                        }
-                        try writer.commitAndApply()
-                    }) { reading in
-                        reading.isMember(port.bsdName,
-                                         ofAll: left.map(\.membership.bridgeName))
+            // A membership the stored list already had was rewritten on the
+            // way back in; that is the retry, whether or not the verification
+            // had to run one of its own.
+            let agreement = try KernelVerification.wait(
+                writer: writer, policy: environment.policy,
+                budget: environment.remainingBudget,
+                retry: {
+                    for entry in left.reversed() {
+                        try BridgeRejoin.toggle(
+                            port.bsdName, in: entry.membership,
+                            at: entry.membership.members.firstIndex(of: port.bsdName),
+                            writer: writer, policy: environment.policy)
                     }
-                    .foldingRewrite(atAddTime: rewroteAtAddTime)
-                succeeded = agreement.agreed
-            }
+                    try writer.commitAndApply()
+                }) { reading in
+                    reading.isMember(port.bsdName,
+                                     ofAll: left.map(\.membership.bridgeName))
+                }
+                .foldingRewrite(atAddTime: rewroteAtAddTime)
+            succeeded = agreement.agreed
         } catch {
             succeeded = false
         }

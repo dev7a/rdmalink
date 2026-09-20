@@ -100,16 +100,6 @@ public final class AuthorizedSession {
     /// The authorization right configd requires for network changes.
     public static let right = "system.services.systemconfiguration.network"
 
-    public enum Mode: Sendable, Equatable {
-        /// Take the credential, make every change in memory, then throw it all
-        /// away: ``commit()`` and ``apply()`` do nothing.
-        case dryRun
-        /// Commit and apply for real.
-        case live
-    }
-
-    public let mode: Mode
-
     /// The open preferences session.
     ///
     /// Deliberately **not** public: configd keeps the `AuthorizationRef` this
@@ -130,8 +120,7 @@ public final class AuthorizedSession {
     /// True once ``end()`` has destroyed the credential. Nothing works after.
     public private(set) var isEnded = false
 
-    private init(mode: Mode, preferences: SCPreferences, authorization: AuthorizationRef?) {
-        self.mode = mode
+    private init(preferences: SCPreferences, authorization: AuthorizationRef?) {
         self.openPreferences = preferences
         self.authorization = authorization
     }
@@ -139,12 +128,9 @@ public final class AuthorizedSession {
     /// Asks macOS for the network right and opens an authorized session.
     ///
     /// This is the interactive path: it puts up the system password dialog.
-    /// Even in ``Mode/dryRun`` the credential is taken, because the point of a
-    /// dry run is to prove the whole burst except the final commit.
-    public static func begin(
-        clientName: String = "RDMALink",
-        mode: Mode
-    ) throws -> AuthorizedSession {
+    /// Every session is live: what the burst writes through it is committed
+    /// and applied for real, and the operations verify it against the kernel.
+    public static func begin(clientName: String = "RDMALink") throws -> AuthorizedSession {
         var authorization: AuthorizationRef?
         let created = AuthorizationCreate(nil, nil, [], &authorization)
         guard created == errAuthorizationSuccess, let authorization else {
@@ -176,8 +162,7 @@ public final class AuthorizedSession {
             AuthorizationFree(authorization, [])
             throw NetworkConfigurationError.preferencesUnavailable(code)
         }
-        return AuthorizedSession(mode: mode, preferences: preferences,
-                                 authorization: authorization)
+        return AuthorizedSession(preferences: preferences, authorization: authorization)
     }
 
     /// Takes the configuration lock. Fails rather than waits: two writers is
@@ -197,17 +182,15 @@ public final class AuthorizedSession {
         isLocked = true
     }
 
-    /// Writes the session's changes to disk. A no-op in ``Mode/dryRun``.
+    /// Writes the session's changes to disk.
     public func commit() throws {
         let preferences = try preferences
-        guard mode == .live else { return }
         try check(SCPreferencesCommitChanges(preferences), "Commit network preferences")
     }
 
-    /// Tells configd to adopt what was committed. A no-op in ``Mode/dryRun``.
+    /// Tells configd to adopt what was committed.
     public func apply() throws {
         let preferences = try preferences
-        guard mode == .live else { return }
         try check(SCPreferencesApplyChanges(preferences), "Apply network preferences")
     }
 

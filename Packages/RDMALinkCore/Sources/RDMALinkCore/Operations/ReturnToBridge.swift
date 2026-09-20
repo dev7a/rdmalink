@@ -229,16 +229,12 @@ public struct ReturnToBridge: Sendable {
             store: environment.store,
             notes: [port.bsdName: BaselineCapture.note(port: port, world: world,
                                                        returnedTo: returnedTo)])
-        if writer.isDryRun {
-            if let refusal = recorder.checkWritable() { throw refusal }
-        } else {
-            do {
-                _ = try recorder.record(port.bsdName)
-            } catch let refusal as Refusal {
-                throw refusal
-            } catch {
-                throw Refusals.baselineUnwritable(detail: "\(error)")
-            }
+        do {
+            _ = try recorder.record(port.bsdName)
+        } catch let refusal as Refusal {
+            throw refusal
+        } catch {
+            throw Refusals.baselineUnwritable(detail: "\(error)")
         }
         progress(.saveUndoNote, .done)
 
@@ -254,10 +250,8 @@ public struct ReturnToBridge: Sendable {
                 // while IPv6 is still being torn down and the kernel refuses
                 // it (see `BridgeRejoin`).
                 try commitOrBusy(writer)
-                if !writer.isDryRun {
-                    _ = try KernelVerification.waitUntilQuiet(
-                        port.bsdName, writer: writer, policy: environment.policy)
-                }
+                _ = try KernelVerification.waitUntilQuiet(
+                    port.bsdName, writer: writer, policy: environment.policy)
             }
             progress(step, .done)
         }
@@ -275,36 +269,29 @@ public struct ReturnToBridge: Sendable {
 
         // Step 4. Read back from the kernel before the sheet says it is in.
         progress(.checkInBridge, .running)
-        var agreement = KernelAgreement(agreed: true, settledOnItsOwn: true,
-                                        retriedMembership: false, settledAfterRetry: false,
-                                        reads: 0)
-        if !writer.isDryRun {
-            // Both sources: the kernel bridging it, and the preferences
-            // listing it — the same two the set-up path has to see cleared.
-            agreement = try KernelVerification.wait(
-                writer: writer, policy: environment.policy,
-                retry: {
-                    try BridgeRejoin.toggle(port.bsdName, in: membership, at: nil,
-                                            writer: writer, policy: environment.policy)
-                    try writer.commitAndApply()
-                }) { reading in
-                    reading.isMember(port.bsdName, ofAll: [bridgeBSDName])
-                }
-                .foldingRewrite(atAddTime: rewroteAtAddTime)
-            guard agreement.agreed else {
-                // On a miss the note is kept and R20 applies (§7.5 step 4),
-                // saying a service went only when one did.
-                throw Refusals.notBackInBridge(
-                    port: port.observed, bridgeName: bridgeName, removedService: deleted != nil)
+        // Both sources: the kernel bridging it, and the preferences listing
+        // it — the same two the set-up path has to see cleared.
+        let agreement = try KernelVerification.wait(
+            writer: writer, policy: environment.policy,
+            retry: {
+                try BridgeRejoin.toggle(port.bsdName, in: membership, at: nil,
+                                        writer: writer, policy: environment.policy)
+                try writer.commitAndApply()
+            }) { reading in
+                reading.isMember(port.bsdName, ofAll: [bridgeBSDName])
             }
-            // Step 5. The change log records the return (§S11), saying that a
-            // service went only when one did.
-            try? environment.log.append(.returned(
-                port: port.bsdName, positionName: port.positionName,
-                bridgeName: bridgeName, removedService: deleted != nil))
-        } else {
-            agreement = agreement.foldingRewrite(atAddTime: rewroteAtAddTime)
+            .foldingRewrite(atAddTime: rewroteAtAddTime)
+        guard agreement.agreed else {
+            // On a miss the note is kept and R20 applies (§7.5 step 4),
+            // saying a service went only when one did.
+            throw Refusals.notBackInBridge(
+                port: port.observed, bridgeName: bridgeName, removedService: deleted != nil)
         }
+        // Step 5. The change log records the return (§S11), saying that a
+        // service went only when one did.
+        try? environment.log.append(.returned(
+            port: port.bsdName, positionName: port.positionName,
+            bridgeName: bridgeName, removedService: deleted != nil))
         progress(.checkInBridge, .done)
 
         let elapsed = clock.now - started

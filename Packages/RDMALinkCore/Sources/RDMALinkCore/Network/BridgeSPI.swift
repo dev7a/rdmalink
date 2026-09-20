@@ -272,8 +272,8 @@ public enum BridgeSPI {
     /// **Internal on purpose.** This only changes an open preferences session;
     /// the commit and the apply that realise it are the caller's. It is
     /// reachable only through ``NetworkWriter``, which owns the authorized
-    /// session, honours ``AuthorizedSession/Mode/dryRun``, requires the undo
-    /// note first, and verifies the kernel afterwards.
+    /// session, requires the undo note first, and verifies the kernel
+    /// afterwards.
     ///
     /// - Returns: what the bridge's membership should now be.
     @discardableResult

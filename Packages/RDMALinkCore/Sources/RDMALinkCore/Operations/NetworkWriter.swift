@@ -12,13 +12,6 @@ import SystemConfiguration
 /// Internal on purpose: nothing outside this module writes network
 /// configuration, and the app reaches these flows through the operations.
 protocol NetworkWriter: AnyObject {
-    /// True when the session will throw its changes away instead of
-    /// committing them.
-    ///
-    /// A dry run writes no bridge membership at all and never applies.
-    var isDryRun: Bool { get }
-
-
     /// Takes the configuration lock. Fails rather than waits — two writers is
     /// how configurations get mangled (R12).
     func lock() throws
@@ -60,9 +53,6 @@ final class LiveNetworkWriter: NetworkWriter {
         self.session = session
         self.runner = runner
     }
-
-    var isDryRun: Bool { session.mode == .dryRun }
-
 
     func lock() throws { try session.lock() }
 
@@ -106,7 +96,6 @@ final class LiveNetworkWriter: NetworkWriter {
         // recorded: a `bridgeN` name freed by a delete and handed to another
         // virtual interface is not the bridge this change is about.
         let (resolved, _) = try BridgeSPI.resolveRecorded(bridge, in: preferences)
-        guard !isDryRun else { return }
         try session.lock()
         try BridgeSPI.removeMember(bsdName: bsdName, from: resolved)
     }
@@ -115,7 +104,6 @@ final class LiveNetworkWriter: NetworkWriter {
         try BridgeSPI.requireMembershipEditing()
         let preferences = try session.preferences
         let (resolved, _) = try BridgeSPI.resolveRecorded(bridge, in: preferences)
-        guard !isDryRun else { return }
         try session.lock()
         try BridgeSPI.addMember(bsdName: bsdName, to: resolved, at: position, in: preferences)
     }
@@ -132,7 +120,6 @@ final class LiveNetworkWriter: NetworkWriter {
         guard let service = StandalonePortRemoval.liveService(
             identifier: identifier, expectedInterface: expectedInterface, in: preferences)
         else { return false }
-        guard !isDryRun else { return false }
         try session.lock()
         try session.check(SCNetworkServiceRemove(service), "Delete the service")
         return true

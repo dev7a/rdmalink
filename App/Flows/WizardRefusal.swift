@@ -279,9 +279,6 @@ enum WizardRefusals {
 
     private static func detail(for writability: BaselineWritability?) -> LocalizedStringResource? {
         switch writability {
-        case let .outOfSpace(availableBytes, volumeName):
-            guard let volumeName else { return "The folder isn't writable." }
-            return "2 KB is all it needs. There's \(availableBytes) bytes free on \(volumeName)."
         case .notWritable:
             return "The folder isn't writable."
         case .writable, nil:

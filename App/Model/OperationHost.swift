@@ -28,11 +28,10 @@ enum OperationHost {
     /// is what keeps a type that owns an `AuthorizationRef` and an open
     /// `SCPreferences` on one thread.
     static func burst<T: Sendable>(
-        mode: AuthorizedSession.Mode = .live,
         _ body: @escaping @Sendable (AuthorizedSession) throws -> T
     ) async throws -> T {
         try await Task.detached(priority: .userInitiated) {
-            let session = try AuthorizedSession.begin(mode: mode)
+            let session = try AuthorizedSession.begin()
             defer { session.end() }
             return try body(session)
         }.value
@@ -42,10 +41,9 @@ enum OperationHost {
     /// a thread of its own — S6 drives its checklist from a detached task, so
     /// it opens the session there rather than nesting another one.
     static func burstSynchronously<T>(
-        mode: AuthorizedSession.Mode = .live,
         _ body: (AuthorizedSession) throws -> T
     ) throws -> T {
-        let session = try AuthorizedSession.begin(mode: mode)
+        let session = try AuthorizedSession.begin()
         defer { session.end() }
         return try body(session)
     }

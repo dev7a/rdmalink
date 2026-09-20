@@ -39,8 +39,6 @@ final class KernelState {
 }
 
 final class FakeWriter: NetworkWriter {
-    var isDryRun = false
-
     /// Every write, in order.
     private(set) var calls: [WriterCall] = []
     /// How many times `ifconfig` was read.

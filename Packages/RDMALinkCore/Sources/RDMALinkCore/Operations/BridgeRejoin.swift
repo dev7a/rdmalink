@@ -55,9 +55,7 @@ enum BridgeRejoin {
     ) throws {
         try writer.removeMember(bsdName, from: bridge)
         try writer.commitAndApply()
-        if !writer.isDryRun {
-            _ = try KernelVerification.waitUntilQuiet(bsdName, writer: writer, policy: policy)
-        }
+        _ = try KernelVerification.waitUntilQuiet(bsdName, writer: writer, policy: policy)
         try writer.addMember(bsdName, to: bridge, at: position)
     }
 
@@ -69,8 +67,6 @@ enum BridgeRejoin {
         policy: KernelWaitPolicy
     ) throws {
         try writer.commitAndApply()
-        if !writer.isDryRun {
-            _ = try KernelVerification.waitUntilQuiet(bsdName, writer: writer, policy: policy)
-        }
+        _ = try KernelVerification.waitUntilQuiet(bsdName, writer: writer, policy: policy)
     }
 }

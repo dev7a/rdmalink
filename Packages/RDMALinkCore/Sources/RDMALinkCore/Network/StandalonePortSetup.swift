@@ -18,10 +18,6 @@ public struct BaselineToken: Sendable, Equatable {
 /// The seam to the `Store` module's undo note, as closures so neither module
 /// has to know the other's types.
 public struct BaselineRecorder: Sendable {
-    /// Whether a note could be written right now, **without writing one**.
-    /// This is how ``AuthorizedSession/Mode/dryRun`` proves R14: a dry run
-    /// leaves nothing behind, so it cannot prove the gate by using it.
-    public var checkWritable: @Sendable () -> Refusal?
     /// Writes how the port looks today and returns proof. Throwing means
     /// nothing may be changed at all (R14).
     public var record: @Sendable (_ bsdName: String) throws -> BaselineToken
@@ -32,11 +28,9 @@ public struct BaselineRecorder: Sendable {
     public var recordCreatedService: @Sendable (_ service: CreatedServiceRecord, _ token: BaselineToken) throws -> Void
 
     public init(
-        checkWritable: @escaping @Sendable () -> Refusal?,
         record: @escaping @Sendable (_ bsdName: String) throws -> BaselineToken,
         recordCreatedService: @escaping @Sendable (_ service: CreatedServiceRecord, _ token: BaselineToken) throws -> Void
     ) {
-        self.checkWritable = checkWritable
         self.record = record
         self.recordCreatedService = recordCreatedService
     }
@@ -97,21 +91,6 @@ public struct StandalonePortPlan: Sendable, Equatable {
         self.existing = existing
         self.outcome = outcome
         self.refusal = refusal
-    }
-}
-
-/// The service RDMALink created, captured at creation time.
-public struct CreatedService: Sendable, Equatable {
-    public var serviceID: String
-    public var serviceName: String
-    public var bsdName: String
-    public var createdAt: Date
-
-    public init(serviceID: String, serviceName: String, bsdName: String, createdAt: Date = Date()) {
-        self.serviceID = serviceID
-        self.serviceName = serviceName
-        self.bsdName = bsdName
-        self.createdAt = createdAt
     }
 }
 
@@ -224,97 +203,6 @@ public struct StandalonePortSetup: Sendable {
     }
 
     // MARK: - Perform
-
-    /// Writes the service, in one burst inside the credential window.
-    ///
-    /// Order: re-read the world, refuse if anything is in the way, take the
-    /// lock, **write the undo note**, then create. The service is recorded
-    /// before the commit. The session is left locked so the caller can keep the
-    /// burst going, and must be ended by the caller.
-    ///
-    /// - Parameter context: re-read **inside the burst**, not carried over from
-    ///   preflight — ``PreflightContext/read(archetype:runner:)`` is what that
-    ///   looks like. Passing a stale one defeats the whole gate.
-    ///
-    /// - Returns: the service that was created, or `nil` in
-    ///   ``AuthorizedSession/Mode/dryRun``, which proves the burst and leaves
-    ///   nothing behind — no service, and no undo note claiming one.
-    ///
-    /// - Throws: ``Refusal`` when the world says no, ``NetworkConfigurationError``
-    ///   when macOS does.
-    @discardableResult
-    public func perform(
-        session: AuthorizedSession,
-        baseline: BaselineRecorder,
-        context: PreflightContext
-    ) throws -> CreatedService? {
-        let preferences = try session.preferences
-        let snapshot = try InterfaceSnapshot.read()
-        let services = NetworkServices.read(from: preferences)
-        // R9 names a System Settings object, so it gets the same map the rest
-        // of the app uses. `SCBridgeInterfaceCopyAll` is a plain symbol and
-        // needs no extra probe; an absent SPI degrades to the BSD name.
-        let storedBridges = (try? BridgeSPI.bridges(in: preferences)) ?? StoredBridges.read().bridges
-        let bridgeNames = storedBridges.reduce(into: [String: String]()) { names, bridge in
-            names[bridge.bsdName] = bridge.displayName
-        }
-        let plan = preview(snapshot: snapshot, services: services,
-                           context: context, storedBridges: storedBridges,
-                           bridgeNames: bridgeNames)
-        if let refusal = plan.refusal { throw refusal }
-        if !NetworkServices.services(for: port.bsdName, in: services).isEmpty {
-            // Belt and braces: `preview` routes this port to Adopt, so no
-            // screen in the app offers a button that reaches here.
-            throw NetworkConfigurationError.missing(
-                "a free interface: \(port.bsdName) already has a service")
-        }
-
-        try session.lock()
-
-        let token: BaselineToken
-        if session.mode == .live {
-            do {
-                token = try baseline.record(port.bsdName)
-            } catch {
-                throw Refusals.baselineUnwritable(detail: "\(error)")
-            }
-            guard token.portBSDName == port.bsdName else {
-                throw Refusals.baselineUnwritable(
-                    detail: "The note that came back is about \(token.portBSDName), not \(port.bsdName).")
-            }
-        } else {
-            // A dry run proves R14 rather than using it: writing a note here
-            // would leave the app believing a port is managed that nothing
-            // ever touched.
-            if let refusal = baseline.checkWritable() { throw refusal }
-            token = BaselineToken(portBSDName: port.bsdName)
-        }
-
-        let record = try Self.createService(
-            bsdName: port.bsdName, named: plan.serviceName, session: session)
-
-        guard session.mode == .live else {
-            // Everything above happened in memory. Nothing is committed, the
-            // preferences are thrown away with the session, and no note claims
-            // a service that will never exist.
-            return nil
-        }
-
-        // The record goes in the note before the commit: matching is by
-        // identifier, never by name — and the configuration alongside it is
-        // what lets Restore tell RDMALink's own work from a service somebody
-        // has since taken over.
-        do {
-            try baseline.recordCreatedService(record, token)
-        } catch {
-            throw Refusals.baselineUnwritable(detail: "\(error)")
-        }
-
-        try session.commit()
-        try session.apply()
-        return CreatedService(serviceID: record.identifier, serviceName: plan.serviceName,
-                              bsdName: port.bsdName, createdAt: Date())
-    }
 
     /// Creates one standalone service on `bsdName`, names it, turns IPv4 off
     /// and sets IPv6 to link-local only.
@@ -488,34 +376,6 @@ public struct StandalonePortRemoval: Sendable {
         if !plan.differences.isEmpty {
             plan.refusal = Refusals.createdServiceEdited(port: port, differences: plan.differences)
         }
-        return plan
-    }
-
-    /// Removes the service. Does nothing, successfully, when it is already gone.
-    ///
-    /// The session is left locked for the rest of the burst — the port still
-    /// has to go back into its bridges — and must be ended by the caller.
-    @discardableResult
-    public func perform(session: AuthorizedSession) throws -> StandalonePortRemovalPlan {
-        let preferences = try session.preferences
-        let plan = preview(services: NetworkServices.read(from: preferences))
-        if let refusal = plan.refusal { throw refusal }
-        guard !plan.isAlreadyGone else { return plan }
-
-        guard let service = Self.liveService(identifier: record.identifier,
-                                             expectedInterface: record.interfaceBSDName,
-                                             in: preferences) else {
-            return StandalonePortRemovalPlan(serviceID: record.identifier,
-                                             serviceName: plan.serviceName,
-                                             interfaceBSDName: plan.interfaceBSDName,
-                                             isAlreadyGone: true)
-        }
-
-        guard session.mode == .live else { return plan }
-        try session.lock()
-        try session.check(SCNetworkServiceRemove(service), "Delete the RDMA service")
-        try session.commit()
-        try session.apply()
         return plan
     }
 

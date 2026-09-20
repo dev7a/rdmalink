@@ -138,7 +138,7 @@ struct PreflightFindings: Sendable, Equatable {
         }
         self.notesWritability =
             world.notesAreWritable == nil
-            ? .writable(availableBytes: nil)
+            ? .writable
             : .notWritable(reason: world.notesAreWritable?.detail ?? "")
     }
 }

@@ -217,19 +217,6 @@ extension BaselineRecorder {
     /// not as it was when the review screen was drawn.
     static func live(store: BaselineStore, notes: [String: PortBaseline]) -> BaselineRecorder {
         BaselineRecorder(
-            checkWritable: {
-                switch store.checkWritable() {
-                case .writable:
-                    return nil
-                case let .outOfSpace(available, volume):
-                    let amount = available.formatted(.byteCount(style: .file, spellsOutZero: false))
-                    return Refusals.baselineUnwritable(
-                        detail: "2 KB is all it needs. There's \(amount) free on "
-                            + "\(volume ?? store.directory.path).")
-                case let .notWritable(reason):
-                    return Refusals.baselineUnwritable(detail: "The folder isn't writable. \(reason)")
-                }
-            },
             record: { bsdName in
                 guard let note = notes[bsdName] else {
                     throw BaselineStoreError.missing(bsdName)

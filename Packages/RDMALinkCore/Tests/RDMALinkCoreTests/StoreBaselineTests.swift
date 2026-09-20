@@ -293,22 +293,8 @@ struct StoreBaselineTests {
         #expect(throws: BaselineStoreError.self) { try store.load(port: "en5") }
     }
 
-    @Test("R14: the folder either takes a note or says why not")
-    func probesWritability() throws {
-        let root = try temporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let directory = root.appending(path: "baselines")
-        let store = BaselineStore(directory: directory)
-
-        let writable = store.checkWritable()
-        #expect(writable.isWritable)
-        // The probe makes the folder and leaves nothing behind.
-        #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == [])
-        #expect(try permissions(directory) == 0o700)
-    }
-
-    @Test("R14: a folder that will not take a file")
-    func reportsUnwritableFolder() throws {
+    @Test("R14: a folder that will not take a file refuses the save")
+    func refusesToSaveIntoUnwritableFolder() throws {
         let root = try temporaryDirectory()
         defer {
             try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
@@ -317,11 +303,6 @@ struct StoreBaselineTests {
         try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: root.path)
         let store = BaselineStore(directory: root.appending(path: "baselines"))
 
-        let writability = store.checkWritable()
-        #expect(!writability.isWritable)
-        if case .notWritable = writability {} else {
-            Issue.record("Expected an unwritable folder, got \(writability)")
-        }
         // R14 comes before the first write, and nothing is written after it.
         #expect(throws: BaselineStoreError.self) { try store.save(sampleBaseline()) }
     }

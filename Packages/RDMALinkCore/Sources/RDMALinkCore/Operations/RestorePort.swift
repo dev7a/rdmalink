@@ -307,10 +307,8 @@ public struct RestorePort: Sendable {
                 // membership lands while IPv6 is still being torn down and the
                 // kernel refuses it (see `BridgeRejoin`).
                 try commitOrBusy(writer)
-                if !writer.isDryRun {
-                    _ = try KernelVerification.waitUntilQuiet(
-                        port.bsdName, writer: writer, policy: environment.policy)
-                }
+                _ = try KernelVerification.waitUntilQuiet(
+                    port.bsdName, writer: writer, policy: environment.policy)
             }
             progress(step, .done)
         }
@@ -338,7 +336,7 @@ public struct RestorePort: Sendable {
         var agreement = KernelAgreement(agreed: true, settledOnItsOwn: true,
                                         retriedMembership: false, settledAfterRetry: false,
                                         reads: 0)
-        if mode == .full, !writer.isDryRun, !note.bridges.isEmpty {
+        if mode == .full, !note.bridges.isEmpty {
             // Both sources: the port is back when the kernel is bridging it
             // **and** the preferences list it again, which is the state it
             // was found in.
@@ -370,7 +368,7 @@ public struct RestorePort: Sendable {
         progress(.checkBackInBridge, .done)
 
         var deletedNote = false
-        if mode == .full, !writer.isDryRun {
+        if mode == .full {
             try environment.store.delete(port: port.bsdName)
             deletedNote = true
             try? environment.log.append(ChangeEntry(
