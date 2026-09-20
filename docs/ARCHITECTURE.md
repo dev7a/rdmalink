@@ -98,7 +98,10 @@ geometry reference for the real model.
   to go quiet (`KernelVerification.waitUntilQuiet`), and only then is the
   membership written and committed (`BridgeRejoin`). When the kernel still
   has not followed, the retry is to take the membership out and put it back
-  in commits of their own; R20 keeps the note if that fails too.
+  in commits of their own; R20 keeps the note if that fails too. Proven at
+  11:36:42: a stored list that already had `en5` (left by a refused
+  restore) was rewritten in two commits 275 ms apart, and configd added the
+  member 14 ms after the second apply.
 
 ## Layout
 
