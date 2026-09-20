@@ -1,0 +1,539 @@
+<title>RDMALink Stage</title>
+<style>
+  :root {
+    --bg: #ececef; --stage: #e2e2e6; --panel: #f6f6f8; --grouped: #ffffff; --line: rgba(0,0,0,0.08);
+    --ink: #1d1d1f; --ink2: rgba(29,29,31,0.62); --ink3: rgba(29,29,31,0.42);
+    --accent: #0a84ff; --accent-soft: rgba(10,132,255,0.16); --material: rgba(255,255,255,0.72);
+    --scene-bg: #e2e2e6; --scene-lift: #f2f2f5; --ring-sec: rgba(29,29,31,0.55);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, sans-serif;
+    --mono: "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1e1e20; --stage: #1a1a1c; --panel: #1e1e20; --grouped: #2a2a2d; --line: rgba(255,255,255,0.08);
+      --ink: #f5f5f7; --ink2: rgba(245,245,247,0.62); --ink3: rgba(245,245,247,0.40);
+      --accent: #0a84ff; --accent-soft: rgba(10,132,255,0.28); --material: rgba(60,60,64,0.78);
+      --scene-bg: #1a1a1c; --scene-lift: #2a2a2e; --ring-sec: rgba(245,245,247,0.55);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1e1e20; --stage: #1a1a1c; --panel: #1e1e20; --grouped: #2a2a2d; --line: rgba(255,255,255,0.08);
+    --ink: #f5f5f7; --ink2: rgba(245,245,247,0.62); --ink3: rgba(245,245,247,0.40);
+    --accent: #0a84ff; --accent-soft: rgba(10,132,255,0.28); --material: rgba(60,60,64,0.78);
+    --scene-bg: #1a1a1c; --scene-lift: #2a2a2e; --ring-sec: rgba(245,245,247,0.55);
+  }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 13px; line-height: 1.35; -webkit-font-smoothing: antialiased; }
+  .app { height: 100%; display: grid; grid-template-columns: minmax(0, 58fr) minmax(300px, 42fr); grid-template-rows: 100%; }
+  .stage { position: relative; background: var(--stage); overflow: hidden; min-width: 0; }
+  .stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .stage canvas.port { cursor: pointer; }
+  .stage canvas.usb { cursor: not-allowed; }
+  .stage canvas.drag { cursor: grabbing; }
+  .caption { position: absolute; left: 20px; top: 16px; font-size: 12px; color: var(--ink3); pointer-events: none; }
+  .narration { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); font-size: 12px; color: var(--ink2); background: var(--material); padding: 5px 12px; border-radius: 12px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  .narration.on { opacity: 1; }
+  .faces { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; gap: 2px; padding: 3px; border-radius: 16px; background: var(--material); backdrop-filter: blur(12px); }
+  .faces button, .models button { border: 0; background: transparent; color: var(--ink2); font: 500 12px var(--font); padding: 5px 14px; border-radius: 13px; cursor: pointer; }
+  .faces button.on, .models button.on { background: rgba(127,127,135,0.28); color: var(--ink); }
+  .faces button:focus-visible, .models button:focus-visible, .row:focus-visible, .tools button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tools { position: absolute; right: 14px; bottom: 16px; display: flex; gap: 4px; }
+  .tools button { width: 28px; height: 28px; border: 0; border-radius: 14px; background: var(--material); color: var(--ink2); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .panel { padding-block: 18px 20px; padding-inline: 24px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); }
+  .models { display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--grouped); align-self: flex-start; }
+  .models button { border-radius: 7px; padding: 4px 12px; }
+  h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.2px; line-height: 24px; text-wrap: balance; }
+  .lede { margin: 0; color: var(--ink2); font-size: 12.5px; line-height: 17px; text-wrap: pretty; }
+  .group-h { font-size: 11px; font-weight: 600; color: var(--ink3); margin: 0 0 3px 10px; }
+  .group { background: var(--grouped); border-radius: 10px; padding-inline: 10px; }
+  .row { display: flex; align-items: center; gap: 10px; padding-block: 6px; border: 0; width: 100%; background: transparent; color: var(--ink); text-align: left; font: inherit; cursor: pointer; border-radius: 8px; }
+  .row + .row { border-top: 1px solid var(--line); border-radius: 0; }
+  .row.sel { background: var(--accent-soft); margin-inline: -10px; padding-inline: 10px; width: calc(100% + 20px); border-radius: 8px; }
+  .row.hov { background: rgba(127,127,135,0.12); margin-inline: -10px; padding-inline: 10px; width: calc(100% + 20px); border-radius: 8px; }
+  .row.usb { opacity: 0.45; cursor: not-allowed; }
+  .row .ico { width: 20px; height: 20px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+  .row .t { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+  .row .name { font-size: 13px; line-height: 16px; }
+  .row .name code { font-family: var(--mono); font-size: 11px; color: var(--ink3); margin-left: 6px; }
+  .row .sub { font-size: 11px; line-height: 13px; color: var(--ink2); }
+  .status { background: var(--grouped); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-height: 52px; }
+  .status .k { font-size: 11px; color: var(--ink3); }
+  .status .v { font-size: 14px; font-weight: 600; }
+  .status .s { font-size: 12px; color: var(--ink2); }
+  label.tog { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink2); cursor: pointer; margin-top: auto; }
+  label.tog input { accent-color: var(--accent); }
+  .foot { font-size: 11px; color: var(--ink3); line-height: 15px; }
+  @media (max-width: 760px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: 46vh 1fr; }
+    .panel { border-left: 0; border-top: 1px solid var(--line); }
+  }
+  @media (prefers-reduced-motion: reduce) { .narration { transition: none; } }
+</style>
+
+<div class="app">
+  <div class="stage" id="stage">
+    <canvas id="c" aria-label="Your Mac. Drag to rotate, click a Thunderbolt port to select it."></canvas>
+    <div class="caption">Drag to rotate · scroll to zoom · click a port</div>
+    <div class="narration" id="narration">Let me turn it around</div>
+    <div class="faces" id="faces" role="group" aria-label="Which side to look at"></div>
+    <div class="tools">
+      <button id="reset" aria-label="Reset view" title="Reset view">
+        <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M19.5 4.5v4.5H15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="models" id="models" role="group" aria-label="Which Mac"></div>
+    <div>
+      <h1 id="title">Which port should carry RDMA?</h1>
+      <p class="lede">Click a port on the model, or pick one from the list. If it's on the other side, I'll turn the Mac around.</p>
+    </div>
+    <div class="status" id="status"><span class="k">Selected port</span><span class="v">Nothing yet</span><span class="s">Hover a port to see what's in it.</span></div>
+    <div id="list"></div>
+    <label class="tog"><input type="checkbox" id="tech"> Show technical names</label>
+    <div class="foot">Prototype of the RDMALink stage. Proportions and port positions are taken from Apple's product photos; there is no logo on the model. Ring geometry carries state, never colour.</div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  const T = THREE;
+  const PI = Math.PI;
+
+  // ------- hardware catalogue (cm). Faces: back (-z), front (+z), left (-x), right (+x). u = 0..1 from the viewer's left. -------
+  // tb: Thunderbolt receptacle (selectable). usb: USB-C-only receptacle (never selectable). other: HDMI, Ethernet, power, jack, SD, USB-A, MagSafe.
+  const MODELS = {
+    studio: {
+      label: 'Mac Studio', chip: 'M3 Ultra', subtitle: 'Studio — Mac Studio (M3 Ultra)', kind: 'box', vertical: true,
+      w: 19.7, h: 9.5, d: 19.7, r: 2.4, bevel: 0.22, color: 0xd6d6da, faces: ['Back', 'Front'], rest: { th: PI - 0.55, ph: 0.30, r: 1 },
+      grille: { face: 'back', u0: 0.06, u1: 0.94, v0: 0.40, v1: 0.94 }, baseBand: 1.0,
+      ports: [
+        { id: 'b1', face: 'back', u: 0.157, v: 0.20, kind: 'tb', name: 'Back, far left', bsd: 'en2', hw: 'empty', cfg: 'bridge' },
+        { id: 'b2', face: 'back', u: 0.207, v: 0.20, kind: 'tb', name: 'Back, middle left', bsd: 'en3', hw: 'linked', cfg: 'bridge' },
+        { id: 'b3', face: 'back', u: 0.258, v: 0.20, kind: 'tb', name: 'Back, middle right', bsd: 'en4', hw: 'device', cfg: 'bridge' },
+        { id: 'b4', face: 'back', u: 0.309, v: 0.20, kind: 'tb', name: 'Back, far right', bsd: 'en5', hw: 'empty', cfg: 'bridge' },
+        { face: 'back', u: 0.38, v: 0.20, kind: 'eth' }, { face: 'back', u: 0.508, v: 0.20, kind: 'power' },
+        { face: 'back', u: 0.616, v: 0.20, kind: 'usba' }, { face: 'back', u: 0.68, v: 0.20, kind: 'usba' },
+        { face: 'back', u: 0.77, v: 0.20, kind: 'hdmi' }, { face: 'back', u: 0.85, v: 0.20, kind: 'jack' }, { face: 'back', u: 0.92, v: 0.20, kind: 'button' },
+        { id: 'f1', face: 'front', u: 0.165, v: 0.20, kind: 'tb', name: 'Front, left', bsd: 'en6', hw: 'empty', cfg: 'bridge' },
+        { id: 'f2', face: 'front', u: 0.24, v: 0.20, kind: 'tb', name: 'Front, right', bsd: 'en7', hw: 'empty', cfg: 'bridge' },
+        { face: 'front', u: 0.38, v: 0.20, kind: 'sd' }, { face: 'front', u: 0.85, v: 0.20, kind: 'led' },
+      ],
+    },
+    mini: {
+      label: 'Mac mini', chip: 'M4 Pro', subtitle: 'mini — Mac mini (M4 Pro)', kind: 'box', vertical: true,
+      w: 12.7, h: 5.0, d: 12.7, r: 1.4, bevel: 0.16, color: 0xd6d6da, faces: ['Back', 'Front'], rest: { th: PI - 0.55, ph: 0.34, r: 1 },
+      grille: null, baseBand: 0.7,
+      ports: [
+        { face: 'back', u: 0.246, v: 0.35, kind: 'power8' }, { face: 'back', u: 0.418, v: 0.35, kind: 'eth' }, { face: 'back', u: 0.57, v: 0.35, kind: 'hdmi' },
+        { id: 'b1', face: 'back', u: 0.684, v: 0.35, kind: 'tb', name: 'Back, left', bsd: 'en2', hw: 'linked', cfg: 'bridge' },
+        { id: 'b2', face: 'back', u: 0.754, v: 0.35, kind: 'tb', name: 'Back, middle', bsd: 'en3', hw: 'empty', cfg: 'bridge' },
+        { id: 'b3', face: 'back', u: 0.822, v: 0.35, kind: 'tb', name: 'Back, right', bsd: 'en4', hw: 'empty', cfg: 'bridge' },
+        { id: 'f1', face: 'front', u: 0.206, v: 0.35, kind: 'usb', name: 'Front, left', bsd: '', hw: 'device', cfg: 'none' },
+        { id: 'f2', face: 'front', u: 0.325, v: 0.35, kind: 'usb', name: 'Front, right', bsd: '', hw: 'empty', cfg: 'none' },
+        { face: 'front', u: 0.69, v: 0.35, kind: 'led' }, { face: 'front', u: 0.79, v: 0.35, kind: 'jack' },
+      ],
+    },
+    mbp: {
+      label: 'MacBook Pro 14"', chip: 'M4 Max', subtitle: 'MacBook Pro — 14-inch (M4 Max)', kind: 'notebook', vertical: false,
+      w: 31.26, h: 1.55, d: 22.12, r: 1.0, bevel: 0.22, lid: 22.0, lidT: 0.42, open: 104, color: 0xd6d6da, faces: ['Left', 'Right'], rest: { th: -PI / 2 + 0.75, ph: 0.32, r: 1.05 },
+      grille: null, baseBand: 0,
+      ports: [
+        { face: 'left', u: 0.154, v: 0.5, kind: 'magsafe' },
+        { id: 'l1', face: 'left', u: 0.228, v: 0.5, kind: 'tb', name: 'Left side, rear', bsd: 'en1', hw: 'linked', cfg: 'bridge' },
+        { id: 'l2', face: 'left', u: 0.303, v: 0.5, kind: 'tb', name: 'Left side, front', bsd: 'en2', hw: 'empty', cfg: 'bridge' },
+        { face: 'left', u: 0.339, v: 0.5, kind: 'jack' },
+        { face: 'right', u: 0.675, v: 0.5, kind: 'sd' },
+        { id: 'r1', face: 'right', u: 0.787, v: 0.5, kind: 'tb', name: 'Right side', bsd: 'en3', hw: 'empty', cfg: 'bridge' },
+        { face: 'right', u: 0.869, v: 0.5, kind: 'hdmi' },
+      ],
+    },
+  };
+  const FACE = {
+    back:  { n: new T.Vector3(0, 0, -1), th: PI },
+    front: { n: new T.Vector3(0, 0, 1), th: 0 },
+    left:  { n: new T.Vector3(-1, 0, 0), th: -PI / 2 },
+    right: { n: new T.Vector3(1, 0, 0), th: PI / 2 },
+  };
+  const HW_TEXT = { empty: 'Nothing plugged in', device: 'A device is connected — not a Mac', mac: 'Another Mac is here. The link is still coming up.', linked: 'Linked to another Mac' };
+  const CFG_TEXT = { bridge: 'In the Thunderbolt Bridge', none: 'Not in any bridge', ready: 'Ready for RDMA' };
+
+  // ------- renderer / scene -------
+  const stageEl = document.getElementById('stage');
+  const canvas = document.getElementById('c');
+  const renderer = new T.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputEncoding = T.sRGBEncoding;
+  renderer.toneMapping = T.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = T.PCFSoftShadowMap;
+  const scene = new T.Scene();
+  const camera = new T.PerspectiveCamera(32, 1, 1, 400);
+  const hemi = new T.HemisphereLight(0xffffff, 0x8a8a90, 0.75); scene.add(hemi);
+  const key = new T.DirectionalLight(0xffffff, 1.0); key.position.set(-18, 32, 14); key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048); key.shadow.camera.left = -30; key.shadow.camera.right = 30; key.shadow.camera.top = 30; key.shadow.camera.bottom = -30; key.shadow.radius = 4;
+  scene.add(key);
+  const rim = new T.DirectionalLight(0xdfe6ff, 0.45); rim.position.set(22, 12, -26); scene.add(rim);
+  const fill = new T.DirectionalLight(0xffffff, 0.25); fill.position.set(10, 6, 26); scene.add(fill);
+  const ground = new T.Mesh(new T.PlaneGeometry(200, 200), new T.ShadowMaterial({ opacity: 0.28 }));
+  ground.rotation.x = -PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+  function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function applyTheme() {
+    scene.background = new T.Color(cssVar('--scene-bg'));
+    hemi.groundColor.set(cssVar('--scene-lift'));
+    applyRingTone();
+  }
+  function applyRingTone() {
+    if (!mac) return; const c = new T.Color(mac.model.color); const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    const tone = lum > 0.4 ? 0x1d1d1f : 0xf5f5f7;
+    matSec.color.set(tone); matSec.opacity = 0.62; matSecDash.color.set(tone); matSecDash.opacity = 0.62;
+  }
+  function rgbaToHex(s) { const m = s.match(/[\d.]+/g); if (!m || m.length < 3) return s; return (Number(m[0]) << 16 | Number(m[1]) << 8 | Number(m[2])); }
+  function rgbaAlpha(s) { const m = s.match(/[\d.]+/g); return m && m.length > 3 ? Number(m[3]) : 1; }
+
+  // ------- materials -------
+  const matAccent = new T.MeshBasicMaterial({ color: 0x0a84ff, transparent: true, opacity: 1, side: T.DoubleSide, depthWrite: false });
+  const matAccentSoft = new T.MeshBasicMaterial({ color: 0x0a84ff, transparent: true, opacity: 0.16, side: T.DoubleSide, depthWrite: false });
+  const matHover = new T.MeshBasicMaterial({ color: 0x0a84ff, transparent: true, opacity: 0.45, side: T.DoubleSide, depthWrite: false });
+  const matSec = new T.MeshBasicMaterial({ color: 0xf5f5f7, transparent: true, opacity: 0.55, side: T.DoubleSide, depthWrite: false });
+  const matSecDash = new T.LineDashedMaterial({ color: 0xf5f5f7, transparent: true, opacity: 0.55, dashSize: 0.28, gapSize: 0.16 });
+  const matSlot = new T.MeshStandardMaterial({ color: 0x141416, roughness: 0.9, metalness: 0.1 });
+  const matSlotUSB = new T.MeshStandardMaterial({ color: 0x1c1c1e, roughness: 1.0, metalness: 0.0 });
+  const matStub = new T.MeshStandardMaterial({ color: 0x7d7d82, roughness: 0.6, metalness: 0.2 });
+  const matScreen = new T.MeshStandardMaterial({ color: 0x0b0b0d, roughness: 0.25, metalness: 0.1 });
+  const matKeys = new T.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.95, metalness: 0.0 });
+
+  // ------- geometry helpers -------
+  function roundedRect(w, h, r) {
+    const s = new T.Shape(); const x = -w / 2, y = -h / 2; r = Math.min(r, w / 2, h / 2);
+    s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+    s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
+    s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y); return s;
+  }
+  // A rounded slab: footprint w×d (x×z), height h (y), corner radius r, bevelled top and bottom edges.
+  function slab(w, h, d, r, bevel, mat) {
+    // three.js inflates a bevelled extrusion outward by bevelSize, so shrink the outline to keep the faces at ±w/2 and ±d/2.
+    const g = new T.ExtrudeGeometry(roundedRect(w - 2 * bevel, d - 2 * bevel, Math.max(r - bevel, 0.2)), { depth: Math.max(h - 2 * bevel, 0.05), bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 5, curveSegments: 24 });
+    g.rotateX(-PI / 2); g.translate(0, bevel, 0);
+    const m = new T.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true; return m;
+  }
+  function ringShape(w, h, r, t) { const s = roundedRect(w + 2 * t, h + 2 * t, r + t); s.holes.push(roundedRect(w, h, r)); return s; }
+  function flatRing(w, h, r, t, mat) { return new T.Mesh(new T.ShapeGeometry(ringShape(w, h, r, t), 24), mat); }
+  function dashedRing(w, h, r, mat) {
+    const pts = roundedRect(w, h, r).getPoints(40).map(p => new T.Vector3(p.x, p.y, 0));
+    const g = new T.BufferGeometry().setFromPoints(pts); const l = new T.LineLoop(g, mat); l.computeLineDistances(); return l;
+  }
+  const PORT_DIMS = {
+    tb: [0.95, 0.35, 0.17], usb: [0.95, 0.35, 0.08], usba: [1.3, 0.6, 0.12], hdmi: [1.5, 0.55, 0.15], eth: [1.25, 1.35, 0.2],
+    power: [1.9, 1.9, 0.95], power8: [1.9, 1.1, 0.5], jack: [0.55, 0.55, 0.27], sd: [2.6, 0.22, 0.1], magsafe: [1.3, 0.42, 0.2], button: [1.1, 1.1, 0.55], led: [0.28, 0.28, 0.14],
+  };
+  function dimsFor(model, kind) { const d = PORT_DIMS[kind].slice(); if (model.vertical && (kind === 'tb' || kind === 'usb')) { const w = d[0]; d[0] = d[1]; d[1] = w; } return d; }
+  // a hex-pattern grille as a texture (dark dots on transparent)
+  function grilleTexture() {
+    // an exact number of periods per tile, so RepeatWrapping never shows a seam
+    const step = 10, rowStep = 8, cols = 64, rows = 64;
+    const c = document.createElement('canvas'); c.width = step * cols; c.height = rowStep * rows; const g = c.getContext('2d');
+    g.clearRect(0, 0, c.width, c.height); g.fillStyle = 'rgba(20,20,22,0.92)';
+    for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) {
+      const x = col * step + (row % 2 ? step / 2 : 0) + step / 4, y = row * rowStep + rowStep / 2;
+      g.beginPath(); g.arc(x, y, 3.2, 0, PI * 2); g.fill();
+    }
+    const t = new T.CanvasTexture(c); t.anisotropy = 8; return t;
+  }
+  const GRILLE = grilleTexture();
+
+  // ------- building a Mac -------
+  let mac = null; // { group, model, ports: [portObj], hit: [mesh] }
+  function buildMac(model) {
+    const group = new T.Group();
+    const bodyMat = new T.MeshStandardMaterial({ color: model.color, roughness: 0.42, metalness: 0.65 });
+    let bodyH = model.h;
+    const dark = new T.MeshStandardMaterial({ color: 0x2c2c2f, roughness: 0.95, metalness: 0.05 });
+    if (model.kind === 'box') {
+      const band = model.baseBand || 0;
+      const body = slab(model.w, model.h - band, model.d, model.r, model.bevel, bodyMat); body.position.y = band; group.add(body);
+      if (band) { // the perforated vent band around the base, slightly inset
+        const inset = 0.55; group.add(slab(model.w - 2 * inset, band + 0.02, model.d - 2 * inset, Math.max(model.r - inset, 0.4), 0.05, dark));
+      }
+      if (model.grille) { // the back grille: a dotted plane just proud of the face
+        const gr = model.grille; const gw = (gr.u1 - gr.u0) * model.w, gh = (gr.v1 - gr.v0) * (model.h - band);
+        const mat = new T.MeshStandardMaterial({ map: GRILLE, transparent: true, roughness: 0.9, metalness: 0.0, alphaTest: 0.2 });
+        mat.map.wrapS = mat.map.wrapT = T.RepeatWrapping; mat.map.repeat.set(gw / 6.4, gh / 5.12);
+        const plane = new T.Mesh(new T.PlaneGeometry(gw, gh), mat);
+        const f = FACE[gr.face]; const y = band + (gr.v0 + gr.v1) / 2 * (model.h - band);
+        const cu = (gr.u0 + gr.u1) / 2 - 0.5; let x = 0, z = 0;
+        if (gr.face === 'back') { x = -cu * model.w; z = -model.d / 2 - 0.02; } else { x = cu * model.w; z = model.d / 2 + 0.02; }
+        plane.position.set(x, y, z); plane.lookAt(new T.Vector3(x, y, z).add(f.n)); group.add(plane);
+      }
+    } else {
+      // notebook: base + keyboard well + trackpad + speaker grilles + a thin lid on a hinge at the back edge
+      group.add(slab(model.w, model.h, model.d, model.r, model.bevel, bodyMat));
+      for (const [fx, fz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { // rubber feet
+        const foot = new T.Mesh(new T.CylinderGeometry(0.7, 0.7, 0.18, 20), dark); foot.position.set(fx * (model.w / 2 - 2.6), 0.09, fz * (model.d / 2 - 2.0)); group.add(foot);
+      }
+      const well = new T.Mesh(new T.ShapeGeometry(roundedRect(27.4, 11.4, 0.4)), matKeys); // the black keyboard well
+      well.rotation.x = -PI / 2; well.position.set(0, model.h + 0.012, -model.d / 2 + 1.2 + 5.7); group.add(well);
+      const keyMat = new T.MeshStandardMaterial({ color: 0x2a2a2d, roughness: 0.9 }); // key caps as a grid of small squares
+      for (let row = 0; row < 5; row++) for (let col = 0; col < 14; col++) {
+        const k = new T.Mesh(new T.PlaneGeometry(1.55, 1.5), keyMat); k.rotation.x = -PI / 2;
+        k.position.set(-12.35 + col * 1.9, model.h + 0.02, -model.d / 2 + 1.2 + 1.7 + row * 1.9); group.add(k);
+      }
+      const spk = new T.MeshStandardMaterial({ map: GRILLE, transparent: true, roughness: 0.9, alphaTest: 0.2 }); // speaker grilles either side of the keys
+      spk.map = GRILLE.clone(); spk.map.needsUpdate = true; spk.map.wrapS = spk.map.wrapT = T.RepeatWrapping; spk.map.repeat.set(1.0, 2.4);
+      for (const sx of [-1, 1]) { const g = new T.Mesh(new T.PlaneGeometry(3.6, 11.0), spk); g.rotation.x = -PI / 2; g.position.set(sx * 13.7, model.h + 0.015, -model.d / 2 + 1.2 + 5.5); group.add(g); }
+      const pad = new T.Mesh(new T.ShapeGeometry(roundedRect(13.0, 8.2, 0.3)), new T.MeshStandardMaterial({ color: model.color, roughness: 0.5, metalness: 0.55 }));
+      pad.rotation.x = -PI / 2; pad.position.set(0, model.h + 0.014, model.d / 2 - 0.8 - 4.1); group.add(pad);
+      const lid = new T.Group(); lid.position.set(0, model.h + 0.05, -model.d / 2 + 0.55);
+      const lidBody = slab(model.w, model.lidT, model.lid, model.r, 0.12, bodyMat); lidBody.position.z = model.lid / 2; lid.add(lidBody);
+      const bezel = new T.Mesh(new T.ShapeGeometry(roundedRect(model.w - 0.5, model.lid - 0.7, 0.6)), new T.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 0.35 }));
+      bezel.rotation.x = -PI / 2; bezel.position.set(0, model.lidT + 0.01, model.lid / 2 + 0.05); lid.add(bezel);
+      const screen = new T.Mesh(new T.ShapeGeometry(roundedRect(model.w - 1.4, model.lid - 1.6, 0.35)), matScreen);
+      screen.rotation.x = -PI / 2; screen.position.set(0, model.lidT + 0.02, model.lid / 2 + 0.05); lid.add(screen);
+      const notch = new T.Mesh(new T.PlaneGeometry(3.2, 0.9), new T.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 0.35 }));
+      notch.rotation.x = -PI / 2; notch.position.set(0, model.lidT + 0.03, model.lid - 0.75 - 0.45); lid.add(notch);
+      lid.rotation.x = -(PI / 180) * model.open; // opened
+      group.add(lid);
+      bodyH = model.h;
+    }
+    // ports
+    const ports = [], hit = [];
+    for (const p of model.ports) {
+      const f = FACE[p.face]; const dims = dimsFor(model, p.kind); const [pw, ph, r] = dims;
+      // face frame
+      const faceW = (p.face === 'back' || p.face === 'front') ? model.w : model.d;
+      const half = faceW / 2;
+      // viewer's left→right along the face
+      let x, z; const band = model.baseBand || 0; const y = band + p.v * (bodyH - band);
+      const along = (p.u - 0.5) * faceW;
+      if (p.face === 'back') { x = -along; z = -model.d / 2; }
+      else if (p.face === 'front') { x = along; z = model.d / 2; }
+      else if (p.face === 'left') { x = -model.w / 2; z = along; }
+      else { x = model.w / 2; z = -along; }
+      const g = new T.Group(); g.position.set(x, y, z); g.lookAt(new T.Vector3(x, y, z).add(f.n));
+      const isRound = p.kind === 'power' || p.kind === 'jack' || p.kind === 'button' || p.kind === 'led';
+      let slot;
+      if (p.kind === 'button') { slot = new T.Mesh(new T.ShapeGeometry(ringShape(pw - 0.1, ph - 0.1, (pw - 0.1) / 2, 0.06), 32), new T.MeshBasicMaterial({ color: 0x3a3a3e, side: T.DoubleSide })); slot.position.z = 0.02; }
+      else if (p.kind === 'led') { slot = new T.Mesh(new T.CircleGeometry(pw / 2, 24), new T.MeshBasicMaterial({ color: 0xf7f7f9 })); slot.position.z = 0.02; }
+      else if (p.kind === 'power8') { slot = new T.Group(); const cup = new T.Mesh(new T.ExtrudeGeometry(roundedRect(pw, ph, r), { depth: 0.08, bevelEnabled: false, curveSegments: 20 }), matSlot); slot.add(cup);
+        for (const ox of [-0.45, 0.45]) { const pin = new T.Mesh(new T.CircleGeometry(0.22, 20), new T.MeshStandardMaterial({ color: 0x5a5a5e, roughness: 0.7 })); pin.position.set(ox, 0, 0.1); slot.add(pin); } slot.position.z = -0.02; }
+      else if (p.kind === 'power') { slot = new T.Group(); const cup = new T.Mesh(new T.ExtrudeGeometry(circleShape(pw / 2), { depth: 0.08, bevelEnabled: false, curveSegments: 24 }), matSlot); slot.add(cup);
+        for (const [ox, oy] of [[-0.45, 0.25], [0.45, 0.25], [0, -0.35]]) { const pin = new T.Mesh(new T.CircleGeometry(0.28, 20), new T.MeshStandardMaterial({ color: 0x5a5a5e, roughness: 0.7 })); pin.position.set(ox, oy, 0.1); slot.add(pin); } slot.position.z = -0.02; }
+      else { slot = new T.Mesh(new T.ExtrudeGeometry(isRound ? circleShape(pw / 2) : roundedRect(pw, ph, r), { depth: 0.08, bevelEnabled: false, curveSegments: 20 }), p.kind === 'usb' ? matSlotUSB : matSlot); slot.position.z = -0.02; }
+      g.add(slot);
+      if (p.kind === 'tb' || p.kind === 'usb') {
+        const o = { data: p, group: g, rings: {} };
+        if (p.hw !== 'empty') { const stub = new T.Mesh(new T.ExtrudeGeometry(roundedRect(Math.max(pw - 0.16, 0.12), Math.max(ph - 0.16, 0.12), 0.08), { depth: 0.55, bevelEnabled: false }), matStub); stub.position.z = 0.02; g.add(stub); o.stub = stub; }
+        if (p.kind === 'tb') {
+          // inner hardware ring
+          const inner = flatRing(pw + 0.16, ph + 0.16, r + 0.08, 0.07, matSec); inner.position.z = 0.1; inner.visible = (p.hw === 'linked' || p.hw === 'mac'); if (p.hw === 'mac') inner.material = matSec.clone(), inner.material.opacity = 0.18; g.add(inner); o.rings.inner = inner;
+          // outer configuration ring (segmented = bridge member; solid accent = ready)
+          const bridge = new T.Group();
+          bridge.add(flatRing(pw + 0.5, ph + 0.5, r + 0.25, 0.08, matSec));
+          for (const [nx, ny, nw, nh] of [[0, (ph + 0.5) / 2 + 0.04, 0.34, 0.2], [0, -(ph + 0.5) / 2 - 0.04, 0.34, 0.2], [(pw + 0.5) / 2 + 0.04, 0, 0.2, 0.34], [-(pw + 0.5) / 2 - 0.04, 0, 0.2, 0.34]]) {
+            const notch = new T.Mesh(new T.PlaneGeometry(nw, nh), bodyMat); notch.position.set(nx, ny, 0.005); bridge.add(notch);
+          }
+          bridge.position.z = 0.1; bridge.visible = p.cfg === 'bridge'; g.add(bridge); o.rings.bridge = bridge;
+          const ready = flatRing(pw + 0.5, ph + 0.5, r + 0.25, 0.09, matAccent); ready.position.z = 0.1; ready.visible = p.cfg === 'ready'; g.add(ready); o.rings.ready = ready;
+          // interaction rings
+          const hover = flatRing(pw + 1.0, ph + 1.0, r + 0.5, 0.08, matHover); hover.position.z = 0.12; hover.visible = false; g.add(hover); o.rings.hover = hover;
+          const sel = flatRing(pw + 1.0, ph + 1.0, r + 0.5, 0.11, matAccent); sel.position.z = 0.12; sel.visible = false; g.add(sel); o.rings.sel = sel;
+          const bloom = new T.Mesh(new T.ShapeGeometry(roundedRect(pw + 1.6, ph + 1.6, r + 0.8), 24), matAccentSoft); bloom.position.z = 0.11; bloom.visible = false; g.add(bloom); o.rings.bloom = bloom;
+          if (p.hw === 'linked') {
+            // the light thread: a soft tube leaving the receptacle in the cable's direction
+            const curve = new T.QuadraticBezierCurve3(new T.Vector3(0, 0, 0.4), new T.Vector3(0, -0.5, 6), new T.Vector3(0.6, -7, 10));
+            const tube = new T.Mesh(new T.TubeGeometry(curve, 24, 0.09, 8, false), new T.MeshBasicMaterial({ color: 0xf5f5f7, transparent: true, opacity: 0.35, depthWrite: false }));
+            g.add(tube); o.thread = tube;
+          }
+        }
+        // hit proxy: generous, invisible
+        const h = new T.Mesh(new T.BoxGeometry(pw + 0.55, ph + 0.7, 0.5), new T.MeshBasicMaterial({ visible: false })); h.position.z = 0.15; h.userData.port = o; g.add(h); hit.push(h); o.hit = h;
+        ports.push(o);
+      }
+      group.add(g);
+    }
+    return { group, model, ports, hit };
+  }
+  function circleShape(r) { const s = new T.Shape(); s.absarc(0, 0, r, 0, PI * 2, false); return s; }
+
+  // ------- camera: an app-owned orbit rig -------
+  const cam = { th: PI - 0.55, ph: 0.34, r: 60, base: 60, target: new T.Vector3(0, 4, 0) };
+  let anim = null;
+  function fitFor(model) {
+    const span = Math.max(model.w, model.d, model.kind === 'notebook' ? model.lid : model.h) ;
+    cam.base = span * (model.kind === 'notebook' ? 2.9 : 3.1); cam.r = cam.base * model.rest.r;
+    cam.target.set(0, model.kind === 'notebook' ? model.lid * 0.40 : model.h * 0.48, 0);
+  }
+  function placeCamera() {
+    const cp = Math.cos(cam.ph);
+    camera.position.set(cam.target.x + cam.r * Math.sin(cam.th) * cp, cam.target.y + cam.r * Math.sin(cam.ph), cam.target.z + cam.r * Math.cos(cam.th) * cp);
+    camera.lookAt(cam.target);
+  }
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function animateTo(th, ph, r, say) {
+    if (say) narrate(say);
+    // shortest way round
+    let dth = th - cam.th; while (dth > PI) dth -= 2 * PI; while (dth < -PI) dth += 2 * PI;
+    if (reduceMotion) { cam.th += dth; cam.ph = ph; cam.r = r; anim = null; return; }
+    anim = { t0: performance.now(), dur: 700, th0: cam.th, dth, ph0: cam.ph, dph: ph - cam.ph, r0: cam.r, dr: r - cam.r };
+  }
+  function narrate(text) { const n = document.getElementById('narration'); n.textContent = text; n.classList.add('on'); clearTimeout(narrate.t); narrate.t = setTimeout(() => n.classList.remove('on'), 1400); }
+  function stepAnim(now) {
+    if (!anim) return; const k = Math.min(1, (now - anim.t0) / anim.dur); const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+    cam.th = anim.th0 + anim.dth * e; cam.ph = anim.ph0 + anim.dph * e;
+    cam.r = anim.r0 + anim.dr * e + Math.sin(k * PI) * anim.r0 * 0.04; // a 4 % dolly-out and back
+    if (k >= 1) anim = null;
+  }
+  function faceOf(th) { // which face the camera mostly sees
+    const a = ((th % (2 * PI)) + 2 * PI) % (2 * PI);
+    if (a < PI / 4 || a > 7 * PI / 4) return 'front'; if (a < 3 * PI / 4) return 'right'; if (a < 5 * PI / 4) return 'back'; return 'left';
+  }
+  function thForFace(face, threeQuarter) { const t = FACE[face].th; return threeQuarter ? t - 0.55 : t; }
+
+  // ------- pointer -------
+  const ray = new T.Raycaster(); const ndc = new T.Vector2();
+  let hovered = null, selected = null, dragging = false, moved = 0, last = null;
+  function pick(ev) {
+    const rect = canvas.getBoundingClientRect();
+    ndc.set(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera); const hits = ray.intersectObjects(mac.hit, false);
+    return hits.length ? hits[0].object.userData.port : null;
+  }
+  canvas.addEventListener('pointerdown', ev => { dragging = true; moved = 0; last = { x: ev.clientX, y: ev.clientY }; canvas.setPointerCapture(ev.pointerId); canvas.classList.add('drag'); });
+  canvas.addEventListener('pointermove', ev => {
+    if (dragging && last) {
+      const dx = ev.clientX - last.x, dy = ev.clientY - last.y; moved += Math.abs(dx) + Math.abs(dy); last = { x: ev.clientX, y: ev.clientY };
+      anim = null; cam.th -= dx * 0.008; cam.ph = Math.max(0.06, Math.min(0.62, cam.ph + dy * 0.006)); syncFaces();
+    } else { setHover(pick(ev)); }
+  });
+  canvas.addEventListener('pointerup', ev => {
+    dragging = false; canvas.classList.remove('drag');
+    if (moved < 6) { const p = pick(ev); if (p) select(p, 'model'); }
+  });
+  canvas.addEventListener('pointerleave', () => { if (!dragging) setHover(null); });
+  canvas.addEventListener('wheel', ev => { ev.preventDefault(); anim = null; cam.r = Math.max(cam.base * 0.72, Math.min(cam.base * 1.4, cam.r * (1 + ev.deltaY * 0.0015))); }, { passive: false });
+
+  function setHover(p) {
+    if (hovered === p) return;
+    if (hovered) { if (hovered.rings.hover) hovered.rings.hover.visible = false; rowFor(hovered)?.classList.remove('hov'); }
+    hovered = p;
+    canvas.classList.toggle('port', !!(p && p.data.kind === 'tb')); canvas.classList.toggle('usb', !!(p && p.data.kind === 'usb'));
+    if (p) { if (p.rings.hover && p !== selected) p.rings.hover.visible = true; rowFor(p)?.classList.add('hov'); }
+    renderStatus();
+  }
+  function select(p, from) {
+    if (p.data.kind === 'usb') { renderStatus(p); return; }
+    if (selected) { selected.rings.sel.visible = false; selected.rings.bloom.visible = false; rowFor(selected)?.classList.remove('sel'); }
+    selected = p; p.rings.sel.visible = true; p.rings.bloom.visible = true; p.rings.hover.visible = false; rowFor(p)?.classList.add('sel');
+    const face = p.data.face;
+    if (faceOf(cam.th) !== face) animateTo(thForFace(face, true), cam.ph, cam.r, 'Let me turn it around'); else if (from === 'list') animateTo(thForFace(face, true), cam.ph, cam.r);
+    renderStatus(); syncFaces();
+  }
+
+  // ------- panel -------
+  const listEl = document.getElementById('list'); const statusEl = document.getElementById('status'); const techEl = document.getElementById('tech');
+  function rowFor(p) { return listEl.querySelector(`[data-id="${p.data.id}"]`); }
+  function icon(name) {
+    const c = 'currentColor';
+    const d = {
+      empty: `<circle cx="12" cy="12" r="8.5" fill="none" stroke="${c}" stroke-width="1.7" stroke-dasharray="3.4 3.2"/>`,
+      device: `<path d="M3 12h5.5M15.5 12H21" stroke="${c}" stroke-width="1.8" stroke-linecap="round"/><rect x="8.5" y="8" width="7" height="8" rx="2.2" fill="none" stroke="${c}" stroke-width="1.7"/>`,
+      mac: `<circle cx="12" cy="12" r="8.5" fill="none" stroke="${c}" stroke-width="1.7"/><path d="M13 7.5 9.5 12.5H12l-1 4 3.5-5H12l1-4z" fill="${c}"/>`,
+      linked: `<circle cx="12" cy="12" r="9" fill="${c}"/><path d="M13 7.5 9.5 12.5H12l-1 4 3.5-5H12l1-4z" fill="var(--grouped)"/>`,
+      usb: `<path d="M3 12h5.5M15.5 12H21" stroke="${c}" stroke-width="1.8" stroke-linecap="round"/><rect x="8.5" y="8" width="7" height="8" rx="1" fill="none" stroke="${c}" stroke-width="1.7"/>`,
+    }[name];
+    return `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+  }
+  function renderList() {
+    const model = mac.model; const groups = {};
+    for (const p of mac.ports) { const f = p.data.face; (groups[f] = groups[f] || []).push(p); }
+    const order = model.kind === 'notebook' ? ['left', 'right'] : ['back', 'front'];
+    const names = { back: 'Back', front: 'Front', left: 'Left side', right: 'Right side' };
+    listEl.innerHTML = order.filter(f => groups[f]).map(f => `
+      <div class="group-h">${names[f]}</div>
+      <div class="group">${groups[f].map(p => {
+        const usb = p.data.kind === 'usb';
+        const sub = usb ? "USB only — this one isn't Thunderbolt" : `${HW_TEXT[p.data.hw]} <span style="color:var(--ink3)">·</span> ${CFG_TEXT[p.data.cfg]}`;
+        const tech = techEl.checked && p.data.bsd ? `<code>${p.data.bsd}</code>` : '';
+        return `<button class="row${usb ? ' usb' : ''}" data-id="${p.data.id}" ${usb ? 'aria-disabled="true"' : ''}><span class="ico" style="color:var(--ink2)">${icon(usb ? 'usb' : p.data.hw)}</span><span class="t"><span class="name">${p.data.name}${tech}</span><span class="sub">${sub}</span></span></button>`;
+      }).join('')}</div>`).join('<div style="height:10px"></div>');
+    listEl.querySelectorAll('.row').forEach(b => {
+      const p = mac.ports.find(x => x.data.id === b.dataset.id);
+      b.addEventListener('click', () => select(p, 'list'));
+      b.addEventListener('mouseenter', () => setHover(p)); b.addEventListener('mouseleave', () => setHover(null));
+      b.addEventListener('focus', () => setHover(p)); b.addEventListener('blur', () => setHover(null));
+    });
+    if (selected) rowFor(selected)?.classList.add('sel');
+  }
+  function renderStatus(usbHit) {
+    const p = usbHit || hovered || selected;
+    if (usbHit) { statusEl.innerHTML = `<span class="k">That's a USB port</span><span class="v">${p.data.name}</span><span class="s">The front ports on this Mac carry USB, not Thunderbolt. Move the cable to one of the ports on the back and I'll follow along.</span>`; return; }
+    if (!p) { statusEl.innerHTML = `<span class="k">Selected port</span><span class="v">Nothing yet</span><span class="s">Hover a port to see what's in it.</span>`; return; }
+    const isSel = p === selected;
+    const tech = techEl.checked && p.data.bsd ? ` <code style="font-family:var(--mono);font-size:11px;color:var(--ink3)">${p.data.bsd}</code>` : '';
+    const sub = p.data.kind === 'usb' ? "USB only — this one isn't Thunderbolt" : `${HW_TEXT[p.data.hw]} · ${CFG_TEXT[p.data.cfg]}`;
+    statusEl.innerHTML = `<span class="k">${isSel ? 'Selected port' : 'Hovering'}</span><span class="v">${p.data.name}${tech}</span><span class="s">${sub}</span>`;
+  }
+  techEl.addEventListener('change', () => { renderList(); renderStatus(); });
+
+  // faces + models
+  const facesEl = document.getElementById('faces'); const modelsEl = document.getElementById('models');
+  function renderFaces() {
+    facesEl.innerHTML = mac.model.faces.map(f => `<button data-face="${f.toLowerCase()}" aria-pressed="false">${f}</button>`).join('');
+    facesEl.querySelectorAll('button').forEach(b => b.addEventListener('click', () => animateTo(thForFace(b.dataset.face, true), cam.ph, cam.r, `Turning to the ${b.dataset.face}`)));
+    syncFaces();
+  }
+  function syncFaces() { const f = faceOf(anim ? anim.th0 + anim.dth : cam.th); facesEl.querySelectorAll('button').forEach(b => { const on = b.dataset.face === f; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }); }
+  function renderModels() {
+    modelsEl.innerHTML = Object.keys(MODELS).map(k => `<button data-model="${k}" aria-pressed="false">${MODELS[k].label}</button>`).join('');
+    modelsEl.querySelectorAll('button').forEach(b => b.addEventListener('click', () => load(b.dataset.model)));
+  }
+  function load(key) {
+    const model = MODELS[key];
+    if (mac) scene.remove(mac.group);
+    hovered = null; selected = null;
+    mac = buildMac(model); scene.add(mac.group);
+    fitFor(model); cam.th = model.rest.th; cam.ph = model.rest.ph; anim = null;
+    modelsEl.querySelectorAll('button').forEach(b => { const on = b.dataset.model === key; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+    document.title = 'RDMALink Stage';
+    renderFaces(); renderList(); renderStatus(); applyRingTone();
+    // the ports wake up, left to right, once
+    const rings = mac.ports.map(p => p.rings.bridge).filter(Boolean); rings.forEach(r => r.visible = false);
+    rings.forEach((r, i) => setTimeout(() => { r.visible = true; }, reduceMotion ? 0 : 120 + i * 60));
+  }
+  document.getElementById('reset').addEventListener('click', () => animateTo(mac.model.rest.th, mac.model.rest.ph, cam.base * mac.model.rest.r, 'Back to where we started'));
+
+  // keyboard on the stage: arrows move between ports, space selects
+  canvas.tabIndex = 0;
+  canvas.addEventListener('keydown', ev => {
+    const tbs = mac.ports.filter(p => p.data.kind === 'tb'); if (!tbs.length) return;
+    let i = tbs.indexOf(hovered || selected);
+    if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') { i = (i + 1) % tbs.length; setHover(tbs[i]); ev.preventDefault(); }
+    else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') { i = (i - 1 + tbs.length) % tbs.length; setHover(tbs[i]); ev.preventDefault(); }
+    else if (ev.key === ' ' || ev.key === 'Enter') { if (hovered) select(hovered, 'list'); ev.preventDefault(); }
+  });
+
+  // ------- resize + loop -------
+  function resize() {
+    const w = stageEl.clientWidth, h = stageEl.clientHeight; if (!w || !h) return;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stageEl);
+  const themeMq = window.matchMedia('(prefers-color-scheme: dark)'); themeMq.addEventListener('change', applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  let t0 = performance.now();
+  function frame(now) {
+    stepAnim(now); placeCamera();
+    // the "link coming up" breath and hover fade are the only motion at rest
+    const breath = 0.08 + 0.10 * (0.5 + 0.5 * Math.sin((now - t0) / 1600 * 2 * PI));
+    if (mac) for (const p of mac.ports) if (p.data.hw === 'mac' && p.rings.inner) p.rings.inner.material.opacity = breath;
+    renderer.render(scene, camera); requestAnimationFrame(frame);
+  }
+  renderModels(); load('studio'); applyTheme(); resize(); requestAnimationFrame(frame);
+  window.__stage = { cam, camera, faceOf, get mac() { return mac; }, select, MODELS };
+})();
+</script>

@@ -1,0 +1,9 @@
+.DS_Store
+/build/
+/dist/
+xcuserdata/
+*.xcuserstate
+/Packages/RDMALinkCore/.build/
+/.swiftpm/
+/Packages/RDMALinkCore/.swiftpm/
+/.claude/
