@@ -283,14 +283,6 @@ Modeled with the correct, slightly different geometry and a matte, non-reflectiv
 
 **Differentiate Without Color is the default behavior.** Every state on the model is a distinct ring **geometry** (none / breathing / steady / segmented / solid / double hairline / dashed) and every state in the panel is a distinct SF Symbol **plus words**. Nothing anywhere in the app depends on hue, so nothing is lost in greyscale.
 
-### 4.7 The legend and the receptacle callout
-
-The rings say what the words say; two small aids make sure nobody has to guess which is which.
-
-**Legend.** A `.caption` `.secondary` list in the stage's top-leading corner, one line per outer-ring shape **present on this Mac right now**, glyph first: the ring geometries themselves at small scale. Labels are the panel's own words — **In a bridge** · **Standalone** · **Set up outside RDMALink** · **Ready for RDMA** · **Needs a look**. Nothing about the inner track, nothing about selection, no title. It is shown whenever the rings are live, hidden with View › **Hide Legend** ⌘K (which then reads **Show Legend**), and the choice is remembered. It never overlaps a receptacle: it yields to the model by moving to the top-trailing corner when the chassis reaches under it.
-
-**Callout.** Resting on a receptacle (300 ms, as a tooltip) or moving keyboard focus to it shows a small callout beside it with **the row's title and detail line, verbatim** — "Back, far left" over "Nothing plugged in · In the Thunderbolt Bridge" — and, when technical names are on, the row's technical line too. A USB-only receptacle's callout is its own subtitle, **USB only — this one isn't Thunderbolt**. The callout fades with the hover, says nothing the list does not say, and is never the only place a fact lives.
-
 ### 4.7 Position names
 
 Always physical, never numeric unless nothing better exists.
@@ -306,6 +298,14 @@ Always physical, never numeric unless nothing better exists.
 With **Show technical names** on, a `.caption` tertiary suffix is appended to the row's detail line only — `en6` — and nowhere else. **No text is ever drawn on the 3D model, regardless of this toggle.**
 
 ---
+
+### 4.8 The legend and the receptacle callout
+
+The rings say what the words say; two small aids make sure nobody has to guess which is which.
+
+**Legend.** A `.caption` `.secondary` list in the stage's top-leading corner, one line per outer-ring shape **present on this Mac right now**, glyph first: the ring geometries themselves at small scale. Labels are the panel's own words — **In a bridge** · **Standalone** · **Set up outside RDMALink** · **Ready for RDMA** · **Needs a look**. Nothing about the inner track, nothing about selection, no title. It is shown whenever the rings are live, hidden with View › **Hide Legend** ⌘K (which then reads **Show Legend**), and the choice is remembered. It never overlaps a receptacle: it yields to the model by moving to the top-trailing corner when the chassis reaches under it.
+
+**Callout.** Resting on a receptacle (300 ms, as a tooltip) or moving keyboard focus to it shows a small callout beside it with **the row's title and detail line, verbatim** — "Back, far left" over "Nothing plugged in · In the Thunderbolt Bridge" — and, when technical names are on, the row's technical line too. A USB-only receptacle's callout is its own subtitle, **USB only — this one isn't Thunderbolt**. The callout fades with the hover, says nothing the list does not say, and is never the only place a fact lives.
 
 ## 5. Screen-by-screen specification
 
