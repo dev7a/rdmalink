@@ -3,7 +3,7 @@
 /// The tokens are the machine's own words (`back-left-middle`), not the app's.
 /// Anything not listed here parses to nil, so an unfamiliar spelling produces a
 /// numbered port name rather than a wrong physical one.
-enum PortSlot: Sendable, Equatable {
+enum PortSlot: Sendable, Hashable {
     case left, leftMiddle, middle, rightMiddle, right
     /// Notebook side faces, where the qualifier is fore-and-aft.
     case rear, front
@@ -12,7 +12,7 @@ enum PortSlot: Sendable, Equatable {
 }
 
 /// Where a receptacle sits on the chassis, as far as this Mac will say.
-struct PortPosition: Sendable, Equatable {
+struct PortPosition: Sendable, Hashable {
     var face: PortFace
     var slot: PortSlot
 

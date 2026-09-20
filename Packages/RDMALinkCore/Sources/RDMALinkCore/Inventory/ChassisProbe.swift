@@ -12,6 +12,20 @@ struct ReceptacleEnrichment: Sendable, Equatable {
     var deviceAttached: Bool?
 }
 
+/// Everything one pass over the device tree can say about this chassis.
+struct ChassisEnrichment: Sendable, Equatable {
+    /// The Thunderbolt receptacles, keyed by receptacle index.
+    var byReceptacle: [Int: ReceptacleEnrichment] = [:]
+    /// The positions with no `AppleThunderboltIPPort` behind them — the
+    /// USB-only receptacles — and whether something is plugged into each.
+    ///
+    /// These have no receptacle index to join on, so nothing else in the read
+    /// can reach them; the chassis catalogue owns their rows, and this is the
+    /// only signal anywhere that says a cable is in one. UX_SPEC §4.5 and §S1
+    /// need exactly that and nothing more.
+    var cabledPositions: Set<PortPosition> = []
+}
+
 /// Reads physical position and plug presence out of the device tree.
 ///
 /// This is best-effort enrichment behind the public-key read, exactly as
@@ -45,19 +59,25 @@ enum ChassisProbe {
         var deviceAttached: Bool?
     }
 
-    /// Reads the enrichment, keyed by receptacle index. Returns an empty map
-    /// rather than throwing: a Mac with none of these keys is a supported Mac.
-    static func read() -> [Int: ReceptacleEnrichment] {
+    /// Reads the enrichment. Returns an empty value rather than throwing: a
+    /// Mac with none of these keys is a supported Mac.
+    static func read() -> ChassisEnrichment {
         let byPhandle = positionNodes()
-        guard !byPhandle.isEmpty else { return [:] }
+        guard !byPhandle.isEmpty else { return ChassisEnrichment() }
         let receptacles = receptacles(forAcioPhandles: Set(byPhandle.keys))
-        var result: [Int: ReceptacleEnrichment] = [:]
+        var result = ChassisEnrichment()
         for (phandleValue, facts) in byPhandle {
-            // A position node with no Thunderbolt port behind it is a
-            // USB-only receptacle. It has no receptacle index, so it cannot be
-            // joined here; the chassis model owns those.
-            guard let receptacle = receptacles[phandleValue] else { continue }
-            result[receptacle] = ReceptacleEnrichment(
+            // A position node with no Thunderbolt port behind it is a USB-only
+            // receptacle. It has no receptacle index to be joined on, so its
+            // position is all there is — and its `ConnectionActive` is the one
+            // thing that can say a cable is in one.
+            guard let receptacle = receptacles[phandleValue] else {
+                if let position = facts.position, facts.deviceAttached == true {
+                    result.cabledPositions.insert(position)
+                }
+                continue
+            }
+            result.byReceptacle[receptacle] = ReceptacleEnrichment(
                 position: facts.position,
                 deviceAttached: facts.deviceAttached
             )

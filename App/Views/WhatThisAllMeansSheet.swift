@@ -1,8 +1,9 @@
 //
 //  WhatThisAllMeansSheet.swift
 //
-//  S13 — the one explainer, reached from Help. Reading material: no 3D, no
-//  live state, nothing about this particular Mac (UX_SPEC §S13).
+//  S13 — the one explainer, reached from the hub's link row, from the toolbar's
+//  Help button and from the Help menu. Reading material: no 3D, no live state,
+//  nothing about this particular Mac (UX_SPEC §S13).
 //
 
 import SwiftUI
@@ -11,9 +12,10 @@ struct WhatThisAllMeansSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 18) {
             Text("What this all means")
                 .font(.title2.weight(.semibold))
+            TwoMacsIllustration()
             VStack(alignment: .leading, spacing: 16) {
                 ExplainerSection(
                     title: "RDMA over Thunderbolt",
@@ -38,6 +40,7 @@ struct WhatThisAllMeansSheet: View {
             HStack {
                 Spacer(minLength: 0)
                 Button("Done") { dismiss() }
+                    .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
             }
         }

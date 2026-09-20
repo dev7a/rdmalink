@@ -1,0 +1,118 @@
+//
+//  RefusalCard.swift
+//
+//  The one shape every refusal takes (UX_SPEC §6.1): inline in the working
+//  area, a hierarchical symbol in `.secondary` or `.orange`, a headline that
+//  names the situation, one short paragraph of why, and a button row whose
+//  primary is always a real action. Never a filled red badge, never a
+//  full-bleed alarm, and never a "Continue Anyway".
+//
+
+import AppKit
+import SwiftUI
+
+/// §3.1: `attention` is `.orange` and lives in the panel only. `stop` (`.red`)
+/// is used nowhere in this app.
+enum RefusalTint {
+    case secondary
+    case attention
+}
+
+struct RefusalCard<Buttons: View>: View {
+    let symbol: String
+    var tint: RefusalTint = .secondary
+    let headline: LocalizedStringResource
+    let message: LocalizedStringResource
+    /// A second paragraph some refusals grow into — R24 after three tries.
+    var extraMessage: LocalizedStringResource?
+    @ViewBuilder var buttons: Buttons
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: symbol)
+                    .symbolRenderingMode(.hierarchical)
+                    .imageScale(.medium)
+                    .foregroundStyle(symbolStyle)
+                    .accessibilityHidden(true)
+                Text(headline)
+                    .font(.title2.weight(.semibold))
+            }
+            Text(message)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let extraMessage {
+                Text(extraMessage)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 10) { buttons }
+                .padding(.top, 2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var symbolStyle: AnyShapeStyle {
+        switch tint {
+        case .secondary: AnyShapeStyle(.secondary)
+        case .attention: AnyShapeStyle(.orange)
+        }
+    }
+}
+
+/// `Copy Details` → `Copied`. Present on every failure refusal, and its payload
+/// always carries the technical names regardless of the "Show technical names"
+/// toggle (§6.1 rule 8).
+struct CopyDetailsButton: View {
+    let details: () -> String
+
+    var body: some View {
+        CopyButton(title: "Copy Details", payload: details)
+    }
+}
+
+/// §9.14: "The button swaps to a checkmark and the word for two seconds, then
+/// quietly goes back. No toast, no banner, no sound."
+///
+/// It stays *clickable* while it reads `Copied`: "Copied" is a state the
+/// button passes through, not the end of it, and a user who pasted into the
+/// wrong window has to be able to copy again.
+struct CopyButton: View {
+    let title: LocalizedStringResource
+    let payload: () -> String
+    @State private var hasCopied = false
+    @State private var revert: Task<Void, Never>?
+
+    var body: some View {
+        Button {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(payload(), forType: .string)
+            hasCopied = true
+            revert?.cancel()
+            revert = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled else { return }
+                hasCopied = false
+            }
+        } label: {
+            if hasCopied {
+                Label("Copied", systemImage: "checkmark")
+            } else {
+                Text(title)
+            }
+        }
+        .animation(.smooth(duration: 0.15), value: hasCopied)
+        .onDisappear { revert?.cancel() }
+    }
+}
+
+/// The one button in the app that ends the session. Only refusals that leave
+/// nothing to do offer it (§6.2 R24, R25).
+struct QuitButton: View {
+    var body: some View {
+        Button("Quit") { NSApplication.shared.terminate(nil) }
+    }
+}

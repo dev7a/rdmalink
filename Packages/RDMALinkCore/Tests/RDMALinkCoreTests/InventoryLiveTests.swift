@@ -43,10 +43,13 @@ struct InventoryLiveTests {
                 + "IOLinkStatus \(row.linkStatus)")
         }
         let enrichment = ChassisProbe.read()
-        for receptacle in enrichment.keys.sorted() {
-            let facts = enrichment[receptacle]
+        for receptacle in enrichment.byReceptacle.keys.sorted() {
+            let facts = enrichment.byReceptacle[receptacle]
             print("  receptacle \(receptacle) · position \(String(describing: facts?.position)) · "
                 + "attached \(String(describing: facts?.deviceAttached))")
+        }
+        for position in enrichment.cabledPositions {
+            print("  cabled USB-only receptacle · \(position)")
         }
         #expect(rows.allSatisfy { $0.receptacle > 0 })
     }

@@ -6,34 +6,44 @@
 //
 
 import SwiftUI
-import RDMALinkCore
 
 struct ThisMacSection: View {
-    let rdma: RDMAStatus
-    let ports: [ThunderboltPort]
+    let rows: [ThisMacRowModel]
+    let perform: (ThisMacRowAction) -> Void
 
     var body: some View {
         GroupedSection(header: "This Mac") {
-            if let rdmaRow = ThisMacPresentation.rdmaRow(rdma) {
-                ThisMacRow(text: rdmaRow)
-                RowDivider()
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                if index > 0 { RowDivider() }
+                ThisMacRow(row: row, perform: perform)
             }
-            ThisMacRow(text: ThisMacPresentation.bridgeRow(ports))
-            RowDivider()
-            // ML2 owns the baseline store, so nothing can be ready yet.
-            ThisMacRow(text: "Ports ready for RDMA — None yet")
         }
     }
 }
 
 struct ThisMacRow: View {
-    let text: LocalizedStringResource
+    let row: ThisMacRowModel
+    let perform: (ThisMacRowAction) -> Void
 
     var body: some View {
-        Text(text)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(row.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let action = row.action {
+                Button(title(for: action)) { perform(action) }
+                    .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .animation(.smooth(duration: 0.18), value: row)
+    }
+
+    private func title(for action: ThisMacRowAction) -> LocalizedStringResource {
+        switch action {
+        case .turnItOn: "Turn It On…"
+        case .tellMeMore: "Tell Me More"
+        }
     }
 }

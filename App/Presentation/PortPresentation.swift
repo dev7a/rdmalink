@@ -1,48 +1,79 @@
 //
 //  PortPresentation.swift
 //
-//  Every string and symbol a port row draws, derived from one
-//  `ThunderboltPort`. Pure, value-typed and free of SwiftUI layout, so the
-//  row view stays a renderer and the copy stays checkable against
-//  docs/UX_SPEC.md §S1 and §3.3.
+//  Every string and symbol a port row draws, derived from one `PortSnapshot`.
+//  Pure, value-typed and free of SwiftUI layout, so the row view stays a
+//  renderer and the copy stays checkable against docs/UX_SPEC.md §S1 and §3.3.
 //
 
 import Foundation
 import RDMALinkCore
 
-struct PortRowPresentation: Sendable, Identifiable {
+/// How a row's symbol is tinted. UX_SPEC §3.3 names four treatments and no
+/// more; nothing here ever reaches the 3D model, where no colour carries
+/// meaning at all (§3.1).
+enum PortSymbolStyle: Sendable, Equatable {
+    case secondary
+    /// USB-only receptacles and other quiet rows.
+    case tertiary
+    /// The user's system accent: a port that is ready.
+    case accent
+    /// `.orange`, in the panel only: a port that needs a look.
+    case attention
+}
+
+/// The detail line under a row title.
+///
+/// `address` is split out of `state` rather than interpolated into it because
+/// UX_SPEC §3.2 gives the `fe80::` address its own style — `.body.monospaced()`,
+/// selectable — and §8.5 forbids ever truncating it. The middle dot between
+/// them is drawn by the row.
+struct PortRowDetail: Sendable, Equatable {
+    var state: LocalizedStringResource
+    /// Appended after a middle dot on a port that has no setup of its own.
+    var membership: LocalizedStringResource?
+    /// `fe80::1c3d:5aff:fe22:9b04%en6`, scope suffix included.
+    var address: String?
+}
+
+struct PortRowPresentation: Sendable, Equatable, Identifiable {
     let id: String
     /// SF Symbol from UX_SPEC §3.3.
     let symbol: String
-    /// USB-only receptacles draw their symbol in `.tertiary` (§3.3).
-    let usesTertiarySymbol: Bool
+    let symbolStyle: PortSymbolStyle
     /// The physical position name, already localized by Core (§4.7).
     let positionName: String
-    let state: LocalizedStringResource
-    /// `nil` on USB-only receptacles, which are in no bridge by definition.
-    let membership: LocalizedStringResource?
-    /// The BSD name, shown only when `Show technical names` is on.
-    let technicalName: String
+    let detail: PortRowDetail
+    /// Interface, bridge and service names, shown only with "Show technical
+    /// names" on (§1.3 rule 6).
+    let technicalSuffix: String?
     let accessibilityLabel: String
+    /// VoiceOver reads the address as the element's value, not its label (§8.2).
+    let accessibilityValue: String?
 
-    init(port: ThunderboltPort) {
-        let state = Self.state(of: port)
-        let membership = Self.membership(of: port)
+    init(snapshot: PortSnapshot) {
+        let port = snapshot.port
+        let detail = Self.detail(for: snapshot)
         self.id = port.id
-        self.symbol = Self.symbol(of: port)
-        self.usesTertiarySymbol = !port.isThunderbolt
+        self.symbol = Self.symbol(for: snapshot)
+        self.symbolStyle = Self.symbolStyle(for: snapshot)
         self.positionName = port.positionName
-        self.state = state
-        self.membership = membership
-        self.technicalName = port.bsdName
-        self.accessibilityLabel = Self.accessibilityLabel(
-            of: port, state: state, membership: membership
-        )
+        self.detail = detail
+        self.technicalSuffix = Self.technicalSuffix(for: snapshot)
+        self.accessibilityLabel = Self.accessibilityLabel(for: snapshot, detail: detail)
+        self.accessibilityValue = detail.address
     }
 
-    private static func symbol(of port: ThunderboltPort) -> String {
-        guard port.isThunderbolt else { return "cable.connector.horizontal" }
-        switch port.link {
+    private static func symbol(for snapshot: PortSnapshot) -> String {
+        switch snapshot.readiness {
+        case .managed: return "checkmark.circle.fill"
+        case .adopted: return "checkmark.seal.fill"
+        case .setUpElsewhere: return "checkmark.circle"
+        case .drifted: return "exclamationmark.circle"
+        case .plain: break
+        }
+        guard snapshot.port.isThunderbolt else { return "cable.connector.horizontal" }
+        switch snapshot.port.link {
         case .empty: return "circle.dashed"
         case .device: return "cable.connector"
         case .macLinkComingUp: return "bolt.horizontal.circle"
@@ -50,7 +81,39 @@ struct PortRowPresentation: Sendable, Identifiable {
         }
     }
 
-    private static func state(of port: ThunderboltPort) -> LocalizedStringResource {
+    private static func symbolStyle(for snapshot: PortSnapshot) -> PortSymbolStyle {
+        switch snapshot.readiness {
+        case .managed, .adopted: .accent
+        case .setUpElsewhere: .secondary
+        case .drifted: .attention
+        case .plain: snapshot.port.isThunderbolt ? .secondary : .tertiary
+        }
+    }
+
+    private static func detail(for snapshot: PortSnapshot) -> PortRowDetail {
+        switch snapshot.readiness {
+        case .managed:
+            guard let address = snapshot.linkLocalAddress else {
+                return PortRowDetail(
+                    state: "Ready for RDMA · the address appears when a Mac arrives"
+                )
+            }
+            return PortRowDetail(state: "Ready for RDMA", address: address)
+        case .adopted:
+            return PortRowDetail(state: "Ready for RDMA · set up by you, looked after by RDMALink")
+        case .setUpElsewhere:
+            return PortRowDetail(state: "Set up outside RDMALink")
+        case .drifted:
+            return PortRowDetail(state: "Not set up any more")
+        case .plain:
+            return PortRowDetail(
+                state: linkState(of: snapshot.port),
+                membership: membership(of: snapshot)
+            )
+        }
+    }
+
+    private static func linkState(of port: ThunderboltPort) -> LocalizedStringResource {
         guard port.isThunderbolt else { return "USB only — this one isn't Thunderbolt" }
         switch port.link {
         case .empty: return "Nothing plugged in"
@@ -60,62 +123,72 @@ struct PortRowPresentation: Sendable, Identifiable {
         }
     }
 
-    /// §S1 gives "In the Thunderbolt Bridge", "Not in any bridge" and
-    /// "In two bridges, including one that isn't in use".
+    /// §S1's three membership phrases, and only those three.
     ///
-    /// The third is not used verbatim: `ThunderboltPort.bridges` carries BSD
-    /// names only, so nothing here has observed that any bridge is unused, and
-    /// the count is whatever the kernel reports — three bridges are no harder
-    /// to make in Manage Virtual Interfaces than two. Stating "two", or
-    /// "one that isn't in use", would be a claim the app has not observed
-    /// (§1.3 rule 10). Carrying each bridge's liveness through from Core is a
-    /// change to the `ThunderboltPort.bridges` contract and is owed the spec
-    /// owner; until then the count is stated and nothing else is.
-    private static func membership(of port: ThunderboltPort) -> LocalizedStringResource? {
-        guard port.isThunderbolt else { return nil }
-        let count = Set(port.bridges).count
-        switch count {
+    /// "In two bridges, including one that isn't in use" is printed exactly
+    /// when it is true — two bridges, one of them down — because
+    /// `BridgeMembership.isUp` is observed. Every other shape (three bridges,
+    /// or two that are both up) has no sentence in the spec, and the phrase is
+    /// left off rather than minted here; the row still states the port's state,
+    /// and **the missing strings are owed from the spec owner**.
+    private static func membership(of snapshot: PortSnapshot) -> LocalizedStringResource? {
+        guard snapshot.port.isThunderbolt else { return nil }
+        let bridges = snapshot.bridges
+        switch bridges.count {
         case 0: return "Not in any bridge"
         case 1: return "In the Thunderbolt Bridge"
+        case 2 where bridges.count(where: { !$0.isUp }) == 1:
+            return "In two bridges, including one that isn't in use"
         default:
-            let spelled = ThisMacPresentation.spelledOut(count, capitalized: false)
-            return "In \(spelled) bridges"
+            return nil
         }
     }
 
-    private static func accessibilityLabel(
-        of port: ThunderboltPort,
-        state: LocalizedStringResource,
-        membership: LocalizedStringResource?
-    ) -> String {
-        let stateText = String(localized: state)
-        guard let membership else {
-            let usb: String.LocalizationValue = "\(port.positionName). USB port. \(stateText)."
-            return String(localized: usb)
+    /// `en6 · bridge0 · Thunderbolt Bridge` — the interface, bridge and service
+    /// names §S12's help text promises, in that order, and nothing else.
+    private static func technicalSuffix(for snapshot: PortSnapshot) -> String? {
+        var parts: [String] = []
+        // A USB-only receptacle has no interface name, and an empty suffix is
+        // worse than none at all.
+        if !snapshot.port.bsdName.isEmpty { parts.append(snapshot.port.bsdName) }
+        parts.append(contentsOf: snapshot.bridges.map(\.name))
+        if let serviceName = snapshot.serviceName, !serviceName.isEmpty {
+            parts.append(serviceName)
         }
-        let membershipText = String(localized: membership)
-        let thunderbolt: String.LocalizationValue =
-            "\(port.positionName). Thunderbolt port. \(stateText). \(membershipText)."
-        return String(localized: thunderbolt)
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private static func accessibilityLabel(
+        for snapshot: PortSnapshot,
+        detail: PortRowDetail
+    ) -> String {
+        let state = String(localized: detail.state)
+        let kind: String.LocalizationValue = snapshot.port.isThunderbolt
+            ? "\(snapshot.port.positionName). Thunderbolt port. \(state)."
+            : "\(snapshot.port.positionName). USB port. \(state)."
+        guard let membership = detail.membership else { return String(localized: kind) }
+        let joined: String.LocalizationValue =
+            "\(String(localized: kind)) \(String(localized: membership))."
+        return String(localized: joined)
     }
 }
 
 /// One face of the Mac and the receptacles on it, in physical order.
-struct PortGroup: Sendable, Identifiable {
+struct PortGroup: Sendable, Equatable, Identifiable {
     let id: String
     let header: LocalizedStringResource
-    let ports: [ThunderboltPort]
+    let ports: [PortSnapshot]
 }
 
 enum PortGrouping {
     /// Groups by face without reordering: faces come out in the order their
     /// first port appears, and ports keep the order Core reported (§2.3).
-    static func groups(for ports: [ThunderboltPort]) -> [PortGroup] {
+    static func groups(for ports: [PortSnapshot]) -> [PortGroup] {
         var order: [PortFace?] = []
-        var buckets: [PortFace?: [ThunderboltPort]] = [:]
+        var buckets: [PortFace?: [PortSnapshot]] = [:]
         for port in ports {
-            if buckets[port.face] == nil { order.append(port.face) }
-            buckets[port.face, default: []].append(port)
+            if buckets[port.port.face] == nil { order.append(port.port.face) }
+            buckets[port.port.face, default: []].append(port)
         }
         return order.map { face in
             PortGroup(

@@ -1,4 +1,5 @@
 import Foundation
+import SystemConfiguration
 
 /// Everything one read can say about this Mac: what it is, what is plugged into
 /// it, and whether RDMA over Thunderbolt is switched on.
@@ -38,6 +39,13 @@ public struct Inventory: Sendable, Equatable {
     /// back port. Receptacle order is kept as a tie-break, so a Mac that
     /// publishes no positions at all comes back in the order macOS reports.
     ///
+    /// On a recognized Mac the list also carries the **USB-only receptacles**
+    /// from ``ReceptacleCatalogue``, interleaved in the same physical order.
+    /// They have no BSD name and no Thunderbolt-IP port behind them; they are
+    /// in the list because UX_SPEC §4.5 and §S1 put them there, dimmed and
+    /// unselectable, so that a cable in the wrong hole has somewhere to be
+    /// seen.
+    ///
     /// - Throws: ``InventoryError`` when the registry itself refused (R24 with
     ///   a reason for `Copy Details`), or ``InterfaceReadFailure`` when
     ///   `ifconfig` did. Bridge membership is not optional enrichment: a port
@@ -64,16 +72,47 @@ public struct Inventory: Sendable, Equatable {
     ) throws -> [ThunderboltPort] {
         let rows = try PortInventory.readRows()
         let enrichment = ChassisProbe.read()
-        var ports = PortInventory.assemble(rows: rows, archetype: archetype, enrichment: enrichment)
+        var ports = PortInventory.assemble(
+            rows: rows, archetype: archetype, enrichment: enrichment.byReceptacle
+        )
         let interfaces = try InterfaceSnapshot.read(using: runner)
+        // Resolved once, and only if some port is in a bridge at all: on a Mac
+        // with no bridges this opens no preferences session.
+        var displayNames: [String: String]?
         for index in ports.indices {
             let name = ports[index].bsdName
+            let bridges = interfaces.bridges(containing: name)
+            if !bridges.isEmpty, displayNames == nil { displayNames = bridgeDisplayNames() }
             ports[index].apply(
-                bridges: interfaces.bridges(containing: name),
+                bridges: bridges.map { bridge in
+                    ThunderboltPort.BridgeMembership(
+                        name: bridge,
+                        displayName: displayNames?[bridge],
+                        isUp: interfaces[bridge].map { $0.isUp && $0.isActive } ?? false
+                    )
+                },
                 linkLocal: interfaces[name]?.linkLocalAddresses ?? []
             )
         }
-        return sortedPhysically(ports, enrichment: enrichment)
+        return ReceptacleCatalogue.portRows(
+            realPorts: sortedPhysically(ports, enrichment: enrichment.byReceptacle),
+            archetype: archetype,
+            cabledPositions: enrichment.cabledPositions
+        )
+    }
+
+    /// What System Settings calls each bridge, keyed by BSD name.
+    ///
+    /// Read-only: `SCPreferencesCreate` without an `AuthorizationRef` cannot
+    /// write, and ``BridgeSPI/displayNames(in:)`` degrades to an empty map
+    /// when the private symbols are not there, which leaves every
+    /// ``ThunderboltPort/BridgeMembership/displayName`` nil rather than
+    /// guessed.
+    private static func bridgeDisplayNames() -> [String: String] {
+        guard let preferences = SCPreferencesCreate(nil, "RDMALink" as CFString, nil) else {
+            return [:]
+        }
+        return BridgeSPI.displayNames(in: preferences)
     }
 
     /// Sorts by where the receptacles actually are, falling back to receptacle

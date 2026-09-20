@@ -45,6 +45,13 @@ func describe(_ link: LinkState) -> String {
     }
 }
 
+/// One bridge a port is in: the kernel name, what System Settings calls it
+/// when the SPI said, and whether the kernel is really running it.
+func describe(_ bridge: ThunderboltPort.BridgeMembership) -> String {
+    let named = bridge.displayName.map { " (\($0))" } ?? ""
+    return "\(bridge.name)\(named) \(bridge.isUp ? "in use" : "not in use")"
+}
+
 func describe(_ configuration: PortConfiguration) -> String {
     switch configuration {
     case let .unconfigured(bridges):
@@ -93,7 +100,7 @@ func runInventory() throws {
             + "· \(port.face?.rawValue ?? "face unknown") "
             + "· \(port.isThunderbolt ? "Thunderbolt" : "USB only")")
         print("    link: \(describe(port.link))")
-        print("    bridges: \(list(port.bridges))")
+        print("    bridges: \(list(port.bridges.map(describe)))")
         print("    fe80: \(list(port.linkLocal))")
     }
 }
@@ -162,7 +169,10 @@ func runRefusals() throws {
 
     print("")
     print("Per port:")
-    for port in inventory.ports {
+    // USB-only receptacles have no interface, no service and no bridge to
+    // refuse anything about. Previewing one would be a plan for a hole that
+    // cannot carry RDMA.
+    for port in inventory.ports where port.isThunderbolt {
         let observedPort = port.observed
         print("  \(port.positionName) (\(port.bsdName))")
         report("R9", "Out of every bridge", Refusals.portStillBridged(
@@ -170,7 +180,7 @@ func runRefusals() throws {
         ), indent: "    ")
         let configuration = NetworkServices.classify(
             services: NetworkServices.services(for: port.bsdName, in: services),
-            bridges: port.bridges
+            bridges: port.bridges.map(\.name)
         )
         if case let .foreign(_, reason) = configuration {
             report("R16", "No setup RDMALink didn't make",

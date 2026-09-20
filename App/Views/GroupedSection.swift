@@ -8,19 +8,23 @@
 import SwiftUI
 
 struct GroupedSection<Content: View>: View {
-    private let header: LocalizedStringResource
+    private let header: LocalizedStringResource?
     private let content: Content
 
-    init(header: LocalizedStringResource, @ViewBuilder content: () -> Content) {
+    /// Situation rows have no header of their own (§S1), so the header is
+    /// optional rather than an empty string.
+    init(header: LocalizedStringResource? = nil, @ViewBuilder content: () -> Content) {
         self.header = header
         self.content = content()
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(header)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 5) {
+            if let header {
+                Text(header)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             VStack(spacing: 0) { content }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.background.secondary, in: .rect(cornerRadius: 8))

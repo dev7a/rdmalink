@@ -86,7 +86,11 @@ struct InventoryAggregateTests {
             print("  \(port.positionName) · \(port.bsdName) · receptacle \(port.receptacle) "
                 + "· \(port.link) · bridges \(port.bridges) · \(port.linkLocal)")
         }
-        #expect(inventory.ports.allSatisfy { !$0.bsdName.isEmpty })
+        // A Thunderbolt port always has an interface name; a USB-only row from
+        // the chassis catalogue never does, which is how everything downstream
+        // tells them apart.
+        #expect(inventory.ports.filter { $0.isThunderbolt }.allSatisfy { !$0.bsdName.isEmpty })
+        #expect(inventory.ports.filter { !$0.isThunderbolt }.allSatisfy { $0.bsdName.isEmpty })
         #expect(Set(inventory.ports.map(\.id)).count == inventory.ports.count)
         #expect(inventory.observedPorts.map(\.bsdName) == inventory.ports.map(\.bsdName))
         // Back comes before front on every Mac that says which is which.

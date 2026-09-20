@@ -31,7 +31,10 @@ public enum PortInventory {
     /// is R24. A throw means the registry itself refused, which is also R24 but
     /// carries a reason for `Copy Details`.
     public static func read(archetype: Archetype) throws -> [ThunderboltPort] {
-        assemble(rows: try readRows(), archetype: archetype, enrichment: ChassisProbe.read())
+        assemble(
+            rows: try readRows(), archetype: archetype,
+            enrichment: ChassisProbe.read().byReceptacle
+        )
     }
 
     /// The public-key pass. A receptacle with no BSD name is skipped: every

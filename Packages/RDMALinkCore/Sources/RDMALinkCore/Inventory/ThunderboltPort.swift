@@ -23,9 +23,13 @@ public enum LinkState: Sendable, Equatable {
 public struct ThunderboltPort: Sendable, Identifiable, Equatable {
     /// Stable across launches and replugs. This is the BSD name: an IORegistry
     /// entry id changes when the port re-enumerates, and every other module —
-    /// bridges, services, baselines — already keys on `enN`.
+    /// bridges, services, baselines — already keys on `enN`. A USB-only
+    /// receptacle has no BSD name and carries the catalogue's own identifier
+    /// for it instead.
     public var id: String
-    /// `IOLocation`, 1-based, as the Thunderbolt-IP driver reports it.
+    /// `IOLocation`, 1-based, as the Thunderbolt-IP driver reports it. On a
+    /// USB-only receptacle, which has no Thunderbolt-IP port to report one,
+    /// it is the catalogue's own 0-based index for that receptacle on its face.
     public var receptacle: Int
     /// `en6`. Never derived from ``receptacle``.
     public var bsdName: String
@@ -37,10 +41,48 @@ public struct ThunderboltPort: Sendable, Identifiable, Equatable {
     public var isThunderbolt: Bool
     /// The inner track.
     public var link: LinkState
-    /// Every kernel bridge this port is a member of, active or not.
-    public var bridges: [String]
+    /// Every kernel bridge this port is a member of, in use or not.
+    public var bridges: [BridgeMembership]
     /// `fe80::` addresses on this interface, without the `%scope` suffix.
     public var linkLocal: [String]
+
+    /// One kernel bridge a port belongs to.
+    ///
+    /// The BSD name alone is not enough to say what UX_SPEC §S1 says — "In two
+    /// bridges, including one that isn't in use" — so the two facts that
+    /// sentence rests on travel with it.
+    ///
+    /// This is not ``RDMALinkCore/BridgeMembership``, which is the undo note's
+    /// record of a bridge's whole member list at the moment it was changed.
+    /// This one is what the port list knows about a bridge right now.
+    public struct BridgeMembership: Sendable, Equatable, Identifiable {
+        /// The kernel interface name, `bridge0`.
+        public var name: String
+        /// What System Settings calls it, `Thunderbolt Bridge`, when the
+        /// bridge SPI answered. `nil` when it did not: nothing is guessed, and
+        /// the copy falls back to ``name`` (`docs/ARCHITECTURE.md`, rule 5).
+        public var displayName: String?
+        /// Whether the kernel says this bridge is up **and** carrying
+        /// something.
+        ///
+        /// The `UP` flag on its own is not evidence: practically every
+        /// interface on macOS carries it whatever its carrier state, and an
+        /// empty `bridge0` that nothing has ever used reads `UP` too. The fact
+        /// underneath is `ifconfig`'s `status: active`, and both are required
+        /// here, so a bridge this says is up is one the kernel is really
+        /// running traffic through.
+        public var isUp: Bool
+
+        /// The kernel name: unique among one port's bridges, because an
+        /// interface is listed once.
+        public var id: String { name }
+
+        public init(name: String, displayName: String? = nil, isUp: Bool) {
+            self.name = name
+            self.displayName = displayName
+            self.isUp = isUp
+        }
+    }
 
     public init(
         id: String,
@@ -50,7 +92,7 @@ public struct ThunderboltPort: Sendable, Identifiable, Equatable {
         positionName: String,
         isThunderbolt: Bool = true,
         link: LinkState,
-        bridges: [String] = [],
+        bridges: [BridgeMembership] = [],
         linkLocal: [String] = []
     ) {
         self.id = id
@@ -69,7 +111,7 @@ public struct ThunderboltPort: Sendable, Identifiable, Equatable {
     /// The Inventory module reads hardware; kernel bridge membership and live
     /// addresses come from the Network module's `ifconfig -a` parse. This is
     /// where the two meet, so neither module has to know the other's shape.
-    public mutating func apply(bridges: [String], linkLocal: [String]) {
+    public mutating func apply(bridges: [BridgeMembership], linkLocal: [String]) {
         self.bridges = bridges
         self.linkLocal = linkLocal
     }

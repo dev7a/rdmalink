@@ -154,8 +154,16 @@ struct InventoryPortTests {
         #expect(port.bridges.isEmpty)
         #expect(port.linkLocal.isEmpty)
 
-        port.apply(bridges: ["bridge0", "bridge4"], linkLocal: ["fe80::1c3d:5aff:fe22:9b04"])
-        #expect(port.bridges == ["bridge0", "bridge4"])
+        port.apply(
+            bridges: [
+                .init(name: "bridge0", displayName: "Thunderbolt Bridge", isUp: true),
+                .init(name: "bridge4", isUp: false),
+            ],
+            linkLocal: ["fe80::1c3d:5aff:fe22:9b04"]
+        )
+        #expect(port.bridges.map(\.name) == ["bridge0", "bridge4"])
+        #expect(port.bridges.map(\.displayName) == ["Thunderbolt Bridge", nil])
+        #expect(port.bridges.map(\.isUp) == [true, false])
         #expect(port.linkLocal == ["fe80::1c3d:5aff:fe22:9b04"])
         #expect(port.link == .macLinked)
         #expect(port.positionName == "Front, right")
