@@ -124,7 +124,7 @@ struct OperationsReturnToBridgeTests {
         defer { try? FileManager.default.removeItem(at: store.directory) }
         let writer = FakeWriter()
         writer.presentServiceIDs = ["FOREIGN"]
-        writer.canPushBridgeConfiguration = false
+        writer.canReapplyConfiguration = false
         writer.kernel = { _ in Fixtures.snapshot(Fixtures.standalone) }
         #expect {
             try ReturnToBridge(port: Fixtures.port).perform(

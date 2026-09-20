@@ -15,14 +15,13 @@ protocol NetworkWriter: AnyObject {
     /// True when the session will throw its changes away instead of
     /// committing them.
     ///
-    /// A dry run writes no bridge membership at all: the SPI's configuration
-    /// push is what configd itself uses to realise a change and the kernel has
-    /// it the moment the call returns, so there is no such thing as a dry run
-    /// of it (see ``BridgeMembershipChange``).
+    /// A dry run writes no bridge membership at all and never applies.
     var isDryRun: Bool { get }
 
-    /// Whether `_SCBridgeInterfaceUpdateConfiguration` resolves here.
-    var canPushBridgeConfiguration: Bool { get }
+    /// Whether the kernel can be asked again. Live, that is a second
+    /// `SCPreferencesApplyChanges` on the same session, which needs nothing
+    /// the burst does not already hold.
+    var canReapplyConfiguration: Bool { get }
 
     /// Takes the configuration lock. Fails rather than waits — two writers is
     /// how configurations get mangled (R12).
@@ -53,9 +52,12 @@ protocol NetworkWriter: AnyObject {
     @discardableResult
     func deleteService(identifier: String, expectedInterface: String) throws -> Bool
 
-    /// `_SCBridgeInterfaceUpdateConfiguration`, the routine configd itself
-    /// uses to realise a bridge change.
-    func pushBridgeConfiguration() throws
+    /// Applies the committed configuration a second time, so configd runs its
+    /// bridge update again. The app never calls `_SCBridgeInterfaceUpdateConfiguration`
+    /// itself: that call issues the bridge ioctls and a non-root process gets
+    /// `Operation not permitted` from it (measured 2026-09-20). configd runs
+    /// that very call on every apply, so asking configd again is the push.
+    func reapplyConfiguration() throws
     func commitAndApply() throws
 }
 
@@ -71,7 +73,7 @@ final class LiveNetworkWriter: NetworkWriter {
 
     var isDryRun: Bool { session.mode == .dryRun }
 
-    var canPushBridgeConfiguration: Bool { BridgeSPI.availability.canUpdateConfiguration }
+    var canReapplyConfiguration: Bool { true }
 
     func lock() throws { try session.lock() }
 
@@ -147,9 +149,9 @@ final class LiveNetworkWriter: NetworkWriter {
         return true
     }
 
-    func pushBridgeConfiguration() throws {
+    func reapplyConfiguration() throws {
         guard !isDryRun else { return }
-        try BridgeSPI.updateConfiguration(in: try session.preferences)
+        try session.apply()
     }
 
     func commitAndApply() throws {

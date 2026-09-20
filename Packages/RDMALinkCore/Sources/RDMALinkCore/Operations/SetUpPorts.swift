@@ -621,7 +621,7 @@ public struct SetUpPorts: Sendable {
             changedSomething = changedSomething || !writer.isDryRun
         } catch let error as NetworkConfigurationError {
             // Another writer holding the configuration is R12, and nothing was
-            // committed or pushed, so there is nothing to put back.
+            // committed or applied, so there is nothing to put back.
             if case .busy = error { throw Refusals.networkIsBusy(port: port.observed) }
             guard !left.isEmpty else { throw error }
             changedSomething = true
@@ -635,7 +635,7 @@ public struct SetUpPorts: Sendable {
         // only the kernel can say so.
         progress(.checkOutOfEveryBridge, .running)
         var agreement = KernelAgreement(agreed: true, settledOnItsOwn: true,
-                                        pushedConfiguration: false, settledAfterPush: false,
+                                        reappliedConfiguration: false, settledAfterReapply: false,
                                         reads: 0)
         if !writer.isDryRun {
             // Both sources, and both have to agree: a kernel that has let go

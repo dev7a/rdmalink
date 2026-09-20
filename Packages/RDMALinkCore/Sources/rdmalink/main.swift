@@ -364,7 +364,7 @@ func runSetUp(_ names: [String]) throws {
     for port in result.ports {
         print("  \(port.positionName): service \(port.createdServiceID ?? "none") · "
             + "left \(list(port.leftBridges)) · "
-            + "kernel settled \(port.agreement.settledOnItsOwn ? "on its own" : "after the push") "
+            + "kernel settled \(port.agreement.settledOnItsOwn ? "on its own" : "after a second apply") "
             + "in \(port.agreement.reads) reads")
     }
 }

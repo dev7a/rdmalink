@@ -111,7 +111,7 @@ struct OperationsRollbackTests {
 
     // MARK: - Verification
 
-    @Test("A kernel that catches up late settles on its own, with no push")
+    @Test("A kernel that catches up late settles on its own, with no second apply")
     func waitsForASlowKernel() throws {
         let store = Fixtures.store()
         defer { try? FileManager.default.removeItem(at: store.directory) }
@@ -127,18 +127,18 @@ struct OperationsRollbackTests {
         let agreement = try #require(result.ports.first?.agreement)
         #expect(agreement.agreed)
         #expect(agreement.settledOnItsOwn)
-        #expect(agreement.pushedConfiguration == false)
+        #expect(agreement.reappliedConfiguration == false)
         #expect(agreement.reads == 3)
-        #expect(!writer.calls.contains(.push))
+        #expect(!writer.calls.contains(.reapply))
     }
 
-    @Test("A kernel that only moves after the push records that it was needed")
-    func pushesTheConfigurationWhenItHasTo() throws {
+    @Test("A kernel that only moves after a second apply records that it was needed")
+    func reappliesWhenItHasTo() throws {
         let store = Fixtures.store()
         defer { try? FileManager.default.removeItem(at: store.directory) }
         let writer = FakeWriter()
         writer.kernel = { state in
-            Fixtures.snapshot(state.pushed ? Fixtures.standalone : Fixtures.inOneBridge)
+            Fixtures.snapshot(state.reapplied ? Fixtures.standalone : Fixtures.inOneBridge)
         }
         let result = try SetUpPorts(ports: [Fixtures.port]).perform(
             writer: writer, world: Fixtures.world(ifconfig: Fixtures.inOneBridge),
@@ -147,9 +147,9 @@ struct OperationsRollbackTests {
         let agreement = try #require(result.ports.first?.agreement)
         #expect(agreement.agreed)
         #expect(agreement.settledOnItsOwn == false)
-        #expect(agreement.pushedConfiguration)
-        #expect(agreement.settledAfterPush)
-        #expect(writer.calls.contains(.push))
+        #expect(agreement.reappliedConfiguration)
+        #expect(agreement.settledAfterReapply)
+        #expect(writer.calls.contains(.reapply))
     }
 
     @Test("A kernel that never agrees rolls the port back and says so")
@@ -157,7 +157,7 @@ struct OperationsRollbackTests {
         let store = Fixtures.store()
         defer { try? FileManager.default.removeItem(at: store.directory) }
         let writer = FakeWriter()
-        writer.canPushBridgeConfiguration = false
+        writer.canReapplyConfiguration = false
         writer.kernel = { _ in Fixtures.snapshot(Fixtures.inOneBridge) }
         #expect {
             try SetUpPorts(ports: [Fixtures.port]).perform(

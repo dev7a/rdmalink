@@ -217,7 +217,12 @@ public struct ReturnToBridge: Sendable {
         // Step 3. Joined to the bridge that already exists. Never created.
         let membership = world.membership(ofBridge: bridgeBSDName)
         progress(.joinBridge(named: bridgeName), .running)
-        try writer.addMember(port.bsdName, to: membership, at: nil)
+        do {
+            try writer.addMember(port.bsdName, to: membership, at: nil)
+        } catch BridgeSPIError.alreadyMember {
+            // The stored list has it already: an earlier attempt got this far
+            // and the kernel did not follow (R20). The read-back decides.
+        }
         do {
             try writer.commitAndApply()
         } catch let error as NetworkConfigurationError {
@@ -231,7 +236,7 @@ public struct ReturnToBridge: Sendable {
         // Step 4. Read back from the kernel before the sheet says it is in.
         progress(.checkInBridge, .running)
         var agreement = KernelAgreement(agreed: true, settledOnItsOwn: true,
-                                        pushedConfiguration: false, settledAfterPush: false,
+                                        reappliedConfiguration: false, settledAfterReapply: false,
                                         reads: 0)
         if !writer.isDryRun {
             // Both sources: the kernel bridging it, and the preferences

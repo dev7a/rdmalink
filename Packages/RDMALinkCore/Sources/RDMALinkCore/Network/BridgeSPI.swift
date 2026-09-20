@@ -328,6 +328,11 @@ public enum BridgeSPI {
 
     /// Pushes the bridge configuration.
     ///
+    /// **Root only in practice.** From the authorized but non-root CLI it fails
+    /// with `bridge0: could not set MAC address: Operation not permitted`
+    /// (2026-09-20), so the operations never call it: configd runs this very
+    /// call on every `SCPreferencesApplyChanges`, and they apply again instead.
+    ///
     /// **This is what configd itself uses to realise a bridge change**: it
     /// issues the `SIOCSDRVSPEC` ioctls that add and remove members, so the
     /// kernel has it the moment the call returns and `SCPreferencesCommitChanges`

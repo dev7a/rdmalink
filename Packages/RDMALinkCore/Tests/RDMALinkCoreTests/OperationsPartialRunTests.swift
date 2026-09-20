@@ -236,8 +236,8 @@ struct OperationsPartialRunTests {
         let agreement = try KernelVerification.wait(writer: writer, policy: slow) { _ in false }
         #expect(agreement.agreed == false)
         #expect(agreement.ranOutOfTime, "the budget is wall clock, not a count of sleeps")
-        #expect(agreement.pushedConfiguration == false,
-                "a wait that ran out of time does not then spend more of it pushing")
+        #expect(agreement.reappliedConfiguration == false,
+                "a wait that ran out of time does not then spend more of it applying again")
     }
 }
 

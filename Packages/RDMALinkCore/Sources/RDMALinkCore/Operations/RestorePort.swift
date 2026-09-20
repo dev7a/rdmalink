@@ -288,8 +288,14 @@ public struct RestorePort: Sendable {
                 let named = bridge.displayName ?? bridge.bridgeName
                 let step = OperationStep.rejoinBridge(named: named)
                 progress(step, .running)
-                try writer.addMember(port.bsdName, to: bridge,
-                                     at: bridge.members.firstIndex(of: port.bsdName))
+                do {
+                    try writer.addMember(port.bsdName, to: bridge,
+                                         at: bridge.members.firstIndex(of: port.bsdName))
+                } catch BridgeSPIError.alreadyMember {
+                    // The stored list has it already: an earlier attempt got
+                    // this far and the kernel did not follow (R20). Nothing to
+                    // add; the read-back below is what decides.
+                }
                 rejoined.append(named)
                 progress(step, .done)
             }
@@ -307,7 +313,7 @@ public struct RestorePort: Sendable {
         // Never an assumption: an explicit, visible step.
         progress(.checkBackInBridge, .running)
         var agreement = KernelAgreement(agreed: true, settledOnItsOwn: true,
-                                        pushedConfiguration: false, settledAfterPush: false,
+                                        reappliedConfiguration: false, settledAfterReapply: false,
                                         reads: 0)
         if mode == .full, !writer.isDryRun, !note.bridges.isEmpty {
             // Both sources: the port is back when the kernel is bridging it

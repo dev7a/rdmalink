@@ -16,7 +16,7 @@ enum WriterCall: Equatable, CustomStringConvertible {
     case addMember(port: String, bridge: String, position: Int?)
     case createService(interface: String, name: String)
     case deleteService(identifier: String, expecting: String)
-    case push
+    case reapply
     case commitAndApply
 
     var description: String {
@@ -26,7 +26,7 @@ enum WriterCall: Equatable, CustomStringConvertible {
         case let .addMember(port, bridge, position): "add \(port) to \(bridge) at \(position.map(String.init) ?? "end")"
         case let .createService(interface, name): "create \(name) on \(interface)"
         case let .deleteService(identifier, expecting): "delete \(identifier) on \(expecting)"
-        case .push: "push"
+        case .reapply: "re-apply"
         case .commitAndApply: "commit"
         }
     }
@@ -34,13 +34,13 @@ enum WriterCall: Equatable, CustomStringConvertible {
 
 /// Mutable state a kernel closure can read without capturing the writer.
 final class KernelState {
-    var pushed = false
+    var reapplied = false
     var reads = 0
 }
 
 final class FakeWriter: NetworkWriter {
     var isDryRun = false
-    var canPushBridgeConfiguration = true
+    var canReapplyConfiguration = true
 
     /// Every write, in order.
     private(set) var calls: [WriterCall] = []
@@ -127,8 +127,13 @@ final class FakeWriter: NetworkWriter {
 
     func addMember(_ bsdName: String, to bridge: BridgeMembership, at position: Int?) throws {
         try record(.addMember(port: bsdName, bridge: bridge.bridgeName, position: position))
+        // The SPI refuses a member it already has; so does the fake, so an
+        // operation that tolerates it is exercised rather than assumed.
+        if bridgesValue.first(where: { $0.bsdName == bridge.bridgeName })?
+            .members.contains(bsdName) == true {
+            throw BridgeSPIError.alreadyMember(bsdName: bsdName, bridge: bridge.bridgeName)
+        }
         edit(bridge.bridgeName) { members in
-            guard !members.contains(bsdName) else { return }
             members.insert(bsdName, at: min(max(position ?? members.count, 0), members.count))
         }
     }
@@ -157,9 +162,9 @@ final class FakeWriter: NetworkWriter {
         return presentServiceIDs.remove(identifier) != nil
     }
 
-    func pushBridgeConfiguration() throws {
-        state.pushed = true
-        try record(.push)
+    func reapplyConfiguration() throws {
+        state.reapplied = true
+        try record(.reapply)
     }
 
     func commitAndApply() throws {

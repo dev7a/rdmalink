@@ -78,6 +78,20 @@ geometry reference for the real model.
   `SCBridgeInterfaceCopyAll`, falling back to the world-readable
   `/Library/Preferences/SystemConfiguration/preferences.plist`), and every
   membership change is verified against both.
+- `_SCBridgeInterfaceUpdateConfiguration` is root-only in practice: from the
+  authorized but non-root CLI it fails with `bridge0: could not set MAC
+  address: Operation not permitted` (2026-09-20). configd runs the same call
+  itself on every `SCPreferencesApplyChanges` (`InterfaceNamer`), so when the
+  kernel has not followed a commit the app applies a second time instead.
+- The kernel can refuse a member. configd logged `could not add interface
+  "en5" to bridge "bridge0": Operation not supported on socket` twice on
+  2026-09-20: for System Settings' own add at 03:57:59 — which is how the
+  stored/kernel disagreement that broke the first write came about — and for
+  RDMALink's restore at 04:45:55, thirteen seconds after that port's
+  standalone service had been applied. A later retry took the port. XNU's
+  `bridge_ioctl_add` has no such return, so it comes from the interface
+  driver; the condition is not yet understood. R20 keeps the note, and a
+  second apply is the retry.
 
 ## Layout
 

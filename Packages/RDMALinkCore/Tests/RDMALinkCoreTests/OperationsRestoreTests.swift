@@ -109,7 +109,7 @@ struct OperationsRestoreTests {
         try store.save(Self.note())
         let writer = FakeWriter()
         writer.presentServiceIDs = ["ABC"]
-        writer.canPushBridgeConfiguration = false
+        writer.canReapplyConfiguration = false
         writer.kernel = { _ in Fixtures.snapshot(Fixtures.standalone) }  // never comes back
 
         #expect {
@@ -127,6 +127,27 @@ struct OperationsRestoreTests {
                 && refusal?.headline == "Not quite back yet"
         }
         #expect((try? store.load(port: "en6")) != nil, "the note is deliberately kept")
+    }
+
+    @Test("A stored list that already has the port back is not an error")
+    func toleratesAMembershipAlreadyStored() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        try store.save(Self.note())
+        let writer = FakeWriter()
+        writer.presentServiceIDs = ["ABC"]
+        // An earlier restore committed the membership and the kernel did not
+        // follow (R20); this time the kernel has it, and the stored list —
+        // mirrored from `inOneBridge` — lists en6 already.
+        writer.kernel = { _ in Fixtures.snapshot(Fixtures.inOneBridge) }
+        let result = try RestorePort(port: Fixtures.port).perform(
+            writer: writer,
+            world: Fixtures.world(ifconfig: Fixtures.inOneBridge,
+                                  services: [Self.service(id: "ABC", name: "RDMA — Back, far left")]),
+            environment: Fixtures.environment(store: store), progress: { _, _ in })
+        #expect(result.rejoinedBridges == ["Thunderbolt Bridge"])
+        #expect(writer.calls.contains(.addMember(port: "en6", bridge: "bridge0", position: 1)))
+        #expect((try? store.load(port: "en6")) == nil, "verified, so the note is gone")
     }
 
     @Test("R21: a bridge that has gone is offered Remove My Service Only")

@@ -7,7 +7,8 @@ import Foundation
 /// `ifconfig` disagree. Nothing is ever reported as done on the strength of
 /// the write alone (UX_SPEC §S6 step 5, §7.2 step 3).
 public struct KernelWaitPolicy: Sendable {
-    /// How long to wait before pushing the configuration, and again after it.
+    /// How long to wait before applying the configuration a second time, and
+    /// again after it.
     ///
     /// Measured on the wall clock across the whole loop, **including** the
     /// `ifconfig` spawn each read costs — a window counted in sleeps alone is a
@@ -16,7 +17,7 @@ public struct KernelWaitPolicy: Sendable {
     /// How long between reads of `ifconfig`.
     public var interval: Duration
     /// The most wall-clock time one whole verification may take, both polls
-    /// and the configuration push included. Exceeding it is not an agreement:
+    /// and the second apply included. Exceeding it is not an agreement:
     /// the caller rolls back and raises R8.
     public var budget: Duration
     /// How a wait is spent. Tests pass a closure that returns at once, so a
@@ -55,12 +56,13 @@ public struct KernelWaitPolicy: Sendable {
 public struct KernelAgreement: Sendable, Equatable {
     /// Whether the kernel ended up agreeing at all.
     public var agreed: Bool
-    /// The kernel caught up on its own, before anything was pushed.
+    /// The kernel caught up on its own, before the second apply.
     public var settledOnItsOwn: Bool
-    /// `_SCBridgeInterfaceUpdateConfiguration` was called.
-    public var pushedConfiguration: Bool
-    /// The push was what made the difference.
-    public var settledAfterPush: Bool
+    /// The configuration was applied a second time, so configd ran its own
+    /// bridge update again. The app cannot run that update itself.
+    public var reappliedConfiguration: Bool
+    /// The second apply was what made the difference.
+    public var settledAfterReapply: Bool
     /// How many times `ifconfig` was read.
     public var reads: Int
     /// The wait ran out of wall clock rather than out of patience. The caller
@@ -71,15 +73,15 @@ public struct KernelAgreement: Sendable, Equatable {
     public init(
         agreed: Bool,
         settledOnItsOwn: Bool,
-        pushedConfiguration: Bool,
-        settledAfterPush: Bool,
+        reappliedConfiguration: Bool,
+        settledAfterReapply: Bool,
         reads: Int,
         ranOutOfTime: Bool = false
     ) {
         self.agreed = agreed
         self.settledOnItsOwn = settledOnItsOwn
-        self.pushedConfiguration = pushedConfiguration
-        self.settledAfterPush = settledAfterPush
+        self.reappliedConfiguration = reappliedConfiguration
+        self.settledAfterReapply = settledAfterReapply
         self.reads = reads
         self.ranOutOfTime = ranOutOfTime
     }
@@ -129,10 +131,11 @@ enum KernelVerification {
     /// Reads the kernel **and** the stored configuration until they both say
     /// what the write asked for.
     ///
-    /// Waits out the window first, then — only if they still disagree — pushes
-    /// the bridge configuration **once** and waits again. Which of the two got
-    /// there is reported rather than assumed, because on this hardware it is
-    /// not yet known which one is really needed.
+    /// Waits out the window first, then — only if they still disagree — applies
+    /// the configuration a second time, **once**, and waits again. configd runs
+    /// its own `_SCBridgeInterfaceUpdateConfiguration` on every apply and the
+    /// app cannot run it itself (it needs root), so a second apply is the
+    /// retry. Which of the two got there is reported rather than assumed.
     static func wait(
         writer: NetworkWriter,
         policy: KernelWaitPolicy,
@@ -171,18 +174,27 @@ enum KernelVerification {
 
         if try poll() {
             return KernelAgreement(agreed: true, settledOnItsOwn: true,
-                                   pushedConfiguration: false, settledAfterPush: false,
+                                   reappliedConfiguration: false, settledAfterReapply: false,
                                    reads: reads)
         }
-        guard !ranOutOfTime, writer.canPushBridgeConfiguration else {
+        guard !ranOutOfTime, writer.canReapplyConfiguration else {
             return KernelAgreement(agreed: false, settledOnItsOwn: false,
-                                   pushedConfiguration: false, settledAfterPush: false,
+                                   reappliedConfiguration: false, settledAfterReapply: false,
                                    reads: reads, ranOutOfTime: ranOutOfTime)
         }
-        try writer.pushBridgeConfiguration()
+        // A second apply that fails is not a reason to abandon the operation
+        // mid-verification with a raw error: it is recorded as "could not ask
+        // again", and the caller takes its rollback or keep-the-note path.
+        do {
+            try writer.reapplyConfiguration()
+        } catch {
+            return KernelAgreement(agreed: false, settledOnItsOwn: false,
+                                   reappliedConfiguration: false, settledAfterReapply: false,
+                                   reads: reads, ranOutOfTime: false)
+        }
         let settled = try poll()
         return KernelAgreement(agreed: settled, settledOnItsOwn: false,
-                               pushedConfiguration: true, settledAfterPush: settled,
+                               reappliedConfiguration: true, settledAfterReapply: settled,
                                reads: reads, ranOutOfTime: !settled && ranOutOfTime)
     }
 }
