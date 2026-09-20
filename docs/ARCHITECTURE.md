@@ -91,7 +91,9 @@ geometry reference for the real model.
   standalone service had been applied. A later retry took the port. XNU's
   `bridge_ioctl_add` has no such return, so it comes from the interface
   driver; the condition is not yet understood. R20 keeps the note, and a
-  second apply is the retry.
+  second apply is the retry. The same restore, re-run at 05:03:37 with the
+  port quiescent (down, no service, no addresses), was taken on the first
+  apply: configd logged `bridge0: added bridge member: en5` 9 ms after it.
 
 ## Layout
 

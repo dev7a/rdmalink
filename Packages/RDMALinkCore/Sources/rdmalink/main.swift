@@ -58,6 +58,13 @@ func describe(_ bridge: ThunderboltPort.BridgeMembership) -> String {
         + "· seen by: \(bridge.source)"
 }
 
+/// How the kernel came to agree, for the hardware proof's record: whether it
+/// followed the first apply or needed a second one, and how many reads.
+func describe(_ agreement: KernelAgreement) -> String {
+    let how = agreement.settledOnItsOwn ? "on its own" : "after a second apply"
+    return "kernel settled \(how) in \(agreement.reads) reads"
+}
+
 func describe(_ configuration: PortConfiguration) -> String {
     switch configuration {
     case let .unconfigured(bridges):
@@ -364,8 +371,7 @@ func runSetUp(_ names: [String]) throws {
     for port in result.ports {
         print("  \(port.positionName): service \(port.createdServiceID ?? "none") · "
             + "left \(list(port.leftBridges)) · "
-            + "kernel settled \(port.agreement.settledOnItsOwn ? "on its own" : "after a second apply") "
-            + "in \(port.agreement.reads) reads")
+            + describe(port.agreement))
     }
 }
 
@@ -400,6 +406,7 @@ func runRestore(_ bsdName: String?) throws {
     print(result.successHeadline)
     print(result.successBody(bridgeName: plan.bridgesToRejoin.first ?? "Thunderbolt Bridge"))
     print(result.completionLine)
+    print("  \(describe(result.agreement))")
 }
 
 /// `restore-all` — every port with a note, one after the other.
@@ -479,6 +486,7 @@ func runReturnToBridge(_ bsdName: String?) throws {
     print(result.successHeadline)
     print(result.successBody)
     print(result.completionLine)
+    print("  \(describe(result.agreement))")
 }
 
 /// `adopt <bsd>` — UX_SPEC §S9. Writes a note and nothing else.
