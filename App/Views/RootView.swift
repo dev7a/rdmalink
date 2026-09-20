@@ -45,9 +45,6 @@ struct RootView: View {
         // this view tree.
         .focusedSceneValue(\.stageModel, stage)
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                ThisMacBadge()
-            }
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Check Again", systemImage: "arrow.clockwise") {
                     Task { await model.refresh() }

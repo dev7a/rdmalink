@@ -49,11 +49,10 @@ One window, no sidebar, no tabs, no document model, no menu bar extra, no notifi
 
 ### 2.2 Toolbar
 
-Unified toolbar, three items, nothing else. No step indicator, no branding, no rail.
+Unified toolbar, two items, nothing else. No step indicator, no branding, no rail, no "This Mac" badge: that the app only ever changes the Mac it runs on is implied by everything on screen, and the window subtitle already names the machine.
 
 | Position | Item | Symbol | Behavior |
 |---|---|---|---|
-| Leading | `This Mac` — a quiet capsule badge in `.thinMaterial`, not a button | — | Always present. The identity anchor: with two identical Mac Studios on the desk, this badge plus the window subtitle plus the Mac's sharing name say which machine you are editing. Tooltip: `RDMALink only ever changes the Mac it's running on.` |
 | Trailing | `Check Again` | `arrow.clockwise` | Re-runs the full probe. Always enabled. A reassurance, not a requirement — a one-second state diff runs underneath at all times. |
 | Trailing | `Help` | `questionmark.circle` | Opens the Help menu's first item. |
 
@@ -130,7 +129,6 @@ No custom brand color. No gradients in chrome. The palette is the system's, expr
 | `attention` | `.orange` | warning text and warning symbols **in the panel only** |
 | `stop` | `.red` | **used nowhere.** Restore is not styled destructive, because it restores. There is no destructive confirmation in this app. |
 | `material.floating` | `.regularMaterial` | the two floating stage controls |
-| `material.badge` | `.thinMaterial` | the `This Mac` badge |
 
 **Nothing on the 3D model is ever orange, red, green, or any hue carrying meaning.** Warning is a panel job. A colored hole is unreadable at a glance and fails color-blind users. On the model, meaning is carried entirely by **ring geometry** (see §4).
 
@@ -197,7 +195,7 @@ Nothing loops except the "link coming up" breath (1.6 s, 8 → 18 % opacity) and
 
 - Full light/dark support, driven by the system, including the stage.
 - **Increase Contrast:** every ring track goes from 1.5 pt to 3 pt and gains a contrasting halo; the receptacle interior's contrast against the chassis rises; every list badge gains a 1 pt border; both floating capsules gain a hairline.
-- **Reduce Transparency:** both floating capsules and the `This Mac` badge become opaque.
+- **Reduce Transparency:** both floating capsules become opaque.
 - **Reduce Motion:** camera arcs become a 100 ms cross-fade between fixed poses **with the same spoken and written narration**; the Identify shimmer becomes a static dim ring; the apply ring steps between five static states; the ribbon retraction becomes an opacity change; the address appears rather than fading.
 - **Differentiate Without Color** is the default behavior, not a mode (see §4.6).
 
@@ -1105,7 +1103,7 @@ All text uses system text styles and scales to Accessibility XXL. **Below 900 pt
 
 - **Reduce Motion:** camera arcs become a 100 ms cross-fade between fixed poses with identical narration; the Identify shimmer becomes a static dim ring; the apply ring steps between five static states; the ribbon retraction becomes an opacity change; the address appears rather than fading; the waking-ports beat becomes a simultaneous appearance. **Nothing that carries meaning lives only in motion** — every pulse has a text twin in the panel.
 - **Increase Contrast:** every ring track goes 1.5 → 3 pt with a contrasting halo; badges gain a 1 pt border; receptacle interiors gain contrast against the chassis.
-- **Reduce Transparency:** both floating stage capsules and the `This Mac` badge become opaque.
+- **Reduce Transparency:** both floating stage capsules become opaque.
 - **Differentiate Without Color:** the default behavior, not a mode. Every model state is a distinct ring geometry; every panel state is a distinct SF Symbol plus words. No meaning anywhere depends on hue.
 
 ### 8.7 Voice Control

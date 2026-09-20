@@ -117,9 +117,9 @@ enum SnapshotHook {
     ///
     /// The frame view rather than the content view, because the unified
     /// toolbar is drawn above the content view and a review picture without
-    /// the `This Mac` badge and `Check Again` would be missing two of the
-    /// three things §2.2 specifies. It falls back to the content view if
-    /// AppKit ever stops giving the content view a superview.
+    /// `Check Again` and `Help` would be missing what §2.2 specifies. It
+    /// falls back to the content view if AppKit ever stops giving the
+    /// content view a superview.
     ///
     /// `cacheDisplay(in:to:)` draws the AppKit view tree, which leaves a hole
     /// where the `RealityView` is — a Metal layer is not an AppKit drawing.
