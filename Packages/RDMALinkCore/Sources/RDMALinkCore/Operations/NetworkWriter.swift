@@ -18,10 +18,6 @@ protocol NetworkWriter: AnyObject {
     /// A dry run writes no bridge membership at all and never applies.
     var isDryRun: Bool { get }
 
-    /// Whether the kernel can be asked again. Live, that is a second
-    /// `SCPreferencesApplyChanges` on the same session, which needs nothing
-    /// the burst does not already hold.
-    var canReapplyConfiguration: Bool { get }
 
     /// Takes the configuration lock. Fails rather than waits — two writers is
     /// how configurations get mangled (R12).
@@ -52,12 +48,6 @@ protocol NetworkWriter: AnyObject {
     @discardableResult
     func deleteService(identifier: String, expectedInterface: String) throws -> Bool
 
-    /// Applies the committed configuration a second time, so configd runs its
-    /// bridge update again. The app never calls `_SCBridgeInterfaceUpdateConfiguration`
-    /// itself: that call issues the bridge ioctls and a non-root process gets
-    /// `Operation not permitted` from it (measured 2026-09-20). configd runs
-    /// that very call on every apply, so asking configd again is the push.
-    func reapplyConfiguration() throws
     func commitAndApply() throws
 }
 
@@ -73,7 +63,6 @@ final class LiveNetworkWriter: NetworkWriter {
 
     var isDryRun: Bool { session.mode == .dryRun }
 
-    var canReapplyConfiguration: Bool { true }
 
     func lock() throws { try session.lock() }
 
@@ -147,11 +136,6 @@ final class LiveNetworkWriter: NetworkWriter {
         try session.lock()
         try session.check(SCNetworkServiceRemove(service), "Delete the service")
         return true
-    }
-
-    func reapplyConfiguration() throws {
-        guard !isDryRun else { return }
-        try session.apply()
     }
 
     func commitAndApply() throws {

@@ -141,8 +141,7 @@ struct OperationsStoredMembershipTests {
             (error as? Refusal)?.code == .rolledBack
         }
 
-        // It was re-applied once and then rolled back, in reverse order.
-        #expect(writer.calls.contains(.reapply))
+        // It was rolled back, in reverse order.
         #expect(writer.calls.contains(.addMember(port: "en6", bridge: "bridge0", position: 1)))
         // The note is kept, exactly as it is for every other rollback.
         #expect((try? store.load(port: "en6")) != nil)

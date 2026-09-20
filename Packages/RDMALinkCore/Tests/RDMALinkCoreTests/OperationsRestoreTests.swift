@@ -39,6 +39,10 @@ struct OperationsRestoreTests {
         try store.save(Self.note())
         let writer = FakeWriter()
         writer.presentServiceIDs = ["ABC"]
+        // The kernel answers with the finished state throughout, so the
+        // session's stored copy is stated rather than mirrored from it.
+        writer.bridgesValue = [BridgeSPI.Membership(
+            bsdName: "bridge0", displayName: "Thunderbolt Bridge", members: ["en5"])]
         writer.kernel = { _ in Fixtures.snapshot(Fixtures.inOneBridge) }
 
         let result = try RestorePort(port: Fixtures.port).perform(
@@ -50,13 +54,16 @@ struct OperationsRestoreTests {
                                     members: ["en5"])]),
             environment: Fixtures.environment(store: store), progress: { _, _ in })
 
+        // The deletion is committed on its own before the port rejoins.
         #expect(writer.calls == [
             .lock,
             .deleteService(identifier: "ABC", expecting: "en6"),
+            .commitAndApply,
             .addMember(port: "en6", bridge: "bridge0", position: 1),
             .commitAndApply,
         ])
         #expect(result.serviceWasAlreadyGone == false)
+        #expect(result.agreement.settledOnItsOwn)
         #expect(result.rejoinedBridges == ["Thunderbolt Bridge"])
         #expect(result.noteWasDeleted)
         #expect((try? store.load(port: "en6")) == nil, "the note goes only after verification")
@@ -109,7 +116,6 @@ struct OperationsRestoreTests {
         try store.save(Self.note())
         let writer = FakeWriter()
         writer.presentServiceIDs = ["ABC"]
-        writer.canReapplyConfiguration = false
         writer.kernel = { _ in Fixtures.snapshot(Fixtures.standalone) }  // never comes back
 
         #expect {
@@ -129,16 +135,17 @@ struct OperationsRestoreTests {
         #expect((try? store.load(port: "en6")) != nil, "the note is deliberately kept")
     }
 
-    @Test("A stored list that already has the port back is not an error")
-    func toleratesAMembershipAlreadyStored() throws {
+    @Test("A stored list that already has the port is rewritten, not committed again")
+    func rewritesAMembershipAlreadyStored() throws {
         let store = Fixtures.store()
         defer { try? FileManager.default.removeItem(at: store.directory) }
         try store.save(Self.note())
         let writer = FakeWriter()
         writer.presentServiceIDs = ["ABC"]
         // An earlier restore committed the membership and the kernel did not
-        // follow (R20); this time the kernel has it, and the stored list —
-        // mirrored from `inOneBridge` — lists en6 already.
+        // follow (R20): the stored list — mirrored from `inOneBridge` — lists
+        // en6 already. Committing that same list would change nothing, so it
+        // is taken out and put back; the kernel agrees once it has.
         writer.kernel = { _ in Fixtures.snapshot(Fixtures.inOneBridge) }
         let result = try RestorePort(port: Fixtures.port).perform(
             writer: writer,
@@ -146,8 +153,52 @@ struct OperationsRestoreTests {
                                   services: [Self.service(id: "ABC", name: "RDMA — Back, far left")]),
             environment: Fixtures.environment(store: store), progress: { _, _ in })
         #expect(result.rejoinedBridges == ["Thunderbolt Bridge"])
-        #expect(writer.calls.contains(.addMember(port: "en6", bridge: "bridge0", position: 1)))
+        #expect(writer.calls == [
+            .lock,
+            .deleteService(identifier: "ABC", expecting: "en6"),
+            .commitAndApply,
+            .addMember(port: "en6", bridge: "bridge0", position: 1),
+            .removeMember(port: "en6", bridge: "bridge0"),
+            .commitAndApply,
+            .addMember(port: "en6", bridge: "bridge0", position: 1),
+            .commitAndApply,
+        ])
         #expect((try? store.load(port: "en6")) == nil, "verified, so the note is gone")
+    }
+
+    @Test("A kernel that refuses the first add is asked again with the membership rewritten")
+    func retriesByRewritingTheMembership() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        try store.save(Self.note())
+        let writer = FakeWriter()
+        writer.presentServiceIDs = ["ABC"]
+        // The kernel takes the port only on the second addition — the shape of
+        // 2026-09-20, where the first add landed in the service's teardown.
+        writer.kernel = { state in
+            Fixtures.snapshot(state.membersAdded >= 2 ? Fixtures.inOneBridge : Fixtures.quiet)
+        }
+        let result = try RestorePort(port: Fixtures.port).perform(
+            writer: writer,
+            world: Fixtures.world(ifconfig: Fixtures.quiet,
+                                  services: [Self.service(id: "ABC", name: "RDMA — Back, far left")]),
+            environment: Fixtures.environment(store: store), progress: { _, _ in })
+        #expect(result.agreement.agreed)
+        #expect(result.agreement.settledOnItsOwn == false)
+        #expect(result.agreement.retriedMembership)
+        #expect(result.agreement.settledAfterRetry)
+        #expect(writer.calls == [
+            .lock,
+            .deleteService(identifier: "ABC", expecting: "en6"),
+            .commitAndApply,
+            .addMember(port: "en6", bridge: "bridge0", position: 1),
+            .commitAndApply,
+            .removeMember(port: "en6", bridge: "bridge0"),
+            .commitAndApply,
+            .addMember(port: "en6", bridge: "bridge0", position: 1),
+            .commitAndApply,
+        ])
+        #expect((try? store.load(port: "en6")) == nil)
     }
 
     @Test("R21: a bridge that has gone is offered Remove My Service Only")

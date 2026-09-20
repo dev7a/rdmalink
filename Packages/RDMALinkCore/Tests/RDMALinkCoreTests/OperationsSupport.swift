@@ -16,7 +16,6 @@ enum WriterCall: Equatable, CustomStringConvertible {
     case addMember(port: String, bridge: String, position: Int?)
     case createService(interface: String, name: String)
     case deleteService(identifier: String, expecting: String)
-    case reapply
     case commitAndApply
 
     var description: String {
@@ -26,7 +25,6 @@ enum WriterCall: Equatable, CustomStringConvertible {
         case let .addMember(port, bridge, position): "add \(port) to \(bridge) at \(position.map(String.init) ?? "end")"
         case let .createService(interface, name): "create \(name) on \(interface)"
         case let .deleteService(identifier, expecting): "delete \(identifier) on \(expecting)"
-        case .reapply: "re-apply"
         case .commitAndApply: "commit"
         }
     }
@@ -34,13 +32,14 @@ enum WriterCall: Equatable, CustomStringConvertible {
 
 /// Mutable state a kernel closure can read without capturing the writer.
 final class KernelState {
-    var reapplied = false
     var reads = 0
+    /// How many member additions the writer has taken, so a kernel closure
+    /// can follow the first attempt and only agree after a rewrite.
+    var membersAdded = 0
 }
 
 final class FakeWriter: NetworkWriter {
     var isDryRun = false
-    var canReapplyConfiguration = true
 
     /// Every write, in order.
     private(set) var calls: [WriterCall] = []
@@ -136,6 +135,7 @@ final class FakeWriter: NetworkWriter {
         edit(bridge.bridgeName) { members in
             members.insert(bsdName, at: min(max(position ?? members.count, 0), members.count))
         }
+        state.membersAdded += 1
     }
 
     /// One member-list edit on the session's copy, remembering what was on
@@ -160,11 +160,6 @@ final class FakeWriter: NetworkWriter {
     func deleteService(identifier: String, expectedInterface: String) throws -> Bool {
         try record(.deleteService(identifier: identifier, expecting: expectedInterface))
         return presentServiceIDs.remove(identifier) != nil
-    }
-
-    func reapplyConfiguration() throws {
-        state.reapplied = true
-        try record(.reapply)
     }
 
     func commitAndApply() throws {
@@ -209,6 +204,19 @@ enum Fixtures {
             status: inactive
         en6: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
             status: active
+        en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+            inet 10.77.78.1 netmask 0xfffffff8 broadcast 10.77.78.7
+            status: active
+        """
+
+    /// en6 down with nothing on it: what a port looks like once its service
+    /// is gone, and the state the kernel will take it into a bridge from.
+    static let quiet = """
+        bridge0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+            member: en5 flags=3<LEARNING,DISCOVER>
+            status: active
+        en6: flags=8822<BROADCAST,SMART,SIMPLEX,MULTICAST> mtu 1500
+            status: inactive
         en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
             inet 10.77.78.1 netmask 0xfffffff8 broadcast 10.77.78.7
             status: active

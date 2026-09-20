@@ -81,19 +81,24 @@ geometry reference for the real model.
 - `_SCBridgeInterfaceUpdateConfiguration` is root-only in practice: from the
   authorized but non-root CLI it fails with `bridge0: could not set MAC
   address: Operation not permitted` (2026-09-20). configd runs the same call
-  itself on every `SCPreferencesApplyChanges` (`InterfaceNamer`), so when the
-  kernel has not followed a commit the app applies a second time instead.
-- The kernel can refuse a member. configd logged `could not add interface
-  "en5" to bridge "bridge0": Operation not supported on socket` twice on
-  2026-09-20: for System Settings' own add at 03:57:59 — which is how the
-  stored/kernel disagreement that broke the first write came about — and for
-  RDMALink's restore at 04:45:55, thirteen seconds after that port's
-  standalone service had been applied. A later retry took the port. XNU's
-  `bridge_ioctl_add` has no such return, so it comes from the interface
-  driver; the condition is not yet understood. R20 keeps the note, and a
-  second apply is the retry. The same restore, re-run at 05:03:37 with the
-  port quiescent (down, no service, no addresses), was taken on the first
-  apply: configd logged `bridge0: added bridge member: en5` 9 ms after it.
+  itself a few milliseconds after every `SCPreferencesApplyChanges` that
+  changes the bridge configuration (`InterfaceNamer`). An apply that changes
+  nothing makes it attempt nothing (measured 05:06:49): applying again is
+  not a retry.
+- **The kernel refuses a member that still has IP attached.** Measured three
+  times on 2026-09-20 as `could not add interface "en5" to bridge "bridge0":
+  Operation not supported on socket`: System Settings' own add at 03:57:59
+  (which is how the stored/kernel disagreement that broke the first write
+  came about), RDMALink's restore at 04:45:55, and again at 05:06:45 — where
+  the log shows the order: apply, configd's add attempt 8 ms later and
+  refused, IPConfiguration's `SIOCPROTODETACH_IN6` on the port 40 ms after
+  that. With the port quiet (down, no service, no addresses) the add was
+  taken on the first apply at 05:03:37, 9 ms after it. So a service is
+  deleted in a commit of its own, the port is given until the window closes
+  to go quiet (`KernelVerification.waitUntilQuiet`), and only then is the
+  membership written and committed (`BridgeRejoin`). When the kernel still
+  has not followed, the retry is to take the membership out and put it back
+  in commits of their own; R20 keeps the note if that fails too.
 
 ## Layout
 

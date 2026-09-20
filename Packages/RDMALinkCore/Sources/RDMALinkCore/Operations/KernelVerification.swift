@@ -7,8 +7,8 @@ import Foundation
 /// `ifconfig` disagree. Nothing is ever reported as done on the strength of
 /// the write alone (UX_SPEC §S6 step 5, §7.2 step 3).
 public struct KernelWaitPolicy: Sendable {
-    /// How long to wait before applying the configuration a second time, and
-    /// again after it.
+    /// How long to wait before the membership is rewritten, and again after
+    /// it; also how long a port is given to go quiet before it rejoins.
     ///
     /// Measured on the wall clock across the whole loop, **including** the
     /// `ifconfig` spawn each read costs — a window counted in sleeps alone is a
@@ -17,7 +17,7 @@ public struct KernelWaitPolicy: Sendable {
     /// How long between reads of `ifconfig`.
     public var interval: Duration
     /// The most wall-clock time one whole verification may take, both polls
-    /// and the second apply included. Exceeding it is not an agreement:
+    /// and the retry included. Exceeding it is not an agreement:
     /// the caller rolls back and raises R8.
     public var budget: Duration
     /// How a wait is spent. Tests pass a closure that returns at once, so a
@@ -56,13 +56,15 @@ public struct KernelWaitPolicy: Sendable {
 public struct KernelAgreement: Sendable, Equatable {
     /// Whether the kernel ended up agreeing at all.
     public var agreed: Bool
-    /// The kernel caught up on its own, before the second apply.
+    /// The kernel followed the first apply; nothing had to be retried.
     public var settledOnItsOwn: Bool
-    /// The configuration was applied a second time, so configd ran its own
-    /// bridge update again. The app cannot run that update itself.
-    public var reappliedConfiguration: Bool
-    /// The second apply was what made the difference.
-    public var settledAfterReapply: Bool
+    /// The stored membership was rewritten — taken out and put back, each in
+    /// a commit of its own — because the kernel had not followed the first
+    /// apply. A commit that changes nothing makes configd attempt nothing, so
+    /// this is the only retry there is (measured 2026-09-20).
+    public var retriedMembership: Bool
+    /// The retry was what made the difference.
+    public var settledAfterRetry: Bool
     /// How many times `ifconfig` was read.
     public var reads: Int
     /// The wait ran out of wall clock rather than out of patience. The caller
@@ -73,15 +75,15 @@ public struct KernelAgreement: Sendable, Equatable {
     public init(
         agreed: Bool,
         settledOnItsOwn: Bool,
-        reappliedConfiguration: Bool,
-        settledAfterReapply: Bool,
+        retriedMembership: Bool,
+        settledAfterRetry: Bool,
         reads: Int,
         ranOutOfTime: Bool = false
     ) {
         self.agreed = agreed
         self.settledOnItsOwn = settledOnItsOwn
-        self.reappliedConfiguration = reappliedConfiguration
-        self.settledAfterReapply = settledAfterReapply
+        self.retriedMembership = retriedMembership
+        self.settledAfterRetry = settledAfterRetry
         self.reads = reads
         self.ranOutOfTime = ranOutOfTime
     }
@@ -131,15 +133,18 @@ enum KernelVerification {
     /// Reads the kernel **and** the stored configuration until they both say
     /// what the write asked for.
     ///
-    /// Waits out the window first, then — only if they still disagree — applies
-    /// the configuration a second time, **once**, and waits again. configd runs
-    /// its own `_SCBridgeInterfaceUpdateConfiguration` on every apply and the
-    /// app cannot run it itself (it needs root), so a second apply is the
-    /// retry. Which of the two got there is reported rather than assumed.
+    /// Waits out the window first, then — only if they still disagree and the
+    /// caller has a `retry` — runs it **once** and waits again. The app cannot
+    /// run configd's `_SCBridgeInterfaceUpdateConfiguration` itself (it needs
+    /// root), and a bare second apply makes configd attempt nothing, so the
+    /// retry is the caller's: for a membership, take it out and put it back in
+    /// commits of their own. Which of the two got there is reported rather
+    /// than assumed.
     static func wait(
         writer: NetworkWriter,
         policy: KernelWaitPolicy,
         budget: Duration? = nil,
+        retry: (() throws -> Void)? = nil,
         until predicate: (VerificationReading) -> Bool
     ) throws -> KernelAgreement {
         var reads = 0
@@ -174,27 +179,58 @@ enum KernelVerification {
 
         if try poll() {
             return KernelAgreement(agreed: true, settledOnItsOwn: true,
-                                   reappliedConfiguration: false, settledAfterReapply: false,
+                                   retriedMembership: false, settledAfterRetry: false,
                                    reads: reads)
         }
-        guard !ranOutOfTime, writer.canReapplyConfiguration else {
+        guard !ranOutOfTime, let retry else {
             return KernelAgreement(agreed: false, settledOnItsOwn: false,
-                                   reappliedConfiguration: false, settledAfterReapply: false,
+                                   retriedMembership: false, settledAfterRetry: false,
                                    reads: reads, ranOutOfTime: ranOutOfTime)
         }
-        // A second apply that fails is not a reason to abandon the operation
-        // mid-verification with a raw error: it is recorded as "could not ask
-        // again", and the caller takes its rollback or keep-the-note path.
+        // A retry that fails is not a reason to abandon the operation
+        // mid-verification with a raw error: it is recorded as attempted, and
+        // the caller takes its rollback or keep-the-note path.
         do {
-            try writer.reapplyConfiguration()
+            try retry()
         } catch {
             return KernelAgreement(agreed: false, settledOnItsOwn: false,
-                                   reappliedConfiguration: false, settledAfterReapply: false,
+                                   retriedMembership: true, settledAfterRetry: false,
                                    reads: reads, ranOutOfTime: false)
         }
         let settled = try poll()
         return KernelAgreement(agreed: settled, settledOnItsOwn: false,
-                               reappliedConfiguration: true, settledAfterReapply: settled,
+                               retriedMembership: true, settledAfterRetry: settled,
                                reads: reads, ranOutOfTime: !settled && ranOutOfTime)
+    }
+
+    /// Waits for a port to have no IP configuration left on it: not up, and
+    /// no addresses of either family.
+    ///
+    /// configd attempts a bridge add a few milliseconds after an apply, while
+    /// IPConfiguration may still be tearing the port's IPv6 down — on
+    /// 2026-09-20 the add came 8 ms after the apply and the IPv6 detach 40 ms
+    /// after it — and the kernel refuses a member that still has IP attached
+    /// ("Operation not supported on socket"). So a service is deleted in a
+    /// commit of its own and the port is given until the window closes to go
+    /// quiet before it rejoins. Returns whether it did; the caller carries on
+    /// either way, and the read-back afterwards is what decides.
+    static func waitUntilQuiet(
+        _ bsdName: String,
+        writer: NetworkWriter,
+        policy: KernelWaitPolicy
+    ) throws -> Bool {
+        var waited = Duration.zero
+        while true {
+            if let state = try writer.readKernel()[bsdName] {
+                if !state.isUp, state.addresses.isEmpty, state.linkLocalAddresses.isEmpty {
+                    return true
+                }
+            } else {
+                return true
+            }
+            if waited >= policy.window { return false }
+            policy.pause(policy.interval)
+            waited += policy.interval
+        }
     }
 }

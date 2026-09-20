@@ -150,6 +150,17 @@ public struct ReturnToBridge: Sendable {
                            environment: environment, progress: progress)
     }
 
+    /// R12: two things writing network settings at once is how configurations
+    /// get mangled, and nothing was committed.
+    private func commitOrBusy(_ writer: NetworkWriter) throws {
+        do {
+            try writer.commitAndApply()
+        } catch let error as NetworkConfigurationError {
+            if case .busy = error { throw Refusals.networkIsBusy(port: port.observed) }
+            throw error
+        }
+    }
+
     /// The burst itself, against a world that has already been read.
     @discardableResult
     func perform(
@@ -210,39 +221,45 @@ public struct ReturnToBridge: Sendable {
             progress(step, .running)
             if try writer.deleteService(identifier: serviceID, expectedInterface: port.bsdName) {
                 deleted = plan.serviceName
+                // In a commit of its own, and the port given time to go
+                // quiet: written into the same apply, the membership lands
+                // while IPv6 is still being torn down and the kernel refuses
+                // it (see `BridgeRejoin`).
+                try commitOrBusy(writer)
+                if !writer.isDryRun {
+                    _ = try KernelVerification.waitUntilQuiet(
+                        port.bsdName, writer: writer, policy: environment.policy)
+                }
             }
             progress(step, .done)
         }
 
         // Step 3. Joined to the bridge that already exists. Never created.
-        let membership = world.membership(ofBridge: bridgeBSDName)
+        // The record the SPI is checked against lists this port too, so the
+        // retry's own removal resolves the same bridge.
+        var membership = world.membership(ofBridge: bridgeBSDName)
+        if !membership.members.contains(port.bsdName) { membership.members.append(port.bsdName) }
         progress(.joinBridge(named: bridgeName), .running)
-        do {
-            try writer.addMember(port.bsdName, to: membership, at: nil)
-        } catch BridgeSPIError.alreadyMember {
-            // The stored list has it already: an earlier attempt got this far
-            // and the kernel did not follow (R20). The read-back decides.
-        }
-        do {
-            try writer.commitAndApply()
-        } catch let error as NetworkConfigurationError {
-            // R12: two things writing network settings at once is how
-            // configurations get mangled, and nothing was committed.
-            if case .busy = error { throw Refusals.networkIsBusy(port: port.observed) }
-            throw error
-        }
+        try BridgeRejoin.add(port.bsdName, to: membership, at: nil,
+                             writer: writer, policy: environment.policy)
+        try commitOrBusy(writer)
         progress(.joinBridge(named: bridgeName), .done)
 
         // Step 4. Read back from the kernel before the sheet says it is in.
         progress(.checkInBridge, .running)
         var agreement = KernelAgreement(agreed: true, settledOnItsOwn: true,
-                                        reappliedConfiguration: false, settledAfterReapply: false,
+                                        retriedMembership: false, settledAfterRetry: false,
                                         reads: 0)
         if !writer.isDryRun {
             // Both sources: the kernel bridging it, and the preferences
             // listing it — the same two the set-up path has to see cleared.
             agreement = try KernelVerification.wait(
-                writer: writer, policy: environment.policy) { reading in
+                writer: writer, policy: environment.policy,
+                retry: {
+                    try BridgeRejoin.toggle(port.bsdName, in: membership, at: nil,
+                                            writer: writer, policy: environment.policy)
+                    try writer.commitAndApply()
+                }) { reading in
                     reading.isMember(port.bsdName, ofAll: [bridgeBSDName])
                 }
             guard agreement.agreed else {

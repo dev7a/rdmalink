@@ -127,29 +127,8 @@ struct OperationsRollbackTests {
         let agreement = try #require(result.ports.first?.agreement)
         #expect(agreement.agreed)
         #expect(agreement.settledOnItsOwn)
-        #expect(agreement.reappliedConfiguration == false)
+        #expect(agreement.retriedMembership == false)
         #expect(agreement.reads == 3)
-        #expect(!writer.calls.contains(.reapply))
-    }
-
-    @Test("A kernel that only moves after a second apply records that it was needed")
-    func reappliesWhenItHasTo() throws {
-        let store = Fixtures.store()
-        defer { try? FileManager.default.removeItem(at: store.directory) }
-        let writer = FakeWriter()
-        writer.kernel = { state in
-            Fixtures.snapshot(state.reapplied ? Fixtures.standalone : Fixtures.inOneBridge)
-        }
-        let result = try SetUpPorts(ports: [Fixtures.port]).perform(
-            writer: writer, world: Fixtures.world(ifconfig: Fixtures.inOneBridge),
-            environment: Fixtures.environment(store: store), progress: { _, _ in })
-
-        let agreement = try #require(result.ports.first?.agreement)
-        #expect(agreement.agreed)
-        #expect(agreement.settledOnItsOwn == false)
-        #expect(agreement.reappliedConfiguration)
-        #expect(agreement.settledAfterReapply)
-        #expect(writer.calls.contains(.reapply))
     }
 
     @Test("A kernel that never agrees rolls the port back and says so")
@@ -157,7 +136,6 @@ struct OperationsRollbackTests {
         let store = Fixtures.store()
         defer { try? FileManager.default.removeItem(at: store.directory) }
         let writer = FakeWriter()
-        writer.canReapplyConfiguration = false
         writer.kernel = { _ in Fixtures.snapshot(Fixtures.inOneBridge) }
         #expect {
             try SetUpPorts(ports: [Fixtures.port]).perform(
@@ -168,13 +146,15 @@ struct OperationsRollbackTests {
             return refusal?.code == .rolledBack
                 && refusal?.body.contains("macOS didn't actually let go of the port") == true
         }
-        // The service RDMALink had just made goes first, then the membership.
+        // The service RDMALink had just made goes first, in a commit of its
+        // own, then the membership in another (see `BridgeRejoin`).
         #expect(writer.calls == [
             .lock,
             .removeMember(port: "en6", bridge: "bridge0"),
             .createService(interface: "en6", name: "RDMA — Back, far left"),
             .commitAndApply,
             .deleteService(identifier: "NEW-SERVICE-ID", expecting: "en6"),
+            .commitAndApply,
             .addMember(port: "en6", bridge: "bridge0", position: 1),
             .commitAndApply,
         ])

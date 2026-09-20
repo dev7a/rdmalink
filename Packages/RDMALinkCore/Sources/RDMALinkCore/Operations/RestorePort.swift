@@ -237,6 +237,18 @@ public struct RestorePort: Sendable {
                            environment: environment, progress: progress)
     }
 
+    /// Another writer holding the configuration is R12, and nothing was
+    /// committed, so the note stays exactly where it is and the sheet says
+    /// what is in the way rather than printing a raw error.
+    private func commitOrBusy(_ writer: NetworkWriter) throws {
+        do {
+            try writer.commitAndApply()
+        } catch let error as NetworkConfigurationError {
+            if case .busy = error { throw Refusals.networkIsBusy(port: port.observed) }
+            throw error
+        }
+    }
+
     /// The burst itself, against a world that has already been read.
     @discardableResult
     func perform(
@@ -277,8 +289,20 @@ public struct RestorePort: Sendable {
             // another way in the checklist.
             let step = OperationStep.deleteCreatedService(named: plan.serviceName ?? "")
             progress(step, .running)
-            wasAlreadyGone = !(try writer.deleteService(
-                identifier: created.identifier, expectedInterface: created.interfaceBSDName))
+            let deleted = try writer.deleteService(
+                identifier: created.identifier, expectedInterface: created.interfaceBSDName)
+            wasAlreadyGone = !deleted
+            if deleted, mode == .full, !note.bridges.isEmpty {
+                // The deletion goes in a commit of its own and the port is
+                // given time to go quiet: written into the same apply, the
+                // membership lands while IPv6 is still being torn down and the
+                // kernel refuses it (see `BridgeRejoin`).
+                try commitOrBusy(writer)
+                if !writer.isDryRun {
+                    _ = try KernelVerification.waitUntilQuiet(
+                        port.bsdName, writer: writer, policy: environment.policy)
+                }
+            }
             progress(step, .done)
         }
 
@@ -288,39 +312,34 @@ public struct RestorePort: Sendable {
                 let named = bridge.displayName ?? bridge.bridgeName
                 let step = OperationStep.rejoinBridge(named: named)
                 progress(step, .running)
-                do {
-                    try writer.addMember(port.bsdName, to: bridge,
-                                         at: bridge.members.firstIndex(of: port.bsdName))
-                } catch BridgeSPIError.alreadyMember {
-                    // The stored list has it already: an earlier attempt got
-                    // this far and the kernel did not follow (R20). Nothing to
-                    // add; the read-back below is what decides.
-                }
+                try BridgeRejoin.add(port.bsdName, to: bridge,
+                                     at: bridge.members.firstIndex(of: port.bsdName),
+                                     writer: writer, policy: environment.policy)
                 rejoined.append(named)
                 progress(step, .done)
             }
         }
-        // Another writer holding the configuration is R12, and nothing was
-        // committed, so the note stays exactly where it is and the sheet says
-        // what is in the way rather than printing a raw error.
-        do {
-            try writer.commitAndApply()
-        } catch let error as NetworkConfigurationError {
-            if case .busy = error { throw Refusals.networkIsBusy(port: port.observed) }
-            throw error
-        }
+        try commitOrBusy(writer)
 
         // Never an assumption: an explicit, visible step.
         progress(.checkBackInBridge, .running)
         var agreement = KernelAgreement(agreed: true, settledOnItsOwn: true,
-                                        reappliedConfiguration: false, settledAfterReapply: false,
+                                        retriedMembership: false, settledAfterRetry: false,
                                         reads: 0)
         if mode == .full, !writer.isDryRun, !note.bridges.isEmpty {
             // Both sources: the port is back when the kernel is bridging it
             // **and** the preferences list it again, which is the state it
             // was found in.
             agreement = try KernelVerification.wait(
-                writer: writer, policy: environment.policy) { reading in
+                writer: writer, policy: environment.policy,
+                retry: {
+                    for bridge in note.bridges {
+                        try BridgeRejoin.toggle(port.bsdName, in: bridge,
+                                                at: bridge.members.firstIndex(of: port.bsdName),
+                                                writer: writer, policy: environment.policy)
+                    }
+                    try writer.commitAndApply()
+                }) { reading in
                     reading.isMember(port.bsdName, ofAll: note.bridges.map(\.bridgeName))
                 }
             guard agreement.agreed else {

@@ -70,6 +70,9 @@ struct OperationsReturnToBridgeTests {
         defer { try? FileManager.default.removeItem(at: store.directory) }
         let writer = FakeWriter()
         writer.presentServiceIDs = ["FOREIGN"]
+        // The kernel answers with the finished state throughout, so the
+        // session's stored copy is stated rather than mirrored from it.
+        writer.bridgesValue = [Self.thunderboltBridge]
         writer.kernel = { _ in Fixtures.snapshot(Fixtures.inOneBridge) }
         var noteWasThere = false
         writer.intercept = { call in
@@ -89,6 +92,7 @@ struct OperationsReturnToBridgeTests {
         #expect(writer.calls == [
             .lock,
             .deleteService(identifier: "FOREIGN", expecting: "en6"),
+            .commitAndApply,
             .addMember(port: "en6", bridge: "bridge0", position: nil),
             .commitAndApply,
         ])
@@ -124,7 +128,6 @@ struct OperationsReturnToBridgeTests {
         defer { try? FileManager.default.removeItem(at: store.directory) }
         let writer = FakeWriter()
         writer.presentServiceIDs = ["FOREIGN"]
-        writer.canReapplyConfiguration = false
         writer.kernel = { _ in Fixtures.snapshot(Fixtures.standalone) }
         #expect {
             try ReturnToBridge(port: Fixtures.port).perform(

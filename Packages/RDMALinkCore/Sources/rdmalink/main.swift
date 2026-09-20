@@ -61,7 +61,7 @@ func describe(_ bridge: ThunderboltPort.BridgeMembership) -> String {
 /// How the kernel came to agree, for the hardware proof's record: whether it
 /// followed the first apply or needed a second one, and how many reads.
 func describe(_ agreement: KernelAgreement) -> String {
-    let how = agreement.settledOnItsOwn ? "on its own" : "after a second apply"
+    let how = agreement.settledOnItsOwn ? "on its own" : "after the membership was rewritten"
     return "kernel settled \(how) in \(agreement.reads) reads"
 }
 
@@ -564,6 +564,13 @@ do {
     case nil, "help", "-h": printUsage()
     case let other?: fail("unknown subcommand: \(other)")
     }
+} catch let refusal as Refusal {
+    // A refusal raised mid-burst (R10, R11, R20…) is printed the way the
+    // sheet would show it, not as a dumped struct.
+    print("")
+    print("Stopped:")
+    show(refusal)
+    exit(1)
 } catch {
     fail("\(error)")
 }

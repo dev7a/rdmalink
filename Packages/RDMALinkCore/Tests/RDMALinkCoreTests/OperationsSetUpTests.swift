@@ -33,7 +33,7 @@ struct OperationsSetUpTests {
         #expect(result.ports.first?.createdServiceID == "NEW-SERVICE-ID")
         #expect(result.ports.first?.leftBridges == ["Thunderbolt Bridge"])
         #expect(result.ports.first?.agreement.settledOnItsOwn == true)
-        #expect(result.ports.first?.agreement.reappliedConfiguration == false)
+        #expect(result.ports.first?.agreement.retriedMembership == false)
     }
 
     @Test("The note records every bridge with its whole member list")

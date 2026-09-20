@@ -610,8 +610,8 @@ public struct SetUpPorts: Sendable {
                 // rollback runs and R14 is what the user is told.
                 changedSomething = true
                 try? rollBackQuietly(port: port, created: created, left: left,
-                                     serviceName: plan.serviceName,
-                                     writer: writer, progress: progress)
+                                     serviceName: plan.serviceName, writer: writer,
+                                     policy: environment.policy, progress: progress)
                 throw Refusals.baselineUnwritable(detail: "\(error)")
             }
         }
@@ -635,7 +635,7 @@ public struct SetUpPorts: Sendable {
         // only the kernel can say so.
         progress(.checkOutOfEveryBridge, .running)
         var agreement = KernelAgreement(agreed: true, settledOnItsOwn: true,
-                                        reappliedConfiguration: false, settledAfterReapply: false,
+                                        retriedMembership: false, settledAfterRetry: false,
                                         reads: 0)
         if !writer.isDryRun {
             // Both sources, and both have to agree: a kernel that has let go
@@ -722,13 +722,22 @@ public struct SetUpPorts: Sendable {
         var succeeded = false
         do {
             try undo(port: port, created: created, left: left, serviceName: serviceName,
-                     writer: writer, progress: progress)
+                     writer: writer, policy: environment.policy, progress: progress)
             if writer.isDryRun {
                 succeeded = true
             } else {
                 let agreement = try KernelVerification.wait(
                     writer: writer, policy: environment.policy,
-                    budget: environment.remainingBudget) { reading in
+                    budget: environment.remainingBudget,
+                    retry: {
+                        for entry in left.reversed() {
+                            try BridgeRejoin.toggle(
+                                port.bsdName, in: entry.membership,
+                                at: entry.membership.members.firstIndex(of: port.bsdName),
+                                writer: writer, policy: environment.policy)
+                        }
+                        try writer.commitAndApply()
+                    }) { reading in
                         reading.isMember(port.bsdName,
                                          ofAll: left.map(\.membership.bridgeName))
                     }
@@ -770,6 +779,7 @@ public struct SetUpPorts: Sendable {
         left: [(membership: BridgeMembership, name: String)],
         serviceName: String,
         writer: NetworkWriter,
+        policy: KernelWaitPolicy,
         progress: OperationProgress
     ) throws {
         if let created {
@@ -784,12 +794,20 @@ public struct SetUpPorts: Sendable {
                                      expectedInterface: created.interfaceBSDName)
             progress(step, .pending)
             progress(.setAddresses, .pending)
+            if !left.isEmpty {
+                // The deletion in a commit of its own, and the port given time
+                // to go quiet, or the membership lands in the teardown and
+                // the kernel refuses it (see `BridgeRejoin`).
+                try BridgeRejoin.commitDeletionAndSettle(port.bsdName, writer: writer,
+                                                         policy: policy)
+            }
         }
         for entry in left.reversed() {
             let step = OperationStep.leaveBridge(named: entry.name)
             progress(step, .reversing)
-            try writer.addMember(port.bsdName, to: entry.membership,
-                                 at: entry.membership.members.firstIndex(of: port.bsdName))
+            try BridgeRejoin.add(port.bsdName, to: entry.membership,
+                                 at: entry.membership.members.firstIndex(of: port.bsdName),
+                                 writer: writer, policy: policy)
             progress(step, .pending)
         }
         try writer.commitAndApply()
@@ -801,9 +819,10 @@ public struct SetUpPorts: Sendable {
         left: [(membership: BridgeMembership, name: String)],
         serviceName: String,
         writer: NetworkWriter,
+        policy: KernelWaitPolicy,
         progress: OperationProgress
     ) throws {
         try undo(port: port, created: created, left: left, serviceName: serviceName,
-                 writer: writer, progress: progress)
+                 writer: writer, policy: policy, progress: progress)
     }
 }

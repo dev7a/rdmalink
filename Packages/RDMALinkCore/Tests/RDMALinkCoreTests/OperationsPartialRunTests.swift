@@ -225,6 +225,26 @@ struct OperationsPartialRunTests {
         } throws: { ($0 as? Refusal)?.code == .credentialExpired }
     }
 
+    @Test("A port is quiet once it is down with no addresses, and not before")
+    func waitsForThePortToGoQuiet() throws {
+        let writer = FakeWriter()
+        // Up with an address for the first two reads, torn down on the third.
+        writer.kernel = { state in
+            Fixtures.snapshot(state.reads >= 3 ? Fixtures.quiet : Fixtures.standalone)
+        }
+        #expect(try KernelVerification.waitUntilQuiet("en6", writer: writer,
+                                                       policy: Fixtures.quickPolicy))
+        #expect(writer.state.reads == 3)
+
+        let never = FakeWriter()
+        never.kernel = { _ in Fixtures.snapshot(Fixtures.standalone) }
+        #expect(try KernelVerification.waitUntilQuiet("en6", writer: never,
+                                                       policy: Fixtures.quickPolicy) == false)
+        // A port the kernel does not list at all has nothing to tear down.
+        #expect(try KernelVerification.waitUntilQuiet("en9", writer: never,
+                                                       policy: Fixtures.quickPolicy))
+    }
+
     @Test("The wait counts the reads, not only the sleeps")
     func theWaitIsOnTheWallClock() throws {
         let writer = FakeWriter()
@@ -236,8 +256,8 @@ struct OperationsPartialRunTests {
         let agreement = try KernelVerification.wait(writer: writer, policy: slow) { _ in false }
         #expect(agreement.agreed == false)
         #expect(agreement.ranOutOfTime, "the budget is wall clock, not a count of sleeps")
-        #expect(agreement.reappliedConfiguration == false,
-                "a wait that ran out of time does not then spend more of it applying again")
+        #expect(agreement.retriedMembership == false,
+                "a wait that ran out of time does not then spend more of it retrying")
     }
 }
 
