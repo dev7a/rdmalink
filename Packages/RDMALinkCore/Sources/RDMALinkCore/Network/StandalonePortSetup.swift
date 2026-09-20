@@ -143,9 +143,10 @@ public struct StandalonePortSetup: Sendable {
         snapshot: InterfaceSnapshot,
         services: [NetworkServiceInfo],
         context: PreflightContext,
+        storedBridges: [BridgeSPI.Membership] = [],
         bridgeNames: [String: String] = [:]
     ) -> StandalonePortPlan {
-        let bridges = snapshot.bridges(containing: port.bsdName)
+        let bridges = Self.bridges(of: port.bsdName, snapshot: snapshot, stored: storedBridges)
         let existing = NetworkServices.classify(
             services: NetworkServices.services(for: port.bsdName, in: services),
             bridges: bridges)
@@ -158,7 +159,8 @@ public struct StandalonePortSetup: Sendable {
             outcome: .setUp,
             refusal: nil)
         plan.refusal = blockingRefusal(
-            snapshot: snapshot, services: services, context: context, bridgeNames: bridgeNames)
+            snapshot: snapshot, services: services, context: context,
+            storedBridges: storedBridges, bridgeNames: bridgeNames)
         if plan.refusal != nil {
             plan.outcome = .refused
             return plan
@@ -186,6 +188,7 @@ public struct StandalonePortSetup: Sendable {
         snapshot: InterfaceSnapshot,
         services: [NetworkServiceInfo],
         context: PreflightContext,
+        storedBridges: [BridgeSPI.Membership] = [],
         bridgeNames: [String: String] = [:]
     ) -> Refusal? {
         if let refusal = Refusals.oneCableOnly(context.observedPorts) { return refusal }
@@ -193,16 +196,28 @@ public struct StandalonePortSetup: Sendable {
             in: snapshot,
             thunderboltPorts: context.thunderboltBSDNames,
             primaryInterfaces: context.primaryInterfaces) { return refusal }
-        if let refusal = Refusals.portStillBridged(port, in: snapshot, bridgeNames: bridgeNames) {
+        if let refusal = Refusals.portStillBridged(
+            port, in: snapshot, storedBridges: storedBridges, bridgeNames: bridgeNames) {
             return refusal
         }
         let existing = NetworkServices.classify(
             services: NetworkServices.services(for: port.bsdName, in: services),
-            bridges: snapshot.bridges(containing: port.bsdName))
+            bridges: Self.bridges(of: port.bsdName, snapshot: snapshot, stored: storedBridges))
         if case let .foreign(_, reason) = existing {
             return Refusals.foreignService(port, reason: reason)
         }
         return nil
+    }
+
+    /// Every bridge a port is in, from both reads — kernel first.
+    static func bridges(
+        of bsdName: String,
+        snapshot: InterfaceSnapshot,
+        stored: [BridgeSPI.Membership]
+    ) -> [String] {
+        let kernel = snapshot.bridges(containing: bsdName)
+        let saved = StoredBridges.names(in: stored, containing: bsdName)
+        return kernel + saved.filter { !kernel.contains($0) }
     }
 
     // MARK: - Perform
@@ -236,9 +251,13 @@ public struct StandalonePortSetup: Sendable {
         // R9 names a System Settings object, so it gets the same map the rest
         // of the app uses. `SCBridgeInterfaceCopyAll` is a plain symbol and
         // needs no extra probe; an absent SPI degrades to the BSD name.
-        let bridgeNames = BridgeSPI.displayNames(in: preferences)
+        let storedBridges = (try? BridgeSPI.bridges(in: preferences)) ?? StoredBridges.read().bridges
+        let bridgeNames = storedBridges.reduce(into: [String: String]()) { names, bridge in
+            names[bridge.bsdName] = bridge.displayName
+        }
         let plan = preview(snapshot: snapshot, services: services,
-                           context: context, bridgeNames: bridgeNames)
+                           context: context, storedBridges: storedBridges,
+                           bridgeNames: bridgeNames)
         if let refusal = plan.refusal { throw refusal }
         if !NetworkServices.services(for: port.bsdName, in: services).isEmpty {
             // Belt and braces: `preview` routes this port to Adopt, so no
@@ -321,9 +340,22 @@ public struct StandalonePortSetup: Sendable {
             throw NetworkConfigurationError.missing("the interface \(bsdName)")
         }
         guard let service = SCNetworkServiceCreate(preferences, interface) else {
+            let code = SCError()
+            // configd refuses — with a bare `kSCStatusFailed`, which says
+            // nothing — to put a service on an interface a stored bridge still
+            // claims. That is the single most likely reason to be here, and
+            // the caller is entitled to be told which bridge rather than
+            // "Failed!".
+            let stored = (try? BridgeSPI.bridges(in: preferences))
+                ?? StoredBridges.read().bridges
+            let claiming = StoredBridges.names(in: stored, containing: bsdName)
+            if code == kSCStatusFailed, !claiming.isEmpty {
+                throw NetworkConfigurationError.interfaceIsStoredBridgeMember(
+                    bsdName: bsdName, bridges: claiming, code: code)
+            }
             throw NetworkConfigurationError.stepFailed(
-                step: "Create the RDMA service", code: SCError(),
-                message: NetworkConfigurationError.message(SCError()))
+                step: "Create the RDMA service", code: code,
+                message: NetworkConfigurationError.message(code))
         }
         try session.check(SCNetworkServiceEstablishDefaultConfiguration(service),
                           "Create the RDMA service")

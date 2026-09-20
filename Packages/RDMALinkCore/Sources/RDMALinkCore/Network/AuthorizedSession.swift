@@ -22,6 +22,14 @@ public enum NetworkConfigurationError: Error, Sendable, Equatable, CustomStringC
     case busy(step: String, code: Int32)
     /// A step of the burst failed. → rollback, then R10 or R11.
     case stepFailed(step: String, code: Int32, message: String)
+    /// `SCNetworkServiceCreate` refused because the interface is still a
+    /// member of a bridge in the **stored** configuration.
+    ///
+    /// configd answers this with a bare `kSCStatusFailed` (1001), whose
+    /// `SCErrorString` is just "Failed!" — so the reason is reconstructed here
+    /// from the membership that was read back, rather than left as a number
+    /// nobody can act on.
+    case interfaceIsStoredBridgeMember(bsdName: String, bridges: [String], code: Int32)
     /// Something that must exist did not, e.g. the interface or the location.
     case missing(String)
     /// The session was used after ``AuthorizedSession/end()`` destroyed its
@@ -32,7 +40,7 @@ public enum NetworkConfigurationError: Error, Sendable, Equatable, CustomStringC
     public var scStatus: Int32? {
         switch self {
         case let .preferencesUnavailable(code), let .busy(_, code),
-             let .stepFailed(_, code, _):
+             let .stepFailed(_, code, _), let .interfaceIsStoredBridgeMember(_, _, code):
             return code
         default: return nil
         }
@@ -52,6 +60,12 @@ public enum NetworkConfigurationError: Error, Sendable, Equatable, CustomStringC
             return "\(step): \(NetworkConfigurationError.message(code))"
         case let .stepFailed(step, _, message):
             return "\(step): \(message)"
+        case let .interfaceIsStoredBridgeMember(bsdName, bridges, code):
+            return "Create the RDMA service: macOS refused "
+                + "(\(code) \(NetworkConfigurationError.message(code))) because \(bsdName) is "
+                + "still a member of \(bridges.joined(separator: ", ")) in the saved network "
+                + "settings, even if the kernel bridge lists no members. The port has to leave "
+                + "that bridge first."
         case let .missing(what):
             return "Missing \(what)"
         case .sessionEnded:

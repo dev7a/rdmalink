@@ -240,16 +240,26 @@ public struct BridgeMembershipChange: Sendable {
         try session.apply()
     }
 
-    /// The kernel's own answer, read back through `ifconfig`. `nil` when it
-    /// does not yet agree with what was asked for.
+    /// Both answers read back — the kernel's through `ifconfig`, and the
+    /// committed configuration's through a fresh, unprivileged handle. `nil`
+    /// when either of them does not yet agree with what was asked for.
+    ///
+    /// One of the two is not enough: while the stored list still claims the
+    /// port, `SCNetworkServiceCreate` refuses on it, so a removal the kernel
+    /// alone has honoured is not a removal that has landed.
     private func verified(
         bridgeBSDName: String,
         runner: CommandRunner
     ) throws -> BridgeSPI.Membership? {
         let snapshot = try InterfaceSnapshot.read(using: runner)
+        let stored = StoredBridges.read()
+        // An unreadable configuration is not an empty one, and `[]` here would
+        // read as "the port has left" and sign off a removal nobody observed.
+        guard stored.source != .unavailable else { return nil }
         let isMember = snapshot.bridges(containing: port.bsdName).contains(bridgeBSDName)
+        let isStoredMember = stored.names(containing: port.bsdName).contains(bridgeBSDName)
         let wanted = direction != .leave
-        guard isMember == wanted else { return nil }
+        guard isMember == wanted, isStoredMember == wanted else { return nil }
         return BridgeSPI.Membership(
             bsdName: bridgeBSDName,
             displayName: bridge.displayName,

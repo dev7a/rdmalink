@@ -15,9 +15,18 @@ public struct ObservedWorld: Sendable {
     public var services: [NetworkServiceInfo]
     /// Service identifiers in the order macOS keeps them, for the undo note.
     public var serviceOrder: [String]
-    /// The bridges as the stored configuration has them, for their display
-    /// names and their own service identifiers.
+    /// The bridges as the stored configuration has them: their display names,
+    /// their own service identifiers, and — the fact the kernel cannot be
+    /// asked for — their **stored** member lists.
+    ///
+    /// Membership here is not a weaker copy of `ifconfig`'s. A bridge whose
+    /// stored `Interfaces` array still lists a port while the kernel bridge
+    /// has no members at all is an ordinary state of a Mac, and in it
+    /// `SCNetworkServiceCreate` refuses with `kSCStatusFailed`: configd will
+    /// not put a service on an interface a stored bridge still claims.
     public var bridges: [BridgeSPI.Membership]
+    /// Which read answered for ``bridges``, so a diagnostic can name it.
+    public var bridgeSource: StoredBridgeReading.Source
     /// R1 and R5, which no single port can see.
     public var context: PreflightContext
     /// The RDMA switch, for S5's warning row. Not RDMALink's to change.
@@ -32,6 +41,7 @@ public struct ObservedWorld: Sendable {
         services: [NetworkServiceInfo],
         serviceOrder: [String] = [],
         bridges: [BridgeSPI.Membership] = [],
+        bridgeSource: StoredBridgeReading.Source = .bridgeSPI,
         context: PreflightContext,
         rdma: RDMAStatus = .unknown,
         mountedVolumes: [MountedVolume] = [],
@@ -41,6 +51,7 @@ public struct ObservedWorld: Sendable {
         self.services = services
         self.serviceOrder = serviceOrder
         self.bridges = bridges
+        self.bridgeSource = bridgeSource
         self.context = context
         self.rdma = rdma
         self.mountedVolumes = mountedVolumes
@@ -60,11 +71,16 @@ public struct ObservedWorld: Sendable {
         guard let preferences = SCPreferencesCreate(nil, clientName as CFString, nil) else {
             throw NetworkConfigurationError.preferencesUnavailable(SCError())
         }
+        // Stored membership decides whether a service can be created at all,
+        // so it is never allowed to degrade silently to "no bridges": when the
+        // SPI will not answer, the world-readable preferences file does.
+        let stored = StoredBridges.read(clientName: clientName)
         return ObservedWorld(
             snapshot: try InterfaceSnapshot.read(using: runner),
             services: NetworkServices.read(from: preferences),
             serviceOrder: NetworkServices.serviceOrder(in: preferences),
-            bridges: (try? BridgeSPI.bridges(in: preferences)) ?? [],
+            bridges: stored.bridges,
+            bridgeSource: stored.source,
             context: try PreflightContext.read(archetype: archetype, runner: runner),
             rdma: RDMAStatus.read(runner: runner),
             mountedVolumes: (try? MountedVolumes.over(ports, runner: runner)) ?? [],
@@ -80,11 +96,20 @@ public struct ObservedWorld: Sendable {
         notesDirectory: URL,
         runner: CommandRunner
     ) throws -> ObservedWorld {
-        ObservedWorld(
+        // The session's own handle first — it is the object the writes will
+        // edit — and the world-readable preferences file when the SPI refuses,
+        // because a burst that read "no bridges" from a failure would plan no
+        // removal and then fail at `SCNetworkServiceCreate`.
+        var stored = (try? writer.bridges()).map {
+            StoredBridgeReading(bridges: $0, source: .bridgeSPI)
+        }
+        if stored == nil { stored = StoredBridges.read() }
+        return ObservedWorld(
             snapshot: try writer.readKernel(),
             services: try writer.services(),
             serviceOrder: try writer.serviceOrder(),
-            bridges: (try? writer.bridges()) ?? [],
+            bridges: stored?.bridges ?? [],
+            bridgeSource: stored?.source ?? .unavailable,
             context: try PreflightContext.read(archetype: archetype, runner: runner),
             rdma: RDMAStatus.read(runner: runner),
             mountedVolumes: (try? MountedVolumes.over(ports, runner: runner)) ?? [],
@@ -104,10 +129,18 @@ public struct ObservedWorld: Sendable {
         bridgeDisplayNames[bsdName] ?? bsdName
     }
 
-    /// The undo note's record of one kernel bridge, member list included.
+    /// The undo note's record of one bridge, member list included.
+    ///
+    /// The member list is the **union** of the stored and kernel lists, stored
+    /// order first. It is the list the SPI's remove and add are checked
+    /// against (``BridgeSPI/resolveRecorded(_:in:)``), and a kernel bridge
+    /// that has forgotten its members while the preferences still hold them
+    /// would otherwise make every stored member look like a stranger's.
     func membership(ofBridge bsdName: String) -> BridgeMembership {
         let stored = bridges.first { $0.bsdName == bsdName }
         let live = snapshot[bsdName]
+        let storedMembers = stored?.members ?? []
+        let liveMembers = live?.members ?? []
         return BridgeMembership(
             bridgeName: bsdName,
             // A bridge has a service of its own, and that identifier is how it
@@ -115,13 +148,31 @@ public struct ObservedWorld: Sendable {
             // stable across a delete and recreate.
             serviceIdentifier: services.first { $0.interfaceBSDName == bsdName }?.serviceID,
             displayName: stored?.displayName,
-            members: live?.members ?? stored?.members ?? [],
+            members: storedMembers + liveMembers.filter { !storedMembers.contains($0) },
             isActive: live?.isActive ?? false)
     }
 
-    /// Every kernel bridge a port is a member of, down ones included.
+    /// Every bridge a port is a member of — kernel first, then the ones only
+    /// the stored configuration knows about. Down bridges included.
+    ///
+    /// This is the list an operation plans its removals from. A port the
+    /// preferences still list is a port configd will not create a service on,
+    /// however empty `ifconfig` says the bridge is.
     public func bridges(containing bsdName: String) -> [String] {
+        let kernel = snapshot.bridges(containing: bsdName)
+        let stored = StoredBridges.names(in: bridges, containing: bsdName)
+        return kernel + stored.filter { !kernel.contains($0) }
+    }
+
+    /// Only what `ifconfig` says, for the places that have to tell the two
+    /// reads apart.
+    public func kernelBridges(containing bsdName: String) -> [String] {
         snapshot.bridges(containing: bsdName)
+    }
+
+    /// Only what the stored configuration says.
+    public func storedBridges(containing bsdName: String) -> [String] {
+        StoredBridges.names(in: bridges, containing: bsdName)
     }
 }
 

@@ -48,8 +48,12 @@ enum PreflightRoute: Sendable, Equatable {
 struct PreflightFindings: Sendable, Equatable {
     /// True while `Check Again` is running: `Continue` greys for the duration.
     var isRechecking = false
-    /// Receptacles with a Mac on the end, in physical order (R1).
+    /// Receptacles with a Mac on the end, in physical order.
     var portsWithAMac: [PreflightPort] = []
+    /// The ones among them that share a bridge, so this Mac could forward
+    /// between the two cables — R1's subjects, from Core's own rule. Empty
+    /// when no bridge holds more than one of them, however many there are.
+    var portsInALoop: [PreflightPort] = []
     /// True when those two are the two ends of the same cable (R2).
     var isLoopedBackIntoThisMac = false
     /// Volumes mounted over Thunderbolt (R4). `nil` until something looks.
@@ -74,6 +78,9 @@ struct PreflightFindings: Sendable, Equatable {
         self.portsWithAMac = ports.withAMac.map {
             PreflightPort(id: $0.port.bsdName, positionName: $0.port.positionName)
         }
+        self.portsInALoop = ports.inALoop.map {
+            PreflightPort(id: $0.port.bsdName, positionName: $0.port.positionName)
+        }
     }
 
     /// Everything S3 asks, from the one read Core already does for the
@@ -89,6 +96,8 @@ struct PreflightFindings: Sendable, Equatable {
         self.portsWithAMac = world.context.observedPorts.filter(\.hasLinkedMac).map {
             PreflightPort(id: $0.bsdName, positionName: $0.positionName)
         }
+        let inALoop = Set(Refusals.oneCableOnly(world.context.observedPorts)?.subjects ?? [])
+        self.portsInALoop = portsWithAMac.filter { inALoop.contains($0.id) }
         self.mountedThunderboltVolumes = world.mountedVolumes.map(\.name)
         // §S3 row 3's satisfied finding names Wi-Fi by name, so the row needs
         // to know what kind of interface the route is on.
@@ -210,8 +219,12 @@ struct PreflightReport: Sendable, Equatable {
         self.continueReason = findings.isRechecking ? nil : Self.reason(rows: rows, findings)
         self.canContinue =
             !findings.isRechecking && rows.allSatisfy { $0.state == .satisfied }
+        // R1 rings the ports in the loop; R2 rings the two ends of the cable.
         self.attentionPortIDs =
-            rows[0].state == .unsatisfied ? Set(findings.portsWithAMac.map(\.id)) : []
+            rows[0].state == .unsatisfied
+            ? Set((findings.portsInALoop.isEmpty ? findings.portsWithAMac : findings.portsInALoop)
+                .map(\.id))
+            : []
     }
 
     // MARK: - Row 1
@@ -231,14 +244,30 @@ struct PreflightReport: Sendable, Equatable {
                 finding: "Just one, in \(macs[0].positionName). Perfect."
             )
         default:
+            if findings.isLoopedBackIntoThisMac {
+                let named = macs.map(\.positionName).formatted(.list(type: .and))
+                return PreflightRow(
+                    check: .oneCable, state: .unsatisfied, title: title,
+                    finding: "Both ends of one cable are in this Mac, on \(named). Unplug one end and put it in the other Mac."
+                )
+            }
+            let loop = findings.portsInALoop
+            guard loop.count >= 2 else {
+                // Two or more cables, and no bridge holds more than one of
+                // their ports: nothing on this Mac can forward between them.
+                // A finished set-up looks exactly like this.
+                let named = macs.map(\.positionName).formatted(.list(type: .and))
+                return PreflightRow(
+                    check: .oneCable, state: .satisfied, title: title,
+                    finding: "Cables in \(named), and no bridge holds more than one of them — nothing can loop."
+                )
+            }
             // §6.2 R1 keeps its headline for any count above one, and names
-            // every receptacle it found; the row's finding does the same.
-            let named = macs.map(\.positionName).formatted(.list(type: .and))
+            // every receptacle in the loop; the row's finding does the same.
+            let named = loop.map(\.positionName).formatted(.list(type: .and))
             return PreflightRow(
                 check: .oneCable, state: .unsatisfied, title: title,
-                finding: findings.isLoopedBackIntoThisMac
-                    ? "Both ends of one cable are in this Mac, on \(named). Unplug one end and put it in the other Mac."
-                    : "Two Macs are connected, on \(named). Unplug one and I'll pick this back up."
+                finding: "Two Macs are connected, on \(named). Unplug one and I'll pick this back up."
             )
         }
     }

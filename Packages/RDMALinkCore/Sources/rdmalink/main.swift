@@ -50,10 +50,12 @@ func describe(_ link: LinkState) -> String {
 }
 
 /// One bridge a port is in: the kernel name, what System Settings calls it
-/// when the SPI said, and whether the kernel is really running it.
+/// when the stored configuration said, whether the kernel is really running
+/// it, and which of the two reads saw the membership at all.
 func describe(_ bridge: ThunderboltPort.BridgeMembership) -> String {
     let named = bridge.displayName.map { " (\($0))" } ?? ""
-    return "\(bridge.name)\(named) \(bridge.isUp ? "in use" : "not in use")"
+    return "\(bridge.name)\(named) \(bridge.isUp ? "in use" : "not in use") "
+        + "· seen by: \(bridge.source)"
 }
 
 func describe(_ configuration: PortConfiguration) -> String {
@@ -97,6 +99,16 @@ func runInventory() throws {
         print("  (unrecognized model: ports are numbered, not named)")
     }
     print("RDMA over Thunderbolt: \(describe(inventory.rdma))")
+    // Bridge membership is two facts, not one: what the kernel is running and
+    // what the saved network settings still hold. A port either read lists is
+    // a port no service can be created on.
+    let stored = inventory.storedBridges
+    print("Bridges in the saved network settings (read from \(stored.source)): "
+        + "\(stored.bridges.count)")
+    for bridge in stored.bridges {
+        print("  \(bridge.bsdName) · \(bridge.displayName ?? "no display name") "
+            + "· members \(list(bridge.members))")
+    }
     print("Ports (physical order, \(inventory.ports.count)):")
     for port in inventory.ports {
         print("  \(port.positionName)")
@@ -143,6 +155,14 @@ func runBridgeProbe() {
     } catch {
         print("live kernel bridges: unavailable — \(error)")
     }
+    // The other place membership is real, and the one the kernel cannot be
+    // asked about.
+    let stored = StoredBridges.read()
+    print("stored bridges (read from \(stored.source)): \(stored.bridges.count)")
+    for bridge in stored.bridges {
+        print("  \(bridge.bsdName) · \(bridge.displayName ?? "no display name") "
+            + "· members \(list(bridge.members))")
+    }
 }
 
 /// `refusals` — every refusal this Mac can be measured against right now, each
@@ -156,11 +176,18 @@ func runRefusals() throws {
     let primary = NetworkGlobals.primaryInterfaces()
     let context = inventory.preflightContext(primaryInterfaces: primary)
     print("macOS says the default route is on: \(list(primary))")
+    // The stored configuration is the second place membership is real, and
+    // R9 is measured against both.
+    let stored = inventory.storedBridges
+    print("Bridges in the saved network settings (read from \(stored.source)):")
+    for bridge in stored.bridges {
+        print("  \(bridge.bsdName) · \(bridge.displayName ?? "no display name") "
+            + "· members \(list(bridge.members))")
+    }
     print("")
-    let bridgeNames = (try? BridgeSPI.activeBridges())?
-        .reduce(into: [String: String]()) { names, bridge in
-            names[bridge.bsdName] = bridge.displayName
-        } ?? [:]
+    let bridgeNames = stored.bridges.reduce(into: [String: String]()) { names, bridge in
+        names[bridge.bsdName] = bridge.displayName
+    }
 
     report("R1", "Only one Mac is connected", Refusals.oneCableOnly(observed))
     report("R5", "Something other than Thunderbolt reaches this Mac", Refusals.managementPathExists(
@@ -179,8 +206,11 @@ func runRefusals() throws {
     for port in inventory.ports where port.isThunderbolt {
         let observedPort = port.observed
         print("  \(port.positionName) (\(port.bsdName))")
+        print("    in bridges: kernel \(list(snapshot.bridges(containing: port.bsdName))) "
+            + "· saved settings \(list(stored.names(containing: port.bsdName)))")
         report("R9", "Out of every bridge", Refusals.portStillBridged(
-            observedPort, in: snapshot, bridgeNames: bridgeNames
+            observedPort, in: snapshot, storedBridges: stored.bridges,
+            bridgeNames: bridgeNames
         ), indent: "    ")
         let configuration = NetworkServices.classify(
             services: NetworkServices.services(for: port.bsdName, in: services),
@@ -199,7 +229,7 @@ func runRefusals() throws {
         // did not create.
         let plan = StandalonePortSetup(port: observedPort).preview(
             snapshot: snapshot, services: services, context: context,
-            bridgeNames: bridgeNames)
+            storedBridges: stored.bridges, bridgeNames: bridgeNames)
         print("    offers: \(describe(plan))")
     }
 }

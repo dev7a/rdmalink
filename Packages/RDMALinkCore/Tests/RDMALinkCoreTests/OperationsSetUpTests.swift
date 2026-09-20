@@ -109,8 +109,10 @@ struct OperationsSetUpTests {
         let store = Fixtures.store()
         defer { try? FileManager.default.removeItem(at: store.directory) }
         let writer = FakeWriter()
+        // `inOneBridge` has en5 and en6 in bridge0; a Mac on the end of both
+        // is the loop R1 is about.
         var second = Fixtures.port
-        second.bsdName = "en7"
+        second.bsdName = "en5"
         second.positionName = "Back, far right"
         let world = Fixtures.world(ifconfig: Fixtures.inOneBridge,
                                    ports: [Fixtures.port, second])

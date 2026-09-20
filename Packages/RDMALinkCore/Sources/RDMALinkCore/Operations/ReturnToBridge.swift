@@ -234,9 +234,11 @@ public struct ReturnToBridge: Sendable {
                                         pushedConfiguration: false, settledAfterPush: false,
                                         reads: 0)
         if !writer.isDryRun {
+            // Both sources: the kernel bridging it, and the preferences
+            // listing it — the same two the set-up path has to see cleared.
             agreement = try KernelVerification.wait(
-                writer: writer, policy: environment.policy) { snapshot in
-                    snapshot.bridges(containing: port.bsdName).contains(bridgeBSDName)
+                writer: writer, policy: environment.policy) { reading in
+                    reading.isMember(port.bsdName, ofAll: [bridgeBSDName])
                 }
             guard agreement.agreed else {
                 // On a miss the note is kept and R20 applies (§7.5 step 4).

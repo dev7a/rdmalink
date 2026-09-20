@@ -46,7 +46,8 @@ public struct ThunderboltPort: Sendable, Identifiable, Equatable {
     /// `fe80::` addresses on this interface, without the `%scope` suffix.
     public var linkLocal: [String]
 
-    /// One kernel bridge a port belongs to.
+    /// One bridge a port belongs to, as the kernel or the stored network
+    /// configuration has it.
     ///
     /// The BSD name alone is not enough to say what UX_SPEC §S1 says — "In two
     /// bridges, including one that isn't in use" — so the two facts that
@@ -56,6 +57,46 @@ public struct ThunderboltPort: Sendable, Identifiable, Equatable {
     /// record of a bridge's whole member list at the moment it was changed.
     /// This one is what the port list knows about a bridge right now.
     public struct BridgeMembership: Sendable, Equatable, Identifiable {
+        /// Which read said this port is in this bridge.
+        ///
+        /// The kernel and the stored configuration can disagree: a `bridge0`
+        /// whose stored `Interfaces` array still lists a port while `ifconfig
+        /// bridge0` lists no members at all is an ordinary state of a Mac. A
+        /// port is in a bridge when **either** says so, because configd
+        /// refuses to create a service on an interface a stored bridge still
+        /// claims — so a port that is only stored-a-member is every bit as
+        /// unusable as one the kernel is really bridging.
+        public enum Source: String, Sendable, Equatable, CaseIterable, CustomStringConvertible {
+            /// `ifconfig` lists the port here; the stored configuration does not.
+            case kernel
+            /// The stored configuration lists it; the kernel does not.
+            case stored
+            /// Both say so, which is the ordinary case.
+            case both
+
+            public var description: String {
+                switch self {
+                case .kernel: "kernel only"
+                case .stored: "saved settings only"
+                case .both: "kernel and saved settings"
+                }
+            }
+
+            /// True when `ifconfig` is one of the reads that said so.
+            public var includesKernel: Bool { self != .stored }
+            /// True when the stored configuration is one of them.
+            public var includesStored: Bool { self != .kernel }
+
+            /// The source for a membership seen by one read, the other, or both.
+            public static func of(kernel: Bool, stored: Bool) -> Source {
+                switch (kernel, stored) {
+                case (true, true): .both
+                case (false, true): .stored
+                default: .kernel
+                }
+            }
+        }
+
         /// The kernel interface name, `bridge0`.
         public var name: String
         /// What System Settings calls it, `Thunderbolt Bridge`, when the
@@ -72,15 +113,25 @@ public struct ThunderboltPort: Sendable, Identifiable, Equatable {
         /// here, so a bridge this says is up is one the kernel is really
         /// running traffic through.
         public var isUp: Bool
+        /// Which of the two reads said so. A membership seen only in the
+        /// stored configuration has `isUp == false`, because the kernel is not
+        /// running it — but it still blocks a service on this port.
+        public var source: Source
 
         /// The kernel name: unique among one port's bridges, because an
         /// interface is listed once.
         public var id: String { name }
 
-        public init(name: String, displayName: String? = nil, isUp: Bool) {
+        public init(
+            name: String,
+            displayName: String? = nil,
+            isUp: Bool,
+            source: Source = .kernel
+        ) {
             self.name = name
             self.displayName = displayName
             self.isUp = isUp
+            self.source = source
         }
     }
 

@@ -355,7 +355,7 @@ With **Show technical names** on, a `.caption` tertiary suffix is appended to th
 - Drift: **Back, far left isn't set up any more.** · detail: **The network service RDMALink made is gone — it may have been removed in System Settings.** *[Set It Up Again]* *[Forget This Port]*
 - Restart owed: **RDMA is switched on and waiting for a restart. Restart whenever it suits you.**
 - USB tip: **There's a cable in a front port. Those carry USB, not Thunderbolt. Move it to one of the four ports on the back and I'll follow along.**
-- Two Macs tip: **Two Macs are connected. Leave just one cable in place while we work — two can send Ethernet traffic around in a loop.**
+- Two Macs tip: **Two Macs are connected. Leave just one cable in place while we work — two can send Ethernet traffic around in a loop.** Shown only when R1 would fire — two ports with a Mac on the end share a bridge — and never for cables on standalone ports.
 - Unrecognized model note: **I don't recognize this Mac, so the picture is a stand-in and the ports are numbered the way macOS reports them. Everything else works normally.**
 
 **Copy — port list section and rows**
@@ -431,7 +431,7 @@ The camera **holds** the resting three-quarter pose and never moves on its own h
 
 | # | Title | Satisfied | Unsatisfied | Button |
 |---|---|---|---|---|
-| 1 | **One Thunderbolt cable to another Mac** | **Just one, in Back, far left. Perfect.** / **No other Mac is connected yet. That's fine — you can prepare a port now and plug in later.** | **Two Macs are connected, on Back, far left and Back, far right. Unplug one and I'll pick this back up.** / **Both ends of one cable are in this Mac, on Back, far left and Back, far right. Unplug one end and put it in the other Mac.** | — |
+| 1 | **One Thunderbolt cable to another Mac** | **Just one, in Back, far left. Perfect.** / **No other Mac is connected yet. That's fine — you can prepare a port now and plug in later.** / **Cables in Back, far left and Back, far right, and no bridge holds more than one of them — nothing can loop.** (two or more cables whose ports share no bridge: a finished set-up) | **Two Macs are connected, on Back, far left and Back, far right. Unplug one and I'll pick this back up.** / **Both ends of one cable are in this Mac, on Back, far left and Back, far right. Unplug one end and put it in the other Mac.** | — |
 | 2 | **Nothing mounted over Thunderbolt** | **Nothing is mounted. Good.** | **The volume Vault is mounted over Thunderbolt. Eject it in Finder so nothing gets interrupted.** | **Show in Finder** |
 | 3 | **Another way to reach this Mac** | **Wi-Fi is connected, so changing a Thunderbolt port won't cut you off.** | **Right now, Thunderbolt is the only way this Mac is reachable. Changing a port can briefly interrupt the whole bridge — not just that one port — so connect Wi-Fi or Ethernet before we touch it.** | **Open Network Settings** |
 | 4 | **Room to save an undo note** | **RDMALink can save its notes, so anything it changes can be put back.** | **RDMALink can't write its notes folder, so it couldn't put things back afterwards. It won't change anything it can't undo.** | **Show the Notes Folder** |
@@ -786,7 +786,7 @@ Documented once so they all read the same.
 
 ---
 
-**R1 — Two Macs are connected (loop risk).** *Blocks preflight and any apply.*
+**R1 — Two Macs are connected (loop risk).** *Blocks preflight and any apply.* Fires when two or more receptacles with a Mac on the end are members of the same bridge, in the kernel or in the saved network settings. A port that is already standalone forwards nothing, so two cables on two standalone ports — a finished set-up — never trip it.
 - Headline: **Two Macs are connected**
 - Body: **Thunderbolt Bridge forwards Ethernet between Macs, and two cables between the same pair can send traffic around in a loop. Unplug one cable and I'll pick this back up — the other one can go back in when we're done.**
 - Detail: **Back, far left and Back, far right each have a Mac on the end.**

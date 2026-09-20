@@ -85,18 +85,59 @@ public struct KernelAgreement: Sendable, Equatable {
     }
 }
 
-enum KernelVerification {
-    /// Reads the kernel until it says what the write asked for.
+/// One round of verification: both places bridge membership is real, read at
+/// the same moment.
+///
+/// A membership change is not done when `ifconfig` agrees and the preferences
+/// still list the port — configd refuses to create a service on an interface a
+/// stored bridge claims, so a half-agreed state is a state the next step would
+/// fail in. Both reads therefore travel together and every predicate gets both.
+struct VerificationReading: Sendable {
+    /// What `ifconfig -a` says.
+    var snapshot: InterfaceSnapshot
+    /// What a fresh, unprivileged preferences handle says — the committed
+    /// configuration.
     ///
-    /// Waits out the window first, then — only if the kernel still disagrees —
-    /// pushes the bridge configuration **once** and waits again. Which of the
-    /// two got there is reported rather than assumed, because on this hardware
-    /// it is not yet known which one is really needed.
+    /// `nil` when it would not be read at all. Never flattened to `[]`: an
+    /// unreadable configuration is not evidence that a removal landed, and
+    /// every question below answers **no** while it is nil.
+    var stored: [BridgeSPI.Membership]?
+
+    /// Every bridge either read puts this port in, kernel first.
+    func bridges(containing bsdName: String) -> [String] {
+        let kernel = snapshot.bridges(containing: bsdName)
+        let saved = StoredBridges.names(in: stored ?? [], containing: bsdName)
+        return kernel + saved.filter { !kernel.contains($0) }
+    }
+
+    /// True when both reads answered and neither lists this port in a bridge.
+    func isOutOfEveryBridge(_ bsdName: String) -> Bool {
+        guard stored != nil else { return false }
+        return bridges(containing: bsdName).isEmpty
+    }
+
+    /// True when **both** reads list this port in every one of `bridgeNames`.
+    func isMember(_ bsdName: String, ofAll bridgeNames: [String]) -> Bool {
+        guard let stored else { return false }
+        let kernel = Set(snapshot.bridges(containing: bsdName))
+        let saved = Set(StoredBridges.names(in: stored, containing: bsdName))
+        return bridgeNames.allSatisfy { kernel.contains($0) && saved.contains($0) }
+    }
+}
+
+enum KernelVerification {
+    /// Reads the kernel **and** the stored configuration until they both say
+    /// what the write asked for.
+    ///
+    /// Waits out the window first, then — only if they still disagree — pushes
+    /// the bridge configuration **once** and waits again. Which of the two got
+    /// there is reported rather than assumed, because on this hardware it is
+    /// not yet known which one is really needed.
     static func wait(
         writer: NetworkWriter,
         policy: KernelWaitPolicy,
         budget: Duration? = nil,
-        until predicate: (InterfaceSnapshot) -> Bool
+        until predicate: (VerificationReading) -> Bool
     ) throws -> KernelAgreement {
         var reads = 0
         var ranOutOfTime = false
@@ -106,14 +147,18 @@ enum KernelVerification {
         // left of the burst's.
         let cap = min(policy.budget, budget ?? policy.budget)
 
-        /// Reads the kernel until it agrees, the window closes, or the wall
-        /// clock runs out — and the read itself is inside the measurement,
-        /// because a `posix_spawn` of `ifconfig` costs real credential time.
+        /// Reads both sources until they agree, the window closes, or the wall
+        /// clock runs out — and the reads themselves are inside the
+        /// measurement, because a `posix_spawn` of `ifconfig` costs real
+        /// credential time.
         func poll() throws -> Bool {
             var waited = Duration.zero
             while true {
                 reads += 1
-                if predicate(try writer.readKernel()) { return true }
+                let reading = VerificationReading(
+                    snapshot: try writer.readKernel(),
+                    stored: try? writer.readStoredBridges())
+                if predicate(reading) { return true }
                 if clock.now - started >= cap {
                     ranOutOfTime = true
                     return false

@@ -101,11 +101,22 @@ public struct ObservedPort: Sendable, Equatable {
     public var positionName: String
     /// True when another Mac is on the end of this cable (`IOLinkStatus` 3).
     public var hasLinkedMac: Bool
+    /// The BSD names of every bridge this port is a member of, whether the
+    /// kernel or the saved network settings say so. R1 counts a linked Mac
+    /// only through a bridge: a standalone port forwards nothing, so two
+    /// cables on two standalone ports cannot loop.
+    public var bridges: [String]
 
-    public init(bsdName: String, positionName: String, hasLinkedMac: Bool = false) {
+    public init(
+        bsdName: String,
+        positionName: String,
+        hasLinkedMac: Bool = false,
+        bridges: [String] = []
+    ) {
         self.bsdName = bsdName
         self.positionName = positionName
         self.hasLinkedMac = hasLinkedMac
+        self.bridges = bridges
     }
 }
 

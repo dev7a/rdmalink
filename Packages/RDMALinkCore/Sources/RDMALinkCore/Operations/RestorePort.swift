@@ -310,10 +310,12 @@ public struct RestorePort: Sendable {
                                         pushedConfiguration: false, settledAfterPush: false,
                                         reads: 0)
         if mode == .full, !writer.isDryRun, !note.bridges.isEmpty {
+            // Both sources: the port is back when the kernel is bridging it
+            // **and** the preferences list it again, which is the state it
+            // was found in.
             agreement = try KernelVerification.wait(
-                writer: writer, policy: environment.policy) { snapshot in
-                    let bridges = Set(snapshot.bridges(containing: port.bsdName))
-                    return note.bridges.allSatisfy { bridges.contains($0.bridgeName) }
+                writer: writer, policy: environment.policy) { reading in
+                    reading.isMember(port.bsdName, ofAll: note.bridges.map(\.bridgeName))
                 }
             guard agreement.agreed else {
                 // The note is **never** deleted until verification passes, so

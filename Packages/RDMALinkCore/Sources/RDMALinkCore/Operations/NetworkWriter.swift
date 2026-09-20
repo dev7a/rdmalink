@@ -31,10 +31,17 @@ protocol NetworkWriter: AnyObject {
     func services() throws -> [NetworkServiceInfo]
     /// The identifiers of every service in the current location, in order.
     func serviceOrder() throws -> [String]
-    /// Every bridge in the stored configuration, members included.
+    /// Every bridge in the stored configuration as **this session** has it:
+    /// the object the writes edit, uncommitted changes included.
     func bridges() throws -> [BridgeSPI.Membership]
-    /// The kernel's own answer, from `ifconfig -a`. The only place membership
-    /// can really be read.
+    /// Every bridge in the stored configuration as a **fresh, unprivileged**
+    /// handle sees it — which is what has actually been committed.
+    ///
+    /// The verification read. `bridges()` would answer out of the session's
+    /// own copy and say yes to a removal that never reached the disk.
+    func readStoredBridges() throws -> [BridgeSPI.Membership]
+    /// The kernel's own answer, from `ifconfig -a`. One of the two places
+    /// membership is real; ``readStoredBridges()`` is the other.
     func readKernel() throws -> InterfaceSnapshot
 
     func removeMember(_ bsdName: String, from bridge: BridgeMembership) throws
@@ -78,6 +85,19 @@ final class LiveNetworkWriter: NetworkWriter {
 
     func bridges() throws -> [BridgeSPI.Membership] {
         try BridgeSPI.bridges(in: try session.preferences)
+    }
+
+    /// A **fresh** handle every time, deliberately: the point of this read is
+    /// to see what landed on disk, not what the session is holding.
+    func readStoredBridges() throws -> [BridgeSPI.Membership] {
+        let reading = StoredBridges.read()
+        // An unreadable configuration is not an empty one, and the difference
+        // is the whole point here: `[]` would read as "the port is out of
+        // every bridge" and sign off a removal nobody observed.
+        guard reading.source != .unavailable else {
+            throw NetworkConfigurationError.missing("the stored bridge configuration")
+        }
+        return reading.bridges
     }
 
     func readKernel() throws -> InterfaceSnapshot {

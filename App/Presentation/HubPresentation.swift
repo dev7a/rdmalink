@@ -167,7 +167,7 @@ enum HubPresentation {
         }
         if switchState == .onAfterRestart { result.append(.restartOwed) }
         if hasCableInAFrontUSBPort(ports) { result.append(.usbCableTip) }
-        if ports.withAMac.count >= 2 { result.append(.twoMacsTip) }
+        if ports.inALoop.count >= 2 { result.append(.twoMacsTip) }
         if let hardware, !hardware.isRecognized { result.append(.unrecognizedModel) }
         return result
     }
@@ -203,7 +203,7 @@ enum HubPresentation {
         hardware: HardwareModel?,
         ports: [PortSnapshot]
     ) -> HubFooterModel {
-        let twoMacs = ports.withAMac.count >= 2
+        let twoMacs = ports.inALoop.count >= 2
         return HubFooterModel(
             // R23: read-only mode has no primary button at all, and
             // `Identify a Port…` stays in the Port menu.

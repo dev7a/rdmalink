@@ -487,7 +487,8 @@ extension PortSnapshot {
         ObservedPort(
             bsdName: port.bsdName,
             positionName: port.positionName,
-            hasLinkedMac: port.link == .macLinked
+            hasLinkedMac: port.link == .macLinked,
+            bridges: port.bridges.map(\.name)
         )
     }
 }

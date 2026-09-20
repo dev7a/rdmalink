@@ -49,7 +49,34 @@ final class FakeWriter: NetworkWriter {
 
     var servicesValue: [NetworkServiceInfo] = []
     var serviceOrderValue: [String] = []
-    var bridgesValue: [BridgeSPI.Membership] = []
+    /// The stored configuration as the **session** holds it, and every member
+    /// write below edits this copy — exactly as the bridge SPI edits an open
+    /// `SCPreferences`.
+    ///
+    /// A test that does not set one gets a mirror of the kernel's first read,
+    /// which is the ordinary state of a Mac: the two agree. Set it explicitly
+    /// to make them disagree, which is the state this whole seam exists for.
+    var bridgesValue: [BridgeSPI.Membership] {
+        get {
+            if let sessionBridges { return sessionBridges }
+            let mirrored = FakeWriter.mirror(kernel(state))
+            sessionBridges = mirrored
+            return mirrored
+        }
+        set { sessionBridges = newValue }
+    }
+
+    private var sessionBridges: [BridgeSPI.Membership]?
+    /// What a fresh, unprivileged handle would see: only what has been
+    /// committed. `nil` until the first `commitAndApply`.
+    private var committedBridges: [BridgeSPI.Membership]?
+    /// The value on disk before the session's first edit, so a read before any
+    /// commit sees what is really there.
+    private var bridgesBeforeEditing: [BridgeSPI.Membership]?
+    /// When true, a fresh handle never sees the edits — the preferences keep
+    /// listing the port however often the burst commits. The stored half of
+    /// "macOS didn't actually let go of the port".
+    var storedMembershipPersists = false
 
     /// What the kernel says, asked fresh on every read.
     var kernel: (KernelState) -> InterfaceSnapshot = { _ in InterfaceSnapshot(interfaces: []) }
@@ -59,6 +86,15 @@ final class FakeWriter: NetworkWriter {
     /// Service identifiers the configuration currently holds.
     var presentServiceIDs: Set<String> = []
     var createdIdentifier = "NEW-SERVICE-ID"
+
+    /// The stored configuration a Mac whose two reads agree would have.
+    static func mirror(_ snapshot: InterfaceSnapshot) -> [BridgeSPI.Membership] {
+        snapshot.interfaces.filter(\.isBridge).map {
+            BridgeSPI.Membership(bsdName: $0.name,
+                                 displayName: Fixtures.bridgeDisplayNames[$0.name],
+                                 members: $0.members)
+        }
+    }
 
     private func record(_ call: WriterCall) throws {
         calls.append(call)
@@ -70,6 +106,11 @@ final class FakeWriter: NetworkWriter {
     func serviceOrder() throws -> [String] { serviceOrderValue }
     func bridges() throws -> [BridgeSPI.Membership] { bridgesValue }
 
+    func readStoredBridges() throws -> [BridgeSPI.Membership] {
+        if storedMembershipPersists { return bridgesBeforeEditing ?? bridgesValue }
+        return committedBridges ?? bridgesBeforeEditing ?? bridgesValue
+    }
+
     func readKernel() throws -> InterfaceSnapshot {
         state.reads += 1
         return kernel(state)
@@ -77,10 +118,25 @@ final class FakeWriter: NetworkWriter {
 
     func removeMember(_ bsdName: String, from bridge: BridgeMembership) throws {
         try record(.removeMember(port: bsdName, bridge: bridge.bridgeName))
+        edit(bridge.bridgeName) { $0.removeAll { $0 == bsdName } }
     }
 
     func addMember(_ bsdName: String, to bridge: BridgeMembership, at position: Int?) throws {
         try record(.addMember(port: bsdName, bridge: bridge.bridgeName, position: position))
+        edit(bridge.bridgeName) { members in
+            guard !members.contains(bsdName) else { return }
+            members.insert(bsdName, at: min(max(position ?? members.count, 0), members.count))
+        }
+    }
+
+    /// One member-list edit on the session's copy, remembering what was on
+    /// disk before the first one.
+    private func edit(_ bridgeName: String, _ change: (inout [String]) -> Void) {
+        if bridgesBeforeEditing == nil { bridgesBeforeEditing = bridgesValue }
+        guard let index = bridgesValue.firstIndex(where: { $0.bsdName == bridgeName }) else {
+            return
+        }
+        change(&bridgesValue[index].members)
     }
 
     func createService(on bsdName: String, named name: String) throws -> CreatedServiceRecord {
@@ -102,7 +158,10 @@ final class FakeWriter: NetworkWriter {
         try record(.push)
     }
 
-    func commitAndApply() throws { try record(.commitAndApply) }
+    func commitAndApply() throws {
+        try record(.commitAndApply)
+        committedBridges = bridgesValue
+    }
 }
 
 enum Fixtures {
@@ -174,28 +233,47 @@ enum Fixtures {
                                               displayName: "Thunderbolt Bridge 2",
                                               members: ["en6", "en9"])
 
+    /// What System Settings calls the bridges in these fixtures.
+    static let bridgeDisplayNames = [
+        "bridge0": "Thunderbolt Bridge",
+        "bridge1": "Thunderbolt Bridge 2",
+    ]
+
     /// A whole world, with Ethernet as the management path unless told otherwise.
+    ///
+    /// - Parameter bridges: the stored configuration. `nil` mirrors the
+    ///   `ifconfig` text, which is the ordinary state of a Mac — the two reads
+    ///   agree. Pass one explicitly to make them disagree.
     static func world(
         ifconfig: String,
         services: [NetworkServiceInfo] = [],
-        bridges: [BridgeSPI.Membership] = [bridge0],
+        bridges: [BridgeSPI.Membership]? = nil,
         ports: [OperationPort] = [port],
         primary: [String] = ["en0"],
         mounted: [MountedVolume] = [],
         notesAreWritable: Refusal? = nil,
         rdma: RDMAStatus = .off
     ) -> ObservedWorld {
-        ObservedWorld(
+        var world = ObservedWorld(
             snapshot: snapshot(ifconfig),
             services: services,
             serviceOrder: services.map(\.serviceID),
-            bridges: bridges,
-            context: PreflightContext(observedPorts: ports.map(\.observed),
+            bridges: bridges ?? FakeWriter.mirror(snapshot(ifconfig)),
+            context: PreflightContext(observedPorts: [],
                                       thunderboltBSDNames: ports.map(\.bsdName),
                                       primaryInterfaces: primary),
             rdma: rdma,
             mountedVolumes: mounted,
             notesAreWritable: notesAreWritable)
+        // The `ifconfig` text and the stored bridges are the one description
+        // of membership here, as `Inventory.readPorts` is on a real Mac: the
+        // observed ports R1 reads take their bridges from the world.
+        world.context.observedPorts = ports.map { port in
+            var observed = port.observed
+            observed.bridges = world.bridges(containing: port.bsdName)
+            return observed
+        }
+        return world
     }
 
     /// A private notes folder per test, removed afterwards.
@@ -217,8 +295,14 @@ enum Fixtures {
 
     /// Four reads and no real waiting, so a kernel that catches up late can be
     /// exercised without spending three seconds on it.
+    ///
+    /// The budget is wall clock and is left generous on purpose: with a no-op
+    /// pause the loop spends only compute, and the default of twice the
+    /// window — 60 ms — trips on a loaded machine and turns an R10 into an R8.
+    /// Tests about the budget itself pass their own policy.
     static let quickPolicy = KernelWaitPolicy(
-        window: .milliseconds(30), interval: .milliseconds(10), pause: { _ in })
+        window: .milliseconds(30), interval: .milliseconds(10), budget: .seconds(10),
+        pause: { _ in })
 }
 
 /// Collects the checklist as the burst reports it.

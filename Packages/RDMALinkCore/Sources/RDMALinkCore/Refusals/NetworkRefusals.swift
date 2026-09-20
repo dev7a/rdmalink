@@ -30,8 +30,21 @@ public enum Refusals {
     ///
     /// Thunderbolt Bridge forwards Ethernet between Macs, so two cables between
     /// the same pair can put traffic in a loop. Self-clearing: it has no button.
+    ///
+    /// The loop needs a bridge to forward between the two cables, so a linked
+    /// Mac counts only through a bridge: the rule fires when two or more ports
+    /// with a Mac on the end are members of the **same** bridge, in the kernel
+    /// or in the saved settings. Two cables on two standalone ports are two
+    /// point-to-point links — what a finished set-up looks like — and pass.
     public static func oneCableOnly(_ ports: [ObservedPort]) -> Refusal? {
-        let linked = ports.filter(\.hasLinkedMac)
+        let candidates = ports.filter(\.hasLinkedMac)
+        var linkedMembers: [String: Int] = [:]
+        for port in candidates {
+            for bridge in Set(port.bridges) { linkedMembers[bridge, default: 0] += 1 }
+        }
+        let linked = candidates.filter { port in
+            port.bridges.contains { linkedMembers[$0, default: 0] > 1 }
+        }
         guard linked.count > 1 else { return nil }
         return Refusal(
             code: .twoMacsConnected,
@@ -61,15 +74,28 @@ public enum Refusals {
     /// back in its bridge, and ``rollbackFailed(port:bridge:)`` (R11) when it
     /// could not be put back.
     ///
-    /// - Parameter bridgeNames: BSD name to human name, e.g.
-    ///   `["bridge0": "Thunderbolt Bridge"]`. Missing entries fall back to the
-    ///   BSD name rather than guessing.
+    /// Membership is read from **both** places it is real. A bridge whose
+    /// stored `Interfaces` array still lists the port while the kernel bridge
+    /// has no members is not a port that is free: `SCNetworkServiceCreate`
+    /// refuses on it with `kSCStatusFailed`, so the rule is unsatisfied and
+    /// the spec's own sentence is the right one to print.
+    ///
+    /// - Parameters:
+    ///   - storedBridges: every bridge in the stored configuration, from
+    ///     ``StoredBridges/read(clientName:fileURL:)`` or
+    ///     ``ObservedWorld/bridges``.
+    ///   - bridgeNames: BSD name to human name, e.g.
+    ///     `["bridge0": "Thunderbolt Bridge"]`. Missing entries fall back to
+    ///     the BSD name rather than guessing.
     public static func portStillBridged(
         _ port: ObservedPort,
         in snapshot: InterfaceSnapshot,
+        storedBridges: [BridgeSPI.Membership] = [],
         bridgeNames: [String: String] = [:]
     ) -> Refusal? {
-        let bridges = snapshot.bridges(containing: port.bsdName)
+        let kernel = snapshot.bridges(containing: port.bsdName)
+        let stored = StoredBridges.names(in: storedBridges, containing: port.bsdName)
+        let bridges = kernel + stored.filter { !kernel.contains($0) }
         guard !bridges.isEmpty else { return nil }
         let named = englishList(bridges.map { bridgeNames[$0] ?? $0 })
         return Refusal(

@@ -21,13 +21,23 @@ public struct Inventory: Sendable, Equatable {
     public var ports: [ThunderboltPort]
     /// The RDMA switch and the devices it produced.
     public var rdma: RDMAStatus
+    /// Bridge membership as the stored network configuration has it, and which
+    /// read answered. Merged into ``ports`` already; kept whole so a
+    /// diagnostic can name the source rather than imply one.
+    public var storedBridges: StoredBridgeReading
 
     /// Public so the app can build fixtures for screen states it has no
     /// hardware for. A public struct's memberwise initializer is internal.
-    public init(model: HardwareModel, ports: [ThunderboltPort], rdma: RDMAStatus) {
+    public init(
+        model: HardwareModel,
+        ports: [ThunderboltPort],
+        rdma: RDMAStatus,
+        storedBridges: StoredBridgeReading = StoredBridgeReading(bridges: [], source: .unavailable)
+    ) {
         self.model = model
         self.ports = ports
         self.rdma = rdma
+        self.storedBridges = storedBridges
     }
 
     /// Reads this Mac.
@@ -56,19 +66,26 @@ public struct Inventory: Sendable, Equatable {
     /// Mac reports no Thunderbolt-IP ports.
     public static func read(runner: CommandRunner = CommandRunner()) throws -> Inventory {
         let model = HardwareModel.read()
+        let stored = StoredBridges.read()
         return Inventory(
             model: model,
-            ports: try readPorts(archetype: model.archetype, runner: runner),
-            rdma: RDMAStatus.read(runner: runner)
+            ports: try readPorts(archetype: model.archetype, runner: runner,
+                                 storedBridges: stored),
+            rdma: RDMAStatus.read(runner: runner),
+            storedBridges: stored
         )
     }
 
     /// The port half on its own, for the cheap re-read a link event wants: the
     /// RDMA switch cannot change without a restart, and the hardware model
     /// cannot change at all.
+    ///
+    /// - Parameter storedBridges: the stored bridges, when the caller has
+    ///   already read them. `nil` reads them here.
     public static func readPorts(
         archetype: Archetype,
-        runner: CommandRunner = CommandRunner()
+        runner: CommandRunner = CommandRunner(),
+        storedBridges: StoredBridgeReading? = nil
     ) throws -> [ThunderboltPort] {
         let rows = try PortInventory.readRows()
         let enrichment = ChassisProbe.read()
@@ -76,21 +93,15 @@ public struct Inventory: Sendable, Equatable {
             rows: rows, archetype: archetype, enrichment: enrichment.byReceptacle
         )
         let interfaces = try InterfaceSnapshot.read(using: runner)
-        // Resolved once, and only if some port is in a bridge at all: on a Mac
-        // with no bridges this opens no preferences session.
-        var displayNames: [String: String]?
+        // Read once, always: the kernel is not the whole truth about bridge
+        // membership, and a port the preferences still list is a port configd
+        // will not put a service on however empty `ifconfig` says the bridge
+        // is. Both reads are unprivileged and neither can write.
+        let stored = storedBridges ?? StoredBridges.read()
         for index in ports.indices {
             let name = ports[index].bsdName
-            let bridges = interfaces.bridges(containing: name)
-            if !bridges.isEmpty, displayNames == nil { displayNames = bridgeDisplayNames() }
             ports[index].apply(
-                bridges: bridges.map { bridge in
-                    ThunderboltPort.BridgeMembership(
-                        name: bridge,
-                        displayName: displayNames?[bridge],
-                        isUp: interfaces[bridge].map { $0.isUp && $0.isActive } ?? false
-                    )
-                },
+                bridges: membership(of: name, kernel: interfaces, stored: stored.bridges),
                 linkLocal: interfaces[name]?.linkLocalAddresses ?? []
             )
         }
@@ -101,18 +112,37 @@ public struct Inventory: Sendable, Equatable {
         )
     }
 
-    /// What System Settings calls each bridge, keyed by BSD name.
+    /// Every bridge one port belongs to, merged from the two reads.
     ///
-    /// Read-only: `SCPreferencesCreate` without an `AuthorizationRef` cannot
-    /// write, and ``BridgeSPI/displayNames(in:)`` degrades to an empty map
-    /// when the private symbols are not there, which leaves every
-    /// ``ThunderboltPort/BridgeMembership/displayName`` nil rather than
-    /// guessed.
-    private static func bridgeDisplayNames() -> [String: String] {
-        guard let preferences = SCPreferencesCreate(nil, "RDMALink" as CFString, nil) else {
-            return [:]
+    /// Kernel memberships come first, in the order `ifconfig` printed them,
+    /// then the ones only the stored configuration knows about. A bridge both
+    /// reads agree on appears once, with
+    /// ``ThunderboltPort/BridgeMembership/Source/both``.
+    ///
+    /// `isUp` stays the kernel's answer and nothing else: a bridge the
+    /// preferences describe but the kernel is not running is not "in use", and
+    /// saying otherwise would be a claim about traffic that is not flowing.
+    /// The display name comes from the stored configuration, which is the only
+    /// place macOS keeps one — an absent entry leaves it nil rather than
+    /// guessed (`docs/ARCHITECTURE.md`, rule 5).
+    static func membership(
+        of bsdName: String,
+        kernel: InterfaceSnapshot,
+        stored: [BridgeSPI.Membership]
+    ) -> [ThunderboltPort.BridgeMembership] {
+        guard !bsdName.isEmpty else { return [] }
+        let kernelNames = kernel.bridges(containing: bsdName)
+        let storedNames = StoredBridges.names(in: stored, containing: bsdName)
+        let ordered = kernelNames + storedNames.filter { !kernelNames.contains($0) }
+        return ordered.map { name in
+            let live = kernel[name]
+            return ThunderboltPort.BridgeMembership(
+                name: name,
+                displayName: stored.first { $0.bsdName == name }?.displayName,
+                isUp: live.map { $0.isUp && $0.isActive } ?? false,
+                source: .of(kernel: kernelNames.contains(name),
+                            stored: storedNames.contains(name)))
         }
-        return BridgeSPI.displayNames(in: preferences)
     }
 
     /// Sorts by where the receptacles actually are, falling back to receptacle
@@ -169,7 +199,8 @@ extension ThunderboltPort {
         ObservedPort(
             bsdName: bsdName,
             positionName: positionName,
-            hasLinkedMac: link == .macLinked
+            hasLinkedMac: link == .macLinked,
+            bridges: bridges.map(\.name)
         )
     }
 }

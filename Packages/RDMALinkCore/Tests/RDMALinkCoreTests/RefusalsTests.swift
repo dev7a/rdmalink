@@ -49,6 +49,8 @@ struct OneCableOnlyTests {
         var left = farLeft, right = farRight
         left.hasLinkedMac = true
         right.hasLinkedMac = true
+        left.bridges = ["bridge0"]
+        right.bridges = ["bridge0"]
         let refusal = try #require(Refusals.oneCableOnly([left, right]))
         #expect(refusal.code == .twoMacsConnected)
         #expect(refusal.headline == "Two Macs are connected")
@@ -62,10 +64,40 @@ struct OneCableOnlyTests {
         let ports = ["Back, far left", "Back, middle left", "Back, far right"]
             .enumerated()
             .map { ObservedPort(bsdName: "en\($0.offset)", positionName: $0.element,
-                                hasLinkedMac: true) }
+                                hasLinkedMac: true, bridges: ["bridge0"]) }
         let refusal = try #require(Refusals.oneCableOnly(ports))
         #expect(refusal.detail == "Back, far left, Back, middle left and Back, far right "
             + "each have a Mac on the end.")
+    }
+
+    @Test("Two Macs on two standalone ports are two links, not a loop")
+    func acceptsTwoLinksOnStandalonePorts() {
+        var left = farLeft, right = farRight
+        left.hasLinkedMac = true
+        right.hasLinkedMac = true
+        // A finished set-up: neither port is in any bridge, so nothing on
+        // this Mac forwards between the two cables.
+        #expect(Refusals.oneCableOnly([left, right]) == nil)
+        // One still in the bridge and one already out is no loop either.
+        left.bridges = ["bridge0"]
+        #expect(Refusals.oneCableOnly([left, right]) == nil)
+        // Two different bridges do not forward to each other.
+        right.bridges = ["bridge1"]
+        #expect(Refusals.oneCableOnly([left, right]) == nil)
+    }
+
+    @Test("Only the ports that share a bridge are named")
+    func namesOnlyThePortsThatShareABridge() throws {
+        var left = farLeft, right = farRight
+        left.hasLinkedMac = true
+        right.hasLinkedMac = true
+        left.bridges = ["bridge0"]
+        right.bridges = ["bridge0"]
+        let standalone = ObservedPort(bsdName: "en7", positionName: "Front, left",
+                                      hasLinkedMac: true)
+        let refusal = try #require(Refusals.oneCableOnly([left, standalone, right]))
+        #expect(refusal.detail == "Back, far left and Back, far right each have a Mac on the end.")
+        #expect(refusal.subjects == ["en5", "en6"])
     }
 }
 

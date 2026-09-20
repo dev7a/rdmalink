@@ -73,8 +73,19 @@ struct InventoryAggregateTests {
         let observed = inventory.observedPorts
         #expect(observed.map(\.hasLinkedMac) == [false, false, false, false, true, true])
         #expect(observed.map(\.positionName) == Self.studioSixPorts.map(\.positionName))
-        // Two Macs on the end of two cables is R1, and the aggregate feeds it.
-        #expect(Refusals.oneCableOnly(observed)?.code == .twoMacsConnected)
+        // Two Macs on two standalone ports is a finished set-up, not R1.
+        #expect(observed.allSatisfy { $0.bridges.isEmpty })
+        #expect(Refusals.oneCableOnly(observed) == nil)
+        // Put both cables' ports in the bridge and the aggregate feeds R1.
+        var bridged = inventory
+        let membership = ThunderboltPort.BridgeMembership(
+            name: "bridge0", displayName: "Thunderbolt Bridge", isUp: true, source: .both)
+        for index in bridged.ports.indices where bridged.ports[index].link == .macLinked {
+            bridged.ports[index].apply(bridges: [membership], linkLocal: [])
+        }
+        #expect(bridged.observedPorts.map(\.bridges)
+            == [[], [], [], [], ["bridge0"], ["bridge0"]])
+        #expect(Refusals.oneCableOnly(bridged.observedPorts)?.code == .twoMacsConnected)
     }
 
     @Test("This Mac reads end to end through one call")

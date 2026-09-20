@@ -101,4 +101,18 @@ extension Array where Element == PortSnapshot {
     var withAMac: [PortSnapshot] {
         filter { $0.port.link == .macLinked || $0.port.link == .macLinkComingUp }
     }
+
+    /// The ports R1 names: those of `withAMac` that share a bridge, so this
+    /// Mac could forward between the two cables. Core's rule decides, so the
+    /// hub's tip, the footer and S3 agree with every refusal an operation
+    /// raises; two cables on two standalone ports — a finished set-up — are
+    /// not a loop and come back empty.
+    var inALoop: [PortSnapshot] {
+        let observed = withAMac.map {
+            ObservedPort(bsdName: $0.port.bsdName, positionName: $0.port.positionName,
+                         hasLinkedMac: true, bridges: $0.port.bridges.map(\.name))
+        }
+        let subjects = Set(Refusals.oneCableOnly(observed)?.subjects ?? [])
+        return withAMac.filter { subjects.contains($0.port.bsdName) }
+    }
 }

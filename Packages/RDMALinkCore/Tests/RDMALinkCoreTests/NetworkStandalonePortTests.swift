@@ -99,12 +99,14 @@ struct StandalonePortPlanTests {
 
     @Test("A second Mac arriving while the review is on screen blocks the apply")
     func refusesTwoMacsAtReview() {
+        // Both ports are still in the bridge, so the second cable is a loop.
         var left = port
         left.hasLinkedMac = true
+        left.bridges = ["bridge0"]
         let right = ObservedPort(bsdName: "en7", positionName: "Back, far right",
-                                 hasLinkedMac: true)
+                                 hasLinkedMac: true, bridges: ["bridge0"])
         let plan = StandalonePortSetup(port: left).preview(
-            snapshot: snapshot(standaloneFixture), services: [],
+            snapshot: snapshot(bridgedFixture), services: [],
             context: context(ports: [left, right]))
         #expect(!plan.canProceed)
         #expect(plan.refusal?.code == .twoMacsConnected)

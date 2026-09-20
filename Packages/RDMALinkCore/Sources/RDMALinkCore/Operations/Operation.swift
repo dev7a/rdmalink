@@ -19,19 +19,24 @@ public struct OperationPort: Sendable, Equatable {
     /// `fe80::` addresses on this interface, without the `%scope` suffix.
     /// R4 matches a mounted volume's source against these.
     public var linkLocalAddresses: [String]
+    /// The BSD names of every bridge this port is in, kernel or saved
+    /// settings, as ``ThunderboltPort/bridges`` had them. R1's other input.
+    public var bridges: [String]
 
     public init(
         bsdName: String,
         receptacle: Int,
         positionName: String,
         link: LinkState = .empty,
-        linkLocalAddresses: [String] = []
+        linkLocalAddresses: [String] = [],
+        bridges: [String] = []
     ) {
         self.bsdName = bsdName
         self.receptacle = receptacle
         self.positionName = positionName
         self.link = link
         self.linkLocalAddresses = linkLocalAddresses
+        self.bridges = bridges
     }
 
     public init(_ port: ThunderboltPort) {
@@ -40,7 +45,8 @@ public struct OperationPort: Sendable, Equatable {
             receptacle: port.receptacle,
             positionName: port.positionName,
             link: port.link,
-            linkLocalAddresses: port.linkLocal)
+            linkLocalAddresses: port.linkLocal,
+            bridges: port.bridges.map(\.name))
     }
 
     /// True when another Mac is on the end of this cable — R1's input.
@@ -48,7 +54,8 @@ public struct OperationPort: Sendable, Equatable {
 
     /// This port as the refusal functions see it.
     public var observed: ObservedPort {
-        ObservedPort(bsdName: bsdName, positionName: positionName, hasLinkedMac: hasLinkedMac)
+        ObservedPort(bsdName: bsdName, positionName: positionName,
+                     hasLinkedMac: hasLinkedMac, bridges: bridges)
     }
 }
 

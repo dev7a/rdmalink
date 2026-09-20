@@ -54,10 +54,29 @@ geometry reference for the real model.
   `State:/Network/Interface/<bsd>/Link` (and `/IPv6`), which fires on
   Thunderbolt-IP link transitions only. Dock plug/unplug may not fire
   anything; a one-second state diff runs underneath.
-- Kernel bridge membership is visible only in `ifconfig -a` output
-  (`member:` lines under `bridgeN`). A port must be out of every bridge, even
-  an inactive one. Two Thunderbolt cables between the same pair of bridged
-  Macs can create an Ethernet forwarding loop.
+- Kernel bridge membership is visible in `ifconfig` output (`member:` lines
+  under `bridgeN`; `ifconfig -a` and `ifconfig bridge0` both print them). A
+  port must be out of every bridge, even an inactive one. The kernel list can
+  change under the app: on 2026-09-20 `bridge0` had no members when the first
+  write failed and listed `en5` again twenty minutes later, with nothing
+  written by RDMALink in between.
+- Two Thunderbolt cables between the same pair of Macs loop only when a
+  bridge forwards between them, so R1 counts a linked Mac only through a
+  bridge: it fires when two ports with a Mac on the end share a bridge. Two
+  cables on two standalone ports are two point-to-point links — the finished
+  state — and pass.
+- **Bridge membership is two facts, not one** (measured 2026-09-20). The
+  network preferences keep their own member list —
+  `VirtualNetworkInterfaces` → `Bridge` → `bridgeN` → `Interfaces`, with
+  `UserDefinedName` beside it — and it can disagree with the kernel:
+  `bridge0` stored with `en5` in it while the kernel `bridge0` had no members
+  at all. While the stored list claims a port, `SCNetworkServiceCreate`
+  refuses on it with `kSCStatusFailed` (1001), whose `SCErrorString` is the
+  single word `Failed!`. So a port is "in a bridge" when **either** read says
+  so, both are read without privilege (`SCPreferencesCreate` plus
+  `SCBridgeInterfaceCopyAll`, falling back to the world-readable
+  `/Library/Preferences/SystemConfiguration/preferences.plist`), and every
+  membership change is verified against both.
 
 ## Layout
 
@@ -102,7 +121,7 @@ public struct ThunderboltPort: Sendable, Identifiable {
     public var positionName: String      // "Back, far left" or "Thunderbolt port 3"
     public var isThunderbolt: Bool       // false for USB-only receptacles
     public var link: LinkState
-    public var bridges: [String]         // kernel bridges this port is a member of
+    public var bridges: [BridgeMembership]  // kernel ∪ stored, each with its source
     public var linkLocal: [String]       // fe80:: addresses without the %scope
 }
 

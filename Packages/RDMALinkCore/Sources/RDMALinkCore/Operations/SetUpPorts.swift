@@ -357,7 +357,11 @@ public struct SetUpPorts: Sendable {
     ) -> [String] {
         var lines = ["Interface \(port.bsdName)", "New service \(serviceName)"]
         for (index, bridge) in bridges.enumerated() {
-            let before = world.snapshot[bridge]?.members ?? []
+            // The member list the removal actually edits: the stored one,
+            // plus anything only the kernel has. `ifconfig` alone would print
+            // "members  → " for a bridge whose members live only in the
+            // preferences.
+            let before = world.membership(ofBridge: bridge).members
             let after = before.filter { $0 != port.bsdName }
             lines.append("\(index == 0 ? "Removing" : "Also removing") from \(bridge): "
                 + "members \(before.joined(separator: ", ")) → \(after.joined(separator: ", "))")
@@ -562,7 +566,7 @@ public struct SetUpPorts: Sendable {
                 // R9's body promises "it stopped and changed nothing at all",
                 // which is only true while nothing has been written yet.
                 if left.isEmpty, let refusal = Refusals.portStillBridged(
-                    port.observed, in: world.snapshot,
+                    port.observed, in: world.snapshot, storedBridges: world.bridges,
                     bridgeNames: world.bridgeDisplayNames) {
                     throw refusal
                 }
@@ -634,10 +638,14 @@ public struct SetUpPorts: Sendable {
                                         pushedConfiguration: false, settledAfterPush: false,
                                         reads: 0)
         if !writer.isDryRun {
+            // Both sources, and both have to agree: a kernel that has let go
+            // while the preferences still list the port is a port
+            // `SCNetworkServiceCreate` would refuse, and the honest answer is
+            // that the removal has not landed.
             agreement = try KernelVerification.wait(
                 writer: writer, policy: environment.policy,
-                budget: environment.remainingBudget) { snapshot in
-                    snapshot.bridges(containing: port.bsdName).isEmpty
+                budget: environment.remainingBudget) { reading in
+                    reading.isOutOfEveryBridge(port.bsdName)
                 }
             guard agreement.agreed else {
                 // Out of credential rather than out of patience: the honest
@@ -720,9 +728,9 @@ public struct SetUpPorts: Sendable {
             } else {
                 let agreement = try KernelVerification.wait(
                     writer: writer, policy: environment.policy,
-                    budget: environment.remainingBudget) { snapshot in
-                        let bridges = Set(snapshot.bridges(containing: port.bsdName))
-                        return left.allSatisfy { bridges.contains($0.membership.bridgeName) }
+                    budget: environment.remainingBudget) { reading in
+                        reading.isMember(port.bsdName,
+                                         ofAll: left.map(\.membership.bridgeName))
                     }
                 succeeded = agreement.agreed
             }
