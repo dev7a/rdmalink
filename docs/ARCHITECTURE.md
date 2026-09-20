@@ -173,6 +173,31 @@ docs/                     spec, this file, prototype
 script/                   test.sh, build and packaging
 ```
 
+## Packaging
+
+`script/package_dmg.sh` builds what a GitHub release ships. Release signs
+with the Developer ID Application identity of team BV5XC39R5P (manual
+signing, hardened runtime, secure timestamp); Debug stays ad-hoc so
+`script/test.sh` and daily builds need no identity. The script requires
+exactly one such identity in the Keychain and passes its SHA-1 to the
+archive, the export and the image's `codesign`, so no same-named identity
+can be picked up. It archives Release for arm64 only (macOS 27 runs on
+Apple silicon only), exports with `method: developer-id`, and verifies the
+exported app before it ships: `codesign --verify --strict --deep`, Developer
+ID authority and team, hardened-runtime flag (`0x10000` in the CodeDirectory
+flags), secure timestamp, empty signed entitlements (the bridge SPI is reached
+with `dlsym` and the Authorization API needs none), and every Mach-O file
+arm64 only. The app goes into a UDZO image (volume `RDMALink`, with an
+Applications link), checked with `hdiutil verify`, signed with the same
+identity, and mounted once to confirm the code hash on the image is the
+exported one. Without `--notarize` the script stops there, writes
+`dist/RDMALink-<version>-unnotarized.dmg` and prints the notarize command;
+with it, the script first checks that the `rotorfs` notarytool Keychain
+profile exists, then submits the app (zipped) through it and staples it
+before it goes into the image, submits and staples the image too, assesses
+both with `spctl` (`source=Notarized Developer ID` required) and writes
+`dist/RDMALink-<version>.dmg`, the file a release ships.
+
 ## Core contracts
 
 These types are the seams between modules. Keep them small and value-typed.

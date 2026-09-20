@@ -255,9 +255,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = App/RDMALink.entitlements;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = BV5XC39R5P;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -265,6 +266,10 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
+				);
+				OTHER_CODE_SIGN_FLAGS = (
+					"$(inherited)",
+					"--timestamp",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.dev7a.RDMALink;
 				PRODUCT_NAME = RDMALink;
