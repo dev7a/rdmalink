@@ -99,7 +99,7 @@ Sheets are used for exactly five things: **Adopt**, **Restore**, **Restore All P
 | **RDMALink** | About RDMALink · Settings… ⌘, · Services · Hide · Quit RDMALink ⌘Q |
 | **Edit** | Undo ⌘Z (text fields only) · Cut/Copy/Paste — Copy works on the address, on every refusal's details, and on the change log |
 | **Port** | Set Up a Port… ⌘N · Identify a Port… ⌘I · Adopt… · Restore… · Restore All Ports… · Return to Bridge… · Stop Managing… |
-| **View** | Back ⌘1 · Front ⌘2 · Left ⌘3 · Right ⌘4 · Fit ⌘0 · Reset View ⇧⌘0 · Show Technical Names ⌘T · Change Log ⌘L |
+| **View** | Back ⌘1 · Front ⌘2 · Left ⌘3 · Right ⌘4 · Fit ⌘0 · Reset View ⇧⌘0 · Show Technical Names ⌘T · Hide Legend / Show Legend ⌘K · Change Log ⌘L |
 | **Window** | standard |
 | **Help** | RDMALink Help · What RDMA over Thunderbolt Is · What to Do on the Other Mac · Save a Diagnostics File… |
 
@@ -176,10 +176,10 @@ No custom glyphs. **No Thunderbolt trade-dress mark anywhere**, in the UI or on 
 ### 3.4 3D materials and lighting
 
 - **One generic rounded-box chassis per archetype.** Correct proportions and correct receptacle placement. No logo, no engraved text, no trade dress of any kind, and no vent pattern beyond a soft inset — except the Mac Studio's perforated back grille, drawn as a hole field in the recess tone above the port row, which carries no logo and no trade dress.
-- `PhysicallyBasedMaterial`, roughness 0.38, metallic 0.85, base color a neutral aluminium that shifts with appearance (light: 0.78 luminance; dark: 0.22). Two finishes selectable from the detected model: neutral aluminium and a graphite variant.
+- `PhysicallyBasedMaterial`, roughness 0.38, metallic 0.85, base color the aluminium's own silver (0.78 luminance) in **both** appearances. There is no dark Mac Studio or Mac mini, and macOS does not report a MacBook Pro's finish, so silver is the honest default everywhere: **dark mode changes the light, never the metal.**
 - **Receptacles are true geometry** — a 3 mm-scale inset slot with a darker interior — so an unlit port reads as a hole and not a sticker. USB-only receptacles use their correct, slightly different geometry with a matte, non-reflective interior, so they look different before anyone explains why.
 - **Lighting:** one neutral studio IBL (≈900 lux equivalent) plus a single key `DirectionalLight` from upper-left for a defined top edge; a soft contact shadow on an invisible ground plane. No mirror reflection, no floor grid, no diorama.
-- **In dark mode** the IBL swaps to a dimmer neutral, the chassis darkens, a cool rim light carries the silhouette, and the accent ring brightens one step to hold contrast.
+- **In dark mode** the IBL swaps to a dimmer neutral, the chassis keeps its silver, a cool rim light carries the silhouette, the ink tone of the rings adapts so they still read against the metal, and the accent ring brightens one step to hold contrast.
 - **The stage background is `.windowBackground`** with a very shallow radial lift behind the chassis, in **both** appearances. The stage follows the system theme like every other surface; it is never a permanently dark slab inside a light window.
 - **Camera:** `PerspectiveCamera`, 35 mm-equivalent. Orbit constrained to ±35° elevation so the user can never end up under the machine; roll locked; dolly limited to a 1.4× range **and floored** so a receptacle's on-screen hit target never falls below 24 × 24 pt (see §8).
 
@@ -282,6 +282,14 @@ Modeled with the correct, slightly different geometry and a matte, non-reflectiv
 - Interaction **sits on top of state and never replaces it.** A selected bridged port shows all three: accent selection outermost, segmented `.secondary` outer track, breathing or steady inner track — which is precisely the situation the review screen is about to resolve.
 
 **Differentiate Without Color is the default behavior.** Every state on the model is a distinct ring **geometry** (none / breathing / steady / segmented / solid / double hairline / dashed) and every state in the panel is a distinct SF Symbol **plus words**. Nothing anywhere in the app depends on hue, so nothing is lost in greyscale.
+
+### 4.7 The legend and the receptacle callout
+
+The rings say what the words say; two small aids make sure nobody has to guess which is which.
+
+**Legend.** A `.caption` `.secondary` list in the stage's top-leading corner, one line per outer-ring shape **present on this Mac right now**, glyph first: the ring geometries themselves at small scale. Labels are the panel's own words — **In a bridge** · **Standalone** · **Set up outside RDMALink** · **Ready for RDMA** · **Needs a look**. Nothing about the inner track, nothing about selection, no title. It is shown whenever the rings are live, hidden with View › **Hide Legend** ⌘K (which then reads **Show Legend**), and the choice is remembered. It never overlaps a receptacle: it yields to the model by moving to the top-trailing corner when the chassis reaches under it.
+
+**Callout.** Resting on a receptacle (300 ms, as a tooltip) or moving keyboard focus to it shows a small callout beside it with **the row's title and detail line, verbatim** — "Back, far left" over "Nothing plugged in · In the Thunderbolt Bridge" — and, when technical names are on, the row's technical line too. A USB-only receptacle's callout is its own subtitle, **USB only — this one isn't Thunderbolt**. The callout fades with the hover, says nothing the list does not say, and is never the only place a fact lives.
 
 ### 4.7 Position names
 
@@ -1046,7 +1054,7 @@ It records, per port:
 - Whether any network service already existed on that interface, its identifier and its position in the service order.
 - The port's IPv4 and IPv6 configuration.
 - **The identifier of the service RDMALink creates, captured at creation time.**
-- A timestamp, which appears verbatim in the Restore copy: **"exactly as it was on 3 September at 14:21"**.
+- A timestamp, which appears verbatim in the Restore copy: **"exactly as it was on 3 September at 14:21"**. Times are the user's locale's short time — **14:21**, or **2:21 PM** where the locale keeps a 12-hour clock — never a 12-hour hour without its AM/PM.
 
 **Matching is by identifier, never by name.** A service the user renames afterwards is still recognized as RDMALink's; a service the user creates that happens to share RDMALink's name is never mistaken for it. This is stated in the review screen's technical disclosure and in the Restore sheet.
 
