@@ -1030,6 +1030,7 @@ Documented once so they all read the same.
 - Headline: **Nothing to put back**
 - Body: **RDMALink's note for Back, far left only records that it put the port back in Thunderbolt Bridge. There's nothing to undo — Set It Up Again takes the port out of the bridge, and Stop Managing forgets the note.**
 - Buttons: **Set It Up Again** (default) · **Stop Managing…** · **Cancel**
+- Adopted note (§7.3: an adopted port has no bridge history and nothing to put back): body **RDMALink's note for Back, far left only records that it adopted the port as it found it. There's nothing to undo — Stop Managing forgets the note, and the port keeps its setup.** · buttons **Stop Managing…** (default) · **Cancel**
 - **Recovery:** the note is kept; nothing is written.
 
 ---
