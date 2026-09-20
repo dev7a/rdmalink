@@ -253,7 +253,9 @@ This segmented ring is the same geometry that **closes during apply** and **re-o
 
 **Set up outside RDMALink (adopt candidate) — a solid double-hairline ring** in `.secondary`: complete, like the ready state, but drawn as two thin concentric hairlines rather than one solid ring, and not in accent, because it is not RDMALink's. Panel: `checkmark.circle` `.secondary` · **"Set up outside RDMALink"** · trailing button `Adopt…`
 
-**Needs a look (drift) — a dashed ring** in `.secondary`. The service RDMALink created has gone, or the port is back in a bridge. Panel: `exclamationmark.circle` `.orange` · **"Not set up any more"**.
+**Needs a look (drift) — a dashed ring** in `.secondary`. The service RDMALink created has gone, or the port is back in a bridge. Panel: `exclamationmark.circle` `.orange` · **"Not set up any more"**. Drift is only ever about a setup RDMALink made or adopted.
+
+**Returned to the bridge — the plain bridged ring.** A port RDMALink itself put back into Thunderbolt Bridge (§7.5) while its note is still there. Provenance is a panel matter: the ring says only that the port is in the bridge. Panel: `arrow.uturn.backward.circle` `.secondary` · **"Back in the bridge"** · trailing button `Set It Up Again`. It is not drift and raises no situation row.
 
 ### 4.4 The bridge ribbon
 
@@ -349,6 +351,8 @@ With **Show technical names** on, a `.caption` tertiary suffix is appended to th
 - **Ports ready for RDMA — None yet**
 - **Ports ready for RDMA — Back, far left**
 - **Ports ready for RDMA — Back, far left and Back, far right**
+- **Ports ready for RDMA — None by RDMALink · five set up outside it** (only ports set up outside RDMALink are ready; counts are spelled out, and "one set up outside it" in the singular)
+- **Ports ready for RDMA — Back, far left · two more set up outside RDMALink** (both kinds; "one more" in the singular)
 
 **Copy — situation rows** (appear above the port list, at most one of each, in this order)
 - Needs a hand: **Back, far left needs putting back by hand.** *[Show Me]*
@@ -367,6 +371,7 @@ With **Show technical names** on, a `.caption` tertiary suffix is appended to th
 - Ready, nothing attached: **Ready for RDMA · the address appears when a Mac arrives**
 - Set up elsewhere: **Set up outside RDMALink** *[Adopt…]*
 - Drifted: **Not set up any more** *[Set It Up Again]*
+- Returned to the bridge by RDMALink (§7.5), note still there: **Back in the bridge** *[Set It Up Again]* — the link-state subtitle and the membership phrase stay; this is not drift and adds no situation row.
 - Trailing buttons, by state: *[Adopt…]* · *[Restore…]* · *[Return to Bridge…]* · *[Stop Managing…]* · *[Set It Up Again]*
 - Adopted or set up elsewhere (any port that is out of the bridge and that RDMALink did not set up): the row carries **Return to Bridge…**, so putting a port back never depends on how it was removed. A port RDMALink set up carries **Restore…** instead, which returns it exactly.
 
@@ -691,6 +696,7 @@ You can watch each sentence mean something before you agree to it.
 - Foreign-port rows: **Add the port to Thunderbolt Bridge** · **Delete the service Thunderbolt 6 — RDMALink didn't make this one, and a bridge member can't keep its own service** · **Check that it really is in the bridge** · **Leave every other setting alone**
 - Foreign-port button: **Return to Bridge**
 - Foreign-port success: **Back, far right is in Thunderbolt Bridge** · **The port is a member of Thunderbolt Bridge again and its standalone service is gone. Set It Up Again is one click away if you change your mind.**
+- Foreign port with **no** standalone service (a port taken out of the bridge by hand and left bare): body **RDMALink didn't set this port up, so it can't put things back exactly as they were — but it can do the ordinary thing: add the port to Thunderbolt Bridge. It writes down what it found first, so you can set the port up again afterwards.** · rows **Add the port to Thunderbolt Bridge** · **Check that it really is in the bridge** · **Leave every other setting alone** (no delete row, no delete step) · success **Back, far right is in Thunderbolt Bridge** · **The port is a member of Thunderbolt Bridge again. Set It Up Again is one click away if you change your mind.**
 - No bridge exists: headline **There's no Thunderbolt Bridge to return it to** · body **This Mac has no Thunderbolt Bridge at the moment. RDMALink never creates one — recreate it in System Settings, under Network › Manage Virtual Interfaces, and I'll offer the return the moment it exists.** · buttons **Open Network Settings** · **Cancel**
 - Stop-managing headline (adopted port, keep the setup, forget the note): **Stop looking after Back, far right?**
 - Stop-managing body: **Stopping just means RDMALink forgets its note. The port and its settings stay exactly as they are.**
@@ -717,7 +723,9 @@ You can watch each sentence mean something before you agree to it.
 - Empty: **Nothing yet. When RDMALink changes something, it'll be listed here with a way back.**
 - Entry: **3 September, 14:21 — Back, far left** · **Took it out of Thunderbolt Bridge and gave it its own service, with IPv4 off and IPv6 link-local only.** *[Restore…]*
 - Entry: **3 September, 14:40 — Back, far right** · **Adopted. RDMALink noted how it was already set up and changed nothing.** *[Stop Managing…]*
+- Entry (returned to the bridge, §7.5): **20 September, 11:40 — Back, far left** · **Put it back in Thunderbolt Bridge and removed its standalone service.** *[Set It Up Again]* — with no standalone service: **Put it back in Thunderbolt Bridge.**
 - Undone entry: **Already put back on 3 September at 15:10.**
+- Returned entry after the port is set up again: **Set up again on 20 September at 11:52.**
 - Stopped entry: **RDMALink stopped looking after this port on 3 September at 15:12.**
 - Vanished port: **This port isn't on this Mac any more, so there's nothing left to put back. The note stays until you clear it.** *[Forget This Note]*
 - Footnote: **RDMALink keeps one small note per port, in your Library folder. They're only notes — they don't change anything on their own.**
@@ -944,7 +952,7 @@ Documented once so they all read the same.
 **R20 — The bridge doesn't have it back yet.** *At Restore.*
 - Headline: **Not quite back yet**
 - Body: **The service is gone, but Thunderbolt Bridge isn't listing Back, far left yet. RDMALink has kept your undo note, so nothing is lost and it can try again whenever you like.**
-- Steps: **In System Settings, open Network, choose Manage Virtual Interfaces, open Thunderbolt Bridge and add Back, far left back.**
+- Steps: **Try Again usually does it: RDMALink waits for the port to settle and writes the membership afresh. If it still isn't back, open System Settings › Network, choose Manage Virtual Interfaces, open Thunderbolt Bridge and add Back, far left yourself.**
 - Buttons: **Try Again** (default) · **Open Network Settings** · **Copy These Steps**
 - **Recovery:** the baseline is **never** deleted until verification passes. The change log entry keeps its `Restore…` action. The ring on the model stops half-open and stays that way, matching the copy.
 
@@ -1051,13 +1059,20 @@ opens the S10 sheet in its foreign-port form.
    it will join. Without the note, nothing is changed (R14).
 2. The standalone service is deleted. When RDMALink did not create it, the
    sheet names it and says so in its own row; a bridge member cannot keep its
-   own service, so there is no half-way option.
+   own service, so there is no half-way option. When there is no service at
+   all, the row, the step and every sentence about it are omitted (S10's
+   no-service form).
 3. The port is added as a member of the existing Thunderbolt Bridge. With more
    than one bridge, the one named Thunderbolt Bridge wins; with none, the sheet
    stops and hands off to System Settings (RDMALink never creates a bridge).
 4. Membership is read back from the kernel and verified before the sheet says
    the port is in the bridge; on a miss the note is kept and R20 applies.
-5. The change log records the return, and the row offers **Set It Up Again**.
+5. The change log records the return (**Put it back in Thunderbolt Bridge…**,
+   S11), the note stays so the row can offer **Set It Up Again**, and the row
+   reads **Back in the bridge** (§4.3). A returned note is not one `Restore…`
+   lists — the port already has everything the note describes — and it is not
+   drift; **Forget This Port** clears it, and setting the port up again
+   replaces it.
 
 ### 7.4 Steady state
 
@@ -1066,7 +1081,7 @@ The hub is the steady state and needs no explaining on the fifth launch: three r
 - **Status is live.** Link state, bridge membership, service and address changes — including changes made in System Settings while RDMALink is open — land in the row and on the receptacle in place within a second, with a 180 ms badge cross-fade that never reorders or resizes a row, and nothing else moves.
 - Because docks and displays may not raise events, `Check Again` sits permanently in the toolbar **and** a quiet one-second state diff runs underneath anyway, so the toolbar button is a reassurance rather than a requirement.
 - If something changes on a face you are not looking at, the other face-selector segment takes a small accent dot and the panel offers a single inline `Show Me`. The app narrates rather than grabs.
-- **Drift is news, not failure.** If a service RDMALink created has disappeared, or the port is back in a bridge, the row reads **"Not set up any more"**, the hub carries **"Back, far left isn't set up any more"** with `Set It Up Again` and `Forget This Port`, and **a stale baseline is never silently reapplied to a world that moved.**
+- **Drift is news, not failure.** If a service RDMALink created has disappeared, or the port is back in a bridge, the row reads **"Not set up any more"**, the hub carries **"Back, far left isn't set up any more"** with `Set It Up Again` and `Forget This Port`, and **a stale baseline is never silently reapplied to a world that moved.** A port RDMALink returned to the bridge (§7.5) is not drift: its row reads **Back in the bridge** and nothing is raised.
 - **Unfinished business survives quitting** and is shown as a hub row the next launch, phrased as a situation rather than an alarm: a port needing a hand, a restart still owed, a drifted port, an adoptable port.
 - The **change log is append-only.** Undone entries stay, greyed, marked **"Already put back on 3 September at 15:10."** The record of what this app did to this Mac is never quietly rewritten.
 - There is no menu bar extra, no notification, no dock badge and no background agent.
