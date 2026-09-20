@@ -60,6 +60,47 @@ public enum Refusals {
         )
     }
 
+    // MARK: - R2
+
+    /// **R2 — Both ends of one cable are in this Mac.** Blocks preflight.
+    ///
+    /// Fires when a receptacle's cable comes back into another receptacle of
+    /// this Mac: ``ObservedPort/loopedBackTo`` names the partner and the
+    /// partner names it back. The pairing is made in the inventory from the
+    /// Thunderbolt domain identities, so this only has to find a mutual pair;
+    /// a one-sided claim is not one. Self-clearing: it has no button.
+    ///
+    /// Evaluated **before** R1 everywhere both are: a looped cable on two
+    /// bridged ports would otherwise be reported as two Macs.
+    ///
+    /// The spec writes one sentence for one cable, so when more than one pair
+    /// is looped the first pair in the order given — physical order — is the
+    /// one named; the rest clear the same way, one unplugged end at a time.
+    /// The detail is §S3's own finding for the row, which is the only other
+    /// sentence the spec writes for this state.
+    public static func loopedBackIntoThisMac(_ ports: [ObservedPort]) -> Refusal? {
+        let byName = Dictionary(ports.map { ($0.bsdName, $0) }, uniquingKeysWith: { first, _ in first })
+        for port in ports {
+            guard let partner = port.loopedBackTo.flatMap({ byName[$0] }),
+                  partner.bsdName != port.bsdName,
+                  partner.loopedBackTo == port.bsdName else { continue }
+            let named = englishList([port.positionName, partner.positionName])
+            return Refusal(
+                code: .loopedBackIntoThisMac,
+                headline: "Both ends of that cable are in this Mac",
+                body: """
+                \(named) are talking to each other — the cable goes out of this \
+                Mac and straight back in. It's harmless, but it isn't a link to \
+                anywhere. Unplug one end and put it in the other Mac.
+                """,
+                detail: "Both ends of one cable are in this Mac, on \(named). "
+                    + "Unplug one end and put it in the other Mac.",
+                subjects: [port.bsdName, partner.bsdName]
+            )
+        }
+        return nil
+    }
+
     // MARK: - R9
 
     /// **R9 — macOS wouldn't release the port from the bridge.**
@@ -534,8 +575,8 @@ public enum Refusals {
     /// **There's no Thunderbolt Bridge to return it to.** At Return to Bridge
     /// (UX_SPEC §S10, §7.5 step 3). Nothing is written.
     ///
-    /// **Proposed numbering** — see ``RefusalCode/noBridgeToReturnTo``. The
-    /// strings are the spec's own; only the R number is this module's.
+    /// §6.2 numbers it R29 and points at §S10 for the copy, which is what
+    /// the strings below are, verbatim.
     public static func noBridgeToReturnTo(port: ObservedPort) -> Refusal {
         Refusal(
             code: .noBridgeToReturnTo,
@@ -545,6 +586,31 @@ public enum Refusals {
             creates one — recreate it in System Settings, under Network › \
             Manage Virtual Interfaces, and I'll offer the return the moment it \
             exists.
+            """,
+            subjects: [port.bsdName]
+        )
+    }
+
+    // MARK: - R30
+
+    /// **R30 — That note only records a return.** At Restore, reached only
+    /// from the command line or a stale sheet: the hub never offers `Restore…`
+    /// for a return record (§7.5).
+    ///
+    /// The note is kept and nothing is written. R19 is not this — its body
+    /// says the note is missing, and here it is sitting there intact.
+    ///
+    /// - Parameter bridgeName: the bridge as it is shown to a person —
+    ///   ``BridgeReturn/name``.
+    public static func noteIsAReturnRecord(port: ObservedPort, bridgeName: String) -> Refusal {
+        Refusal(
+            code: .noteIsAReturnRecord,
+            headline: "Nothing to put back",
+            body: """
+            RDMALink's note for \(port.positionName) only records that it put \
+            the port back in \(bridgeName). There's nothing to undo — Set It Up \
+            Again takes the port out of the bridge, and Stop Managing forgets \
+            the note.
             """,
             subjects: [port.bsdName]
         )
@@ -560,8 +626,6 @@ public enum Refusals {
     /// has taken over, given a fixed address and routed real traffic through
     /// is not RDMALink's work any more, whatever its identifier says. Deleting
     /// it would take the addresses with it.
-    ///
-    /// **Proposed copy, not yet in UX_SPEC §6.2** — see ``RefusalCode/createdServiceEdited``.
     public static func createdServiceEdited(
         port: ObservedPort,
         differences: [String]

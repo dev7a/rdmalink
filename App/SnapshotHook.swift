@@ -11,20 +11,23 @@
 //      RDMALINK_SNAPSHOT=/tmp/front.png RDMALINK_SNAPSHOT_FACE=front ./…/RDMALink
 //      RDMALINK_SNAPSHOT=/tmp/s13.png RDMALINK_SNAPSHOT_SHEET=whatThisAllMeans ./…
 //      RDMALINK_SNAPSHOT=/tmp/s5.png RDMALINK_SNAPSHOT_ROUTE=review ./…/RDMALink
+//      RDMALINK_SNAPSHOT=/tmp/s8.png RDMALINK_SNAPSHOT_ROUTE=other-mac ./…/RDMALink
 //      RDMALINK_SNAPSHOT=/tmp/light.png RDMALINK_SNAPSHOT_APPEARANCE=light ./…
 //
 //  With `RDMALINK_SNAPSHOT` set, the app waits for the first inventory to land,
 //  draws the key window into a bitmap with `cacheDisplay(in:to:)`, writes it as
 //  a PNG and terminates. `RDMALINK_SNAPSHOT_FACE` is `back`, `front`, `left` or
 //  `right` and turns the stage to that face before the capture.
-//  `RDMALINK_SNAPSHOT_SHEET` is `whatThisAllMeans`, `otherMac` or `settings`
-//  and puts that surface in front first. `RDMALINK_SNAPSHOT_APPEARANCE` is
-//  `light` or `dark` and forces this process's appearance.
+//  `RDMALINK_SNAPSHOT_SHEET` is `whatThisAllMeans` or `settings` and puts
+//  that surface in front first. `RDMALINK_SNAPSHOT_APPEARANCE` is `light` or
+//  `dark` and forces this process's appearance.
 //
 //  `RDMALINK_SNAPSHOT_ROUTE` opens one of the app's own routes on the live
 //  inventory first: `hub`, `preflight`, `choose`, `review`, `restore-sheet`,
-//  `adopt-sheet` or `changelog`. The three assistant routes arrive with the
-//  first Thunderbolt port already chosen. **Every one of them is a read.**
+//  `adopt-sheet`, `changelog` or `other-mac` (§S8, a screen in the working
+//  area, with the ghost second Mac on the stage). The three assistant routes
+//  arrive with the first Thunderbolt port already chosen. **Every one of
+//  them is a read.**
 //  `review` runs `SetUpPorts.preview` and stops; no route reaches
 //  `perform`, opens an `AuthorizedSession` or raises the administrator
 //  prompt — S6's burst is behind its own button, which nothing here presses.
@@ -51,11 +54,10 @@ enum SnapshotHook {
             .flatMap(PortFace.init(rawValue:))
     }
 
-    /// A surface to put in front of the window before capturing, so the sheets
+    /// A surface to put in front of the window before capturing, so the sheet
     /// and the settings pane are reviewable too. `RDMALINK_SNAPSHOT_SHEET`.
     enum Surface: String, Sendable {
         case whatThisAllMeans
-        case otherMac
         case settings
     }
 
@@ -74,6 +76,7 @@ enum SnapshotHook {
         case restoreSheet = "restore-sheet"
         case adoptSheet = "adopt-sheet"
         case changelog
+        case otherMac = "other-mac"
     }
 
     static var route: Route? {
@@ -82,7 +85,8 @@ enum SnapshotHook {
     }
 
     /// How long a route is given to land: a sheet reads this Mac when it
-    /// opens, and the review screen runs its plan off the main actor.
+    /// opens, the review screen runs its plan off the main actor, and §S8's
+    /// ghost takes a 0.7 s camera arc to slide in beside the machine.
     private static let routeDelay = Duration.milliseconds(1400)
 
     /// `light` or `dark`, so both appearances are reviewable from one machine

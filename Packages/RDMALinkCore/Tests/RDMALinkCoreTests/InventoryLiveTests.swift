@@ -54,6 +54,26 @@ struct InventoryLiveTests {
         #expect(rows.allSatisfy { $0.receptacle > 0 })
     }
 
+    @Test("The Thunderbolt domain identities this Mac reports")
+    func readsDomainIdentities() throws {
+        let rows = try PortInventory.readRows()
+        let partners = PortInventory.loopedBackPartners(rows)
+        for row in rows.sorted(by: { $0.receptacle < $1.receptacle }) {
+            print("  \(row.bsdName) · own \(row.domainUUID ?? "not published") · "
+                + "peers \(row.peerDomainUUIDs) · looped back to \(partners[row.bsdName] ?? "none")")
+        }
+        // Private keys: a Mac may publish none of them. When it does, each is
+        // a UUID in its canonical spelling, and a loop is only ever mutual.
+        for row in rows {
+            #expect(row.domainUUID.map { PortInventory.domainUUID($0) == $0 } ?? true)
+            #expect(row.peerDomainUUIDs.allSatisfy { PortInventory.domainUUID($0) == $0 })
+        }
+        for (name, partner) in partners {
+            #expect(partners[partner] == name)
+            #expect(name != partner)
+        }
+    }
+
     @Test("The watcher ticks and tears itself down", .timeLimit(.minutes(1)))
     func watcherTicksAndStops() async {
         let watcher = LinkWatcher(bsdNames: ["en0"], pollInterval: .milliseconds(20))

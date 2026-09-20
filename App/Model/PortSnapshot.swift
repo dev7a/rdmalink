@@ -140,7 +140,8 @@ extension Array where Element == PortSnapshot {
     var inALoop: [PortSnapshot] {
         let observed = withAMac.map {
             ObservedPort(bsdName: $0.port.bsdName, positionName: $0.port.positionName,
-                         hasLinkedMac: true, bridges: $0.port.bridges.map(\.name))
+                         hasLinkedMac: true, bridges: $0.port.bridges.map(\.name),
+                         loopedBackTo: $0.port.loopedBackTo)
         }
         let subjects = Set(Refusals.oneCableOnly(observed)?.subjects ?? [])
         return withAMac.filter { subjects.contains($0.port.bsdName) }
@@ -175,7 +176,8 @@ extension PortSnapshot {
             bsdName: port.bsdName,
             positionName: port.positionName,
             hasLinkedMac: port.link == .macLinked,
-            bridges: port.bridges.map(\.name)
+            bridges: port.bridges.map(\.name),
+            loopedBackTo: port.loopedBackTo
         )
     }
 }

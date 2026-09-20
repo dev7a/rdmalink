@@ -54,7 +54,9 @@ struct RDMALinkApp: App {
                 // open the first item, which is therefore the explainer too.
                 // **Owed:** a real help destination, and the second item back.
                 Button("RDMALink Help") { show(.whatThisAllMeans) }
-                Button("What to Do on the Other Mac") { show(.otherMac) }
+                // §S8: a screen in the working area, not a sheet, so it is
+                // routed like the change log and not like the item above it.
+                Button("What to Do on the Other Mac") { showOtherMac() }
                 Button("Save a Diagnostics File…") { saveDiagnostics() }
             }
         }
@@ -71,6 +73,13 @@ struct RDMALinkApp: App {
     private func show(_ sheet: HubRouter.Sheet) {
         openWindow(id: Self.mainWindowID)
         router.sheet = sheet
+    }
+
+    /// §S8 from the Help menu. The window is brought back first for the same
+    /// reason a sheet's is: the screen is drawn in it.
+    private func showOtherMac() {
+        openWindow(id: Self.mainWindowID)
+        router.showsOtherMac = true
     }
 
     /// §2.7's fourth Help item, on the same payload Settings saves (§6.1

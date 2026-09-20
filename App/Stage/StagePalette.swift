@@ -135,6 +135,21 @@ struct StagePalette {
         surface(screen, roughness: 0.25, metallic: 0.1)
     }
 
+    /// The Mac Studio's back grille: `StageMesh.grille()`'s tile read as an
+    /// opacity mask over the recess tone, so each hole is the same darkness
+    /// as the inside of a receptacle — a hole is a recess. The threshold is
+    /// the prototype's `alphaTest: 0.2`; it makes the material a cut-out that
+    /// writes depth like an opaque surface, so the aluminium and its sheen
+    /// show between the holes and every ring above it wins the depth test.
+    func grilleMaterial(texture: TextureResource) -> PhysicallyBasedMaterial {
+        var material = surface(recess, roughness: 0.9, metallic: 0.0)
+        material.blending = .transparent(
+            opacity: .init(texture: .init(texture, sampler: StageMesh.grilleSampler()))
+        )
+        material.opacityThreshold = 0.2
+        return material
+    }
+
     var indicatorMaterial: UnlitMaterial { flat(indicator) }
 
     var inkMaterial: UnlitMaterial { flat(ink) }

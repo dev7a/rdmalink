@@ -9,7 +9,11 @@ It changes only the Mac it runs on. There is no peer channel.
 The user experience is specified in [UX_SPEC.md](UX_SPEC.md). Every string in
 the app comes from there. The 3D stage is prototyped in
 [prototype/stage.html](prototype/stage.html); its port catalogue is the
-geometry reference for the real model.
+geometry reference for the real model, down to the Mac Studio's back grille,
+which `Chassis.grille` carries as a rectangle in face fractions and the stage
+draws as one strip on the shell's own outline wearing one alpha-masked tile.
+That tile is the only texture in the app, and it is generated at run time,
+never loaded: nothing the stage shows comes from an asset.
 
 ## Decisions (2026-09-19)
 
@@ -54,6 +58,25 @@ geometry reference for the real model.
   `State:/Network/Interface/<bsd>/Link` (and `/IPv6`), which fires on
   Thunderbolt-IP link transitions only. Dock plug/unplug may not fire
   anything; a one-second state diff runs underneath.
+- **Thunderbolt domain identity** (measured 2026-09-20, `IOThunderboltFamily`
+  9.3.3, unprivileged `ioreg`): the private key `Domain UUID` is published in
+  two places. `IOThunderboltLocalNode`, the parent of the
+  `AppleThunderboltIPService` above each `AppleThunderboltIPPort`, carries the
+  receptacle's own domain — one per controller, and on Apple Silicon one
+  controller per receptacle (six local nodes on Mac15,14, one under each
+  `acioN`), so it is per port, not per Mac. `IOThunderboltXDomainLink`, under
+  the local switch on the same controller, carries the far end's domain plus
+  `Device Name` (`Mac17,7`). The values are symmetric across two Macs: the
+  MacBook's local nodes report exactly what this Mac's XDomain links say, and
+  vice versa. Docks put an `IOThunderboltSwitch*` under the local switch and
+  no XDomain link; empty receptacles have neither. So R2 is "the peer domain
+  on port P is the own domain of another port Q of this Mac", mutual and
+  unique, and it never fires on anything but that equality. Private keys, so
+  enrichment under rule 5: absent → `domainUUID` nil, `peerDomainUUIDs`
+  empty, `loopedBackTo` nil, R2 silent. Not in any SDK header. Compared at
+  one instant only, never persisted. A real self-link was **not** observed:
+  no loopback cable on the rig, so whether macOS brings up an XDomain link
+  between two of its own controllers is untested.
 - Kernel bridge membership is visible in `ifconfig` output (`member:` lines
   under `bridgeN`; `ifconfig -a` and `ifconfig bridge0` both print them). A
   port must be out of every bridge, even an inactive one. The kernel list can
@@ -153,6 +176,9 @@ public struct ThunderboltPort: Sendable, Identifiable {
     public var link: LinkState
     public var bridges: [BridgeMembership]  // kernel ∪ stored, each with its source
     public var linkLocal: [String]       // fe80:: addresses without the %scope
+    public var domainUUID: String?       // own Thunderbolt domain, nil when not published
+    public var peerDomainUUIDs: [String] // far-end domains on this controller
+    public var loopedBackTo: String?     // the other receptacle on the same cable (R2)
 }
 
 public struct Inventory: Sendable {

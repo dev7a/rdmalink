@@ -80,7 +80,7 @@ enum StageSnapshot {
         // disabled at opacity 0; only `StageScene.apply` ever raises them, and
         // it runs against the live graph. Without this the review render is
         // bare aluminium with the whole of §4.2, §4.3 and §4.4 missing from it.
-        StageScene.settle(graph, moment: moment)
+        StageScene.settle(graph, moment: moment, palette: palette)
         renderer.entities.append(graph.root)
 
         if let environment = try? StageMesh.environment(
@@ -163,6 +163,9 @@ enum StageSnapshotState: String, Sendable, CaseIterable {
     case ribbons
     /// §S3: two receptacles named by a check, ringed together.
     case attention
+    /// §6.2 R2: the first two receptacles ringed, with the one thread between
+    /// them and neither sending its own out.
+    case loopedBack
     /// §S6: two of the four gaps closed, the ribbon half retracted.
     case applyHalf
     /// §S6: every gap closed — the solid accent ring.
@@ -184,6 +187,11 @@ enum StageSnapshotState: String, Sendable, CaseIterable {
     case previewAddresses
     /// §S5: hovering **Save how to undo this**.
     case previewNote
+    /// §S8: the ghost second Mac beside this one, the cable between them run
+    /// from the first ready receptacle — or the first Thunderbolt receptacle
+    /// on a Mac with none. Posed on the hub; `RDMALINK_SNAPSHOT_ROUTE=other-mac`
+    /// stages the same handoff from the screen's own subject instead.
+    case handoff
 
     /// `RDMALINK_SNAPSHOT_STAGE`, when it names one of these.
     static var requested: StageSnapshotState? {
@@ -203,6 +211,10 @@ enum StageSnapshotState: String, Sendable, CaseIterable {
             model.ribbons = .all
         case .attention:
             model.attention(ids: Set(ports.prefix(2).map(\.id)))
+        case .loopedBack:
+            let pair = Array(ports.prefix(2).map(\.id))
+            model.attention(ids: Set(pair))
+            model.loopedBack(pair)
         case .applyHalf:
             model.ribbons = .all
             model.select(first.id)
@@ -228,6 +240,9 @@ enum StageSnapshotState: String, Sendable, CaseIterable {
             model.ribbons = .all
             model.select(first.id)
             model.preview(previewKind, for: first.id)
+        case .handoff:
+            let near = ports.first { $0.cfg == .ready } ?? first
+            model.beginHandoff(for: near.id)
         }
     }
 

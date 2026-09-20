@@ -400,3 +400,101 @@ struct R20Tests {
             bridgeName: "Thunderbolt Bridge", removedService: true).detail)
     }
 }
+
+@Suite("R30 — that note only records a return")
+struct NoteIsAReturnRecordTests {
+    @Test("It is §6.2 R30's copy, with the bridge named as a person sees it")
+    func writesTheSpecCopy() {
+        let refusal = Refusals.noteIsAReturnRecord(
+            port: ObservedPort(bsdName: "en6", positionName: "Back, far left"),
+            bridgeName: "Thunderbolt Bridge")
+        #expect(refusal.code == .noteIsAReturnRecord)
+        #expect(refusal.code.rawValue == "R30")
+        #expect(refusal.headline == "Nothing to put back")
+        #expect(refusal.body == """
+            RDMALink's note for Back, far left only records that it put the port back \
+            in Thunderbolt Bridge. There's nothing to undo — Set It Up Again takes the \
+            port out of the bridge, and Stop Managing forgets the note.
+            """)
+        #expect(refusal.detail == nil)
+        #expect(refusal.subjects == ["en6"])
+    }
+
+    @Test("It never claims the note is missing — that is R19, and this note is there")
+    func isNotR19() {
+        let returned = Refusals.noteIsAReturnRecord(port: farLeft, bridgeName: "Thunderbolt Bridge")
+        #expect(!returned.body.contains("missing"))
+        #expect(returned.headline != Refusals.undoNoteMissing(port: farLeft).headline)
+    }
+
+    @Test("A bridge macOS gave no display name is named by its kernel name")
+    func fallsBackToTheKernelName() {
+        let refusal = Refusals.noteIsAReturnRecord(port: farLeft, bridgeName: "bridge0")
+        #expect(refusal.body.contains("put the port back in bridge0."))
+    }
+}
+
+@Suite("R2 — both ends of one cable are in this Mac")
+struct LoopedBackIntoThisMacTests {
+    @Test("A cable back into this Mac is refused with the spec's words, naming both receptacles")
+    func refusesALoopedCable() throws {
+        var left = farLeft, right = farRight
+        left.loopedBackTo = "en6"
+        right.loopedBackTo = "en5"
+        let refusal = try #require(Refusals.loopedBackIntoThisMac([left, right]))
+        #expect(refusal.code == .loopedBackIntoThisMac)
+        #expect(refusal.headline == "Both ends of that cable are in this Mac")
+        #expect(refusal.body == "Back, far left and Back, far right are talking to each other — "
+            + "the cable goes out of this Mac and straight back in. It's harmless, but it isn't "
+            + "a link to anywhere. Unplug one end and put it in the other Mac.")
+        #expect(refusal.detail == "Both ends of one cable are in this Mac, on Back, far left "
+            + "and Back, far right. Unplug one end and put it in the other Mac.")
+        #expect(refusal.subjects == ["en5", "en6"])
+    }
+
+    @Test("It does not depend on either end reading as a linked Mac, or on a bridge")
+    func ignoresLinkAndBridges() {
+        var left = farLeft, right = farRight
+        left.loopedBackTo = "en6"
+        right.loopedBackTo = "en5"
+        left.hasLinkedMac = false
+        right.hasLinkedMac = true
+        #expect(Refusals.loopedBackIntoThisMac([left, right])?.code == .loopedBackIntoThisMac)
+        left.bridges = ["bridge0"]
+        right.bridges = ["bridge0"]
+        left.hasLinkedMac = true
+        // Both bridged and linked: R1 would fire too, so callers ask R2 first.
+        #expect(Refusals.loopedBackIntoThisMac([left, right]) != nil)
+        #expect(Refusals.oneCableOnly([left, right]) != nil)
+    }
+
+    @Test("Another Mac, a dock, an empty port and a Mac that says nothing all pass")
+    func acceptsEverythingElse() {
+        var linked = farLeft
+        linked.hasLinkedMac = true
+        #expect(Refusals.loopedBackIntoThisMac([linked, farRight]) == nil)
+        #expect(Refusals.loopedBackIntoThisMac([farLeft, farRight]) == nil)
+        #expect(Refusals.loopedBackIntoThisMac([]) == nil)
+    }
+
+    @Test("A one-sided claim, or a partner that is not in the list, is not a loop")
+    func requiresAMutualPair() {
+        var left = farLeft
+        left.loopedBackTo = "en6"
+        #expect(Refusals.loopedBackIntoThisMac([left, farRight]) == nil)
+        #expect(Refusals.loopedBackIntoThisMac([left]) == nil)
+        var selfNamed = farLeft
+        selfNamed.loopedBackTo = "en5"
+        #expect(Refusals.loopedBackIntoThisMac([selfNamed, farRight]) == nil)
+    }
+
+    @Test("The pair is named in the order the ports are listed")
+    func namesInPhysicalOrder() throws {
+        var left = farLeft, right = farRight
+        left.loopedBackTo = "en6"
+        right.loopedBackTo = "en5"
+        let refusal = try #require(Refusals.loopedBackIntoThisMac([right, left]))
+        #expect(refusal.subjects == ["en6", "en5"])
+        #expect(refusal.body.hasPrefix("Back, far right and Back, far left are talking"))
+    }
+}

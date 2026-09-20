@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Exercises the hub's pure presentation on its own: UX_SPEC §S1's ready row,
 # the port rows, and what an undo note makes of a port (App/Model/PortSnapshot,
-# App/Presentation/PortPresentation, App/Presentation/ThisMacPresentation).
+# App/Presentation/PortPresentation, App/Presentation/ThisMacPresentation) —
+# §S3's first row, where R2 has to win over R1 (App/Flows/PreflightReport,
+# with the two files its button row and refusal card reach into), and §S8's
+# subject (App/Presentation/OtherMacPresentation).
 #
-# The app target has no test bundle, and these four files import nothing but
-# Foundation and RDMALinkCore, so — like script/test_stage_math.sh — they are
-# compiled against the Core module `swift build` left behind and run as a
-# plain executable. Every sentence asserted here is §S1's own.
+# The app target has no test bundle, and these files import nothing but
+# Foundation, AppKit and RDMALinkCore, so — like script/test_stage_math.sh —
+# they are compiled against the Core module `swift build` left behind and run
+# as a plain executable. Every sentence asserted here is §S1's or §S3's own.
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CORE_BIN="$(cd "$ROOT_DIR/Packages/RDMALinkCore" && swift build --show-bin-path)"
@@ -183,6 +186,86 @@ check(PortRowPresentation(snapshot: drifted).actions == [.setItUpAgain(portID: "
 check(snapshot(port("en5", "Back, far left"), configuration: .unconfigured(bridges: []), baseline: returnRecord)
       .readiness != .drifted, "a return record never drifts")
 
+// MARK: §S3 row 1 — R2 is named ahead of R1, and rings the two ends of the cable.
+
+let farLeft = PreflightPort(id: "en5", positionName: "Back, far left")
+let farRight = PreflightPort(id: "en6", positionName: "Back, far right")
+var findings = PreflightFindings()
+findings.mountedThunderboltVolumes = []
+findings.route = .wiFi
+findings.notesWritability = .writable(availableBytes: nil)
+findings.portsLoopedBack = [farLeft, farRight]
+let looped = PreflightReport(findings)
+check(looped.rows[0].state == .unsatisfied, "R2 row is unsatisfied")
+check(looped.rows[0].finding.map(text)
+      == "Both ends of one cable are in this Mac, on Back, far left and Back, far right. Unplug one end and put it in the other Mac.",
+      "R2 row finding is §S3's")
+check(looped.continueReason.map(text) == "Unplug one end of that cable to continue.", "R2 disabled-Continue reason")
+check(!looped.canContinue, "R2 blocks Continue")
+check(looped.attentionPortIDs == ["en5", "en6"], "R2 rings both ends of the cable")
+
+// The same cable with both ends reading as linked Macs in one bridge — every
+// input R1 has — is still R2, and rings R2's pair.
+findings.portsWithAMac = [farLeft, farRight]
+findings.portsInALoop = [farLeft, farRight]
+let both = PreflightReport(findings)
+check(both.rows[0].finding.map(text)?.hasPrefix("Both ends of one cable are in this Mac") == true,
+      "R2 wins over R1")
+check(both.continueReason.map(text) == "Unplug one end of that cable to continue.", "R2 reason wins over R1's")
+
+// Without the loop, the same two linked, bridged ports are R1.
+findings.portsLoopedBack = []
+let r1 = PreflightReport(findings)
+check(r1.rows[0].finding.map(text)
+      == "Two Macs are connected, on Back, far left and Back, far right. Unplug one and I'll pick this back up.",
+      "R1 row finding is §S3's")
+check(r1.continueReason.map(text) == "Unplug one of the two cables to continue.", "R1 disabled-Continue reason")
+check(r1.attentionPortIDs == ["en5", "en6"], "R1 rings the ports in the loop")
+
+// The hub's snapshots carry Core's pairing through to the findings.
+let cable = [
+    snapshot(port("en5", "Back, far left", link: .macLinked, bridges: [bridge0]), configuration: nil),
+    snapshot(port("en6", "Back, far right", link: .macLinked, bridges: [bridge0]), configuration: nil),
+].map { snap -> PortSnapshot in
+    var snap = snap
+    snap.port.loopedBackTo = snap.port.bsdName == "en5" ? "en6" : "en5"
+    return snap
+}
+check(PreflightFindings(ports: cable).portsLoopedBack == [farLeft, farRight],
+      "port snapshots feed R2's pair")
+check(PreflightFindings(ports: cable).isLoopedBackIntoThisMac, "port snapshots say looped back")
+check(PreflightFindings(ports: [cable[0]]).portsLoopedBack.isEmpty, "one end alone is not a loop")
+
+// R2's refusal card: self-clearing, no button, R1's symbol.
+let r2 = WizardRefusal(Refusals.loopedBackIntoThisMac(cable.map(\.observed))!)
+check(r2.code == "R2" && r2.actions.isEmpty && r2.symbol == "cable.connector", "R2 card has no button")
+check(r2.watchingLine.map(text) == "I'll keep watching — when this is sorted I'll carry straight on.",
+      "R2 card keeps watching")
+check(text(r2.headline) == "Both ends of that cable are in this Mac", "R2 card headline is §6.2's")
+
+// MARK: §S8 — which port "this link" is, and when the far end has answered.
+
+let linkedManaged = snapshot(
+    port("en6", "Back, left middle", link: .macLinked), configuration: .readyForRDMA(serviceID: "MINE"),
+    baseline: ownNote)
+var addressed = linkedManaged
+addressed.port.linkLocal = ["fe80::1c3d:5aff:fe22:9b04"]
+check(OtherMacReport(ports: [plain, outside]).subjectID == nil, "a Mac with no ready port has no subject")
+check(OtherMacReport(ports: [plain, outside]).address == nil
+      && !OtherMacReport(ports: [plain, outside]).answered, "and no address, and nothing has answered")
+check(OtherMacReport(ports: [outside, managed]).subjectID == "en6",
+      "a port set up outside RDMALink is never the subject; RDMALink's own is")
+check(OtherMacReport(ports: [managed, addressed]).subjectID == "en6"
+      && OtherMacReport(ports: [managed, addressed]).address == "fe80::1c3d:5aff:fe22:9b04%en6",
+      "the first ready port with an address is the subject, and step 4 names it whole")
+check(OtherMacReport(ports: [managed]).address == nil, "a ready port with no address yet has none to name")
+check(OtherMacReport(ports: [adopted]).subjectID == "en7", "an adopted port is RDMALink's to hand out")
+check(!OtherMacReport(ports: [managed]).answered, "nothing plugged in has not answered")
+check(OtherMacReport(ports: [linkedManaged]).answered, "a Mac at the far end has answered")
+check(!OtherMacReport(ports: [snapshot(port("en6", "Back, left middle", link: .macLinkComingUp),
+                                       configuration: .readyForRDMA(serviceID: "MINE"), baseline: ownNote)]).answered,
+      "a link still coming up has not answered yet")
+
 if failures > 0 {
     FileHandle.standardError.write(Data("test_presentation: \(failures) failed\n".utf8))
     exit(1)
@@ -193,11 +276,17 @@ SWIFT
 xcrun swiftc -swift-version 6 -warnings-as-errors \
   -I "$CORE_BIN" -L "$CORE_BIN" -lRDMALinkCore \
   -framework SystemConfiguration -framework IOKit -framework Security \
+  -framework AppKit \
   -o "$WORK_DIR/test_presentation" \
   "$ROOT_DIR/App/Model/PortSnapshot.swift" \
   "$ROOT_DIR/App/Model/HubActions.swift" \
+  "$ROOT_DIR/App/Model/NotesLocation.swift" \
   "$ROOT_DIR/App/Presentation/PortPresentation.swift" \
   "$ROOT_DIR/App/Presentation/ThisMacPresentation.swift" \
+  "$ROOT_DIR/App/Presentation/OtherMacPresentation.swift" \
+  "$ROOT_DIR/App/Flows/PreflightReport.swift" \
+  "$ROOT_DIR/App/Flows/WizardRefusal.swift" \
+  "$ROOT_DIR/App/Flows/WizardActions.swift" \
   "$WORK_DIR/main.swift"
 
 "$WORK_DIR/test_presentation"

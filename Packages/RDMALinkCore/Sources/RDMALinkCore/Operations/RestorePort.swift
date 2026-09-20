@@ -149,25 +149,26 @@ public struct RestorePort: Sendable {
         }
         // A return record is not one `Restore…` lists (§7.5 step 5): the port
         // is in the bridge the note names and has nothing of RDMALink's on it.
-        // The plan says which record it is, and the refusal is the same one a
-        // note with nothing to undo gets below — the spec writes none for
-        // this. **Owed from the spec owner.**
+        // The plan says which record it is, and §6.2 R30 says so in words —
+        // R19 would claim the note is missing, and it is sitting right there.
         if let returnedToBridge = note.returnedToBridge {
             plan.returnedToBridge = returnedToBridge
-            plan.refusal = Refusals.undoNoteMissing(port: port.observed)
+            plan.refusal = Refusals.noteIsAReturnRecord(
+                port: port.observed, bridgeName: returnedToBridge.name)
             return plan
         }
         // A note that records no bridge history and no service RDMALink made
         // describes nothing to put back: an adopted note (§7.3 — "there's no
-        // 'put it back' for an adopted port"), or a note left by a return to
-        // the bridge. Restoring it would take a password, change nothing, and
-        // then print "Everything is back" and delete the only record there was.
+        // 'put it back' for an adopted port"). Restoring it would take a
+        // password, change nothing, and then print "Everything is back" and
+        // delete the only record there was. (A return record is the other
+        // shape, and it was answered above with R30.)
         //
         // R19's headline — "I can't remember how this looked" — is the nearest
         // the spec writes, and its button row is §7.3's own offer, `Stop
         // Managing This Port`. Its body says the note is *missing*, which here
-        // it is not. **Owed from the spec owner:** a refusal for a note that
-        // records nothing to undo.
+        // it is not. **Owed from the spec owner:** a refusal for an adopted
+        // note that records nothing to undo.
         guard !Self.describesNothingToUndo(note) else {
             plan.refusal = Refusals.undoNoteMissing(port: port.observed)
             return plan

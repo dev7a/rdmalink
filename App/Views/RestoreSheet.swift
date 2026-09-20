@@ -11,8 +11,8 @@
 //  disagree.
 //
 //  §6.1 rule 1's one exception lives here: a refusal raised inside this sheet
-//  stays in this sheet. R4, R19, R20, R21 and R29 all land here, each with the
-//  button row §6.2 gives its number, and none of them with a way around it.
+//  stays in this sheet. R4, R19, R20, R21, R29 and R30 all land here, each with
+//  the button row §6.2 gives its number, and none of them with a way around it.
 //
 
 import AppKit
@@ -259,8 +259,15 @@ struct RestoreSheet: View {
             if let volume = plan.volumes.first { WizardFinder.showVolume(named: volume.name) }
         case .openNetworkSettings:
             WizardSettingsPane.open(WizardSettingsPane.network)
-        case .stopManagingThisPort:
+        case .stopManagingThisPort, .stopManagingEllipsis:
             if let port = plan.port { hub.perform(.stopManaging(portID: port.id)) }
+        // §6.2 R30's default: the note stays, and the port goes back through
+        // the set-up assistant. That is a different window, so this sheet
+        // closes behind it rather than being replaced the way `Stop Managing
+        // This Port` is.
+        case .setItUpAgain:
+            if let port = plan.port { hub.perform(.setItUpAgain(portID: port.id)) }
+            dismiss()
         case .removeMyServiceOnly:
             running = plan
             runServiceOnly(plan)

@@ -193,7 +193,11 @@ struct OperationsRestoreTests {
         let plan = RestorePort(port: Fixtures.port).preview(note: note, world: world)
         #expect(plan.returnedToBridge ==
                 BridgeReturn(bsdName: "bridge0", displayName: "Thunderbolt Bridge"))
-        #expect(plan.refusal?.code == .undoNoteMissing)
+        // §6.2 R30, not R19: the note is sitting right there, and R19's body
+        // would say it is missing.
+        #expect(plan.refusal?.code == .noteIsAReturnRecord)
+        #expect(plan.refusal?.headline == "Nothing to put back")
+        #expect(plan.refusal?.body.contains("put the port back in Thunderbolt Bridge") == true)
         #expect(!plan.canProceed)
         #expect(plan.buttonTitle == nil)
         #expect(plan.rows.isEmpty)
@@ -204,7 +208,7 @@ struct OperationsRestoreTests {
             try RestorePort(port: Fixtures.port).perform(
                 writer: writer, world: world,
                 environment: Fixtures.environment(store: store), progress: { _, _ in })
-        } throws: { ($0 as? Refusal)?.code == .undoNoteMissing }
+        } throws: { ($0 as? Refusal)?.code == .noteIsAReturnRecord }
         #expect(writer.calls == [.lock], "nothing is written, and no service is touched")
         #expect(try store.load(port: "en6") == note, "the record stays for Set It Up Again")
     }

@@ -93,6 +93,19 @@ extension StagePort {
     }
 }
 
+/// UX_SPEC §6.2 R2: the two receptacles one cable's ends are both in.
+///
+/// "Both receptacles ring and a single light thread is drawn between them,
+/// arcing across the chassis — the one time a thread connects two ports of
+/// the same machine." The rings are the ports' own `attention`; this is the
+/// thread's pair, in the order the refusal names them.
+struct StageLoopedPair: Equatable, Sendable {
+    let a: StagePort.ID
+    let b: StagePort.ID
+
+    func contains(_ id: StagePort.ID) -> Bool { a == id || b == id }
+}
+
 /// UX_SPEC §4.4: which bridge ribbons are drawn, beyond the ones hover and
 /// selection raise on their own.
 ///
@@ -156,6 +169,22 @@ struct StagePreviewIntent: Equatable, Sendable {
     var id: StagePort.ID
 }
 
+/// UX_SPEC §S8's handoff: "the ghost second Mac". The camera pulls back and
+/// pans so this Mac occupies the leading third of the stage, a featureless
+/// rounded box at 40 % slides in from the trailing side with a single thin
+/// line between the two, and when the far end answers a pulse travels back
+/// along the line and blooms at the near receptacle, once. The ghost never
+/// gains detail, ever — it is explicitly *a Mac I can't see*.
+struct StageHandoff: Equatable, Sendable {
+    /// The receptacle "this link" is on — the near port, which carries the
+    /// line. `nil` when RDMALink has set up no port yet: the ghost still
+    /// arrives, and there is no cable to draw.
+    var portID: StagePort.ID?
+    /// The face the handoff is staged on: the near port's, or the face in
+    /// front when there is no near port.
+    var face: PortFace
+}
+
 /// A camera move the view has not performed yet.
 ///
 /// The token makes a repeat of the same move a new request: pressing ⌘0 twice
@@ -169,6 +198,11 @@ struct StageCameraRequest: Equatable, Sendable {
         /// §S4b: pull back far enough that a change anywhere will be seen, from
         /// a pose that shows something of every face these receptacles are on.
         case survey([PortFace])
+        /// §S8: pull back and pan so this Mac takes the leading third and the
+        /// ghost beside it fits.
+        case handoff(PortFace)
+        /// §S8 is over: the camera comes back to this Mac alone, where it is.
+        case endHandoff
         case fit
         case reset
     }
@@ -235,6 +269,13 @@ final class StageModel {
     /// §S5: the change row the pointer is on, and the receptacle it is about.
     private(set) var preview: StagePreviewIntent?
 
+    /// §S8: the ghost second Mac, while "Now the other Mac" is up.
+    private(set) var handoff: StageHandoff?
+
+    /// §6.2 R2: the cable that comes back into this Mac, while preflight is
+    /// naming it.
+    private(set) var loopedPair: StageLoopedPair?
+
     private var requestToken = 0
     private var narrationClear: Task<Void, Never>?
 
@@ -249,7 +290,7 @@ final class StageModel {
     func moment(focused: StagePort.ID? = nil) -> StageMoment {
         StageMoment(
             ports: ports, ribbons: ribbons, progress: progress, identify: identify,
-            preview: preview, focused: focused
+            preview: preview, handoff: handoff, loopedPair: loopedPair, focused: focused
         )
     }
 
@@ -307,6 +348,20 @@ final class StageModel {
     /// described**.
     func attention(ids: Set<StagePort.ID>) {
         for index in ports.indices { ports[index].attention = ids.contains(ports[index].id) }
+    }
+
+    /// UX_SPEC §6.2 R2: "both receptacles ring and a single light thread is
+    /// drawn between them, arcing across the chassis". The thread is drawn
+    /// for exactly two receptacles, in the order R2 names them, and taken
+    /// away with anything else — including the empty list.
+    func loopedBack(_ ids: [StagePort.ID]) {
+        guard ids.count == 2, ids[0] != ids[1],
+            ids.allSatisfy({ id in ports.contains { $0.id == id && $0.isThunderbolt } })
+        else {
+            loopedPair = nil
+            return
+        }
+        loopedPair = StageLoopedPair(a: ids[0], b: ids[1])
     }
 
     // MARK: - §S6 and §S10: the ring that closes as the work gets done
@@ -418,6 +473,34 @@ final class StageModel {
     /// which leaves the bookmark glyph or the widened ring asserting a change
     /// that was already made or abandoned.
     func clearPreview() { preview = nil }
+
+    // MARK: - §S8: the ghost second Mac
+
+    /// "Now the other Mac" is up. The near port is the one §S8 step 4 names,
+    /// or none when RDMALink has set up no port yet; the stage turns to its
+    /// face if it is not in front, then pulls back and lets the ghost in.
+    /// Calling it again with a different port re-aims the line without
+    /// starting the handoff over.
+    func beginHandoff(for id: StagePort.ID?) {
+        let face = ports.first { $0.id == id }?.face ?? handoff?.face ?? currentFace
+        let intent = StageHandoff(portID: id, face: face)
+        guard handoff != intent else { return }
+        let wasStaged = handoff?.face
+        handoff = intent
+        if face != currentFace {
+            currentFace = face
+            say("Let me turn it around", showing: face)
+        }
+        if wasStaged != face { request(.handoff(face)) }
+    }
+
+    /// The screen is gone; so is the ghost, and the camera comes back to this
+    /// Mac without turning it.
+    func endHandoff() {
+        guard handoff != nil else { return }
+        handoff = nil
+        request(.endHandoff)
+    }
 
     // MARK: - Camera intents
 
@@ -534,5 +617,7 @@ struct StageMoment: Equatable, Sendable {
     var progress: [StagePort.ID: Int] = [:]
     var identify: StageIdentify = .off
     var preview: StagePreviewIntent?
+    var handoff: StageHandoff?
+    var loopedPair: StageLoopedPair?
     var focused: StagePort.ID?
 }

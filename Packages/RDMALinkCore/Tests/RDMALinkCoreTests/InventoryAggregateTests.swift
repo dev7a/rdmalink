@@ -109,3 +109,22 @@ struct InventoryAggregateTests {
         #expect(faces == faces.sorted())
     }
 }
+
+extension InventoryAggregateTests {
+    @Test("A looped cable is what the refusals see as a looped cable")
+    func mapsLoopedBackOntoObservedPorts() {
+        var ports = Self.studioSixPorts
+        ports[3].loopedBackTo = "en6"
+        ports[4].loopedBackTo = "en5"
+        let inventory = Inventory(
+            model: HardwareModel(identifier: "Mac15,14", marketingName: "Mac Studio",
+                                 chip: "M3 Ultra", archetype: .studioSix),
+            ports: ports,
+            rdma: .off
+        )
+        #expect(inventory.observedPorts.map(\.loopedBackTo) == [nil, nil, nil, "en6", "en5", nil])
+        #expect(Refusals.loopedBackIntoThisMac(inventory.observedPorts)?.subjects == ["en5", "en6"])
+        #expect(OperationPort(ports[3]).observed.loopedBackTo == "en6")
+        #expect(Refusals.loopedBackIntoThisMac(Self.studioSixPorts.map(\.observed)) == nil)
+    }
+}

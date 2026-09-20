@@ -8,6 +8,8 @@ import Foundation
 public enum RefusalCode: String, Sendable, Equatable, CaseIterable {
     /// Two Macs are connected (loop risk).
     case twoMacsConnected = "R1"
+    /// Both ends of one cable are in this Mac. Blocks preflight; self-clearing.
+    case loopedBackIntoThisMac = "R2"
     /// Something is still mounted over a Thunderbolt link. Blocks preflight
     /// and blocks Restore.
     case volumeMounted = "R4"
@@ -41,20 +43,15 @@ public enum RefusalCode: String, Sendable, Equatable, CaseIterable {
     case originalBridgeGone = "R21"
     /// The service RDMALink created has been edited since, so Restore will not
     /// delete it.
-    ///
-    /// **Proposed, not yet in UX_SPEC §6.2.** The spec's numbered refusals stop
-    /// at R27 and none of them covers "RDMALink's own service is no longer the
-    /// one it made". The strings below are written in the spec's voice and are
-    /// owed a review by the spec owner before ML2 ships.
     case createdServiceEdited = "R28"
     /// There is no Thunderbolt Bridge to return a standalone port to, and
-    /// RDMALink never creates one.
-    ///
-    /// **Proposed, not yet numbered in UX_SPEC §6.2.** The situation is
-    /// specified in §S10 — headline, body and buttons — but has no R number,
-    /// so the strings below are the spec's own and only the number is this
-    /// module's. It is owed a number by the spec owner before ML2 ships.
+    /// RDMALink never creates one. The copy is §S10's no-bridge form.
     case noBridgeToReturnTo = "R29"
+    /// The note is a **return record** (§7.5): it says only that RDMALink put
+    /// the port back in a bridge, so there is nothing for Restore to undo.
+    /// Reached only from the command line or a stale sheet — the hub never
+    /// offers `Restore…` for one. The note is kept and nothing is written.
+    case noteIsAReturnRecord = "R30"
 }
 
 /// A refusal: a situation the app names, explains and will not step around.
@@ -106,17 +103,23 @@ public struct ObservedPort: Sendable, Equatable {
     /// only through a bridge: a standalone port forwards nothing, so two
     /// cables on two standalone ports cannot loop.
     public var bridges: [String]
+    /// The BSD name of the receptacle on this Mac the same cable comes back
+    /// into, from ``ThunderboltPort/loopedBackTo`` — R2's input. `nil` when
+    /// the cable goes somewhere else, or when this Mac could not say.
+    public var loopedBackTo: String?
 
     public init(
         bsdName: String,
         positionName: String,
         hasLinkedMac: Bool = false,
-        bridges: [String] = []
+        bridges: [String] = [],
+        loopedBackTo: String? = nil
     ) {
         self.bsdName = bsdName
         self.positionName = positionName
         self.hasLinkedMac = hasLinkedMac
         self.bridges = bridges
+        self.loopedBackTo = loopedBackTo
     }
 }
 

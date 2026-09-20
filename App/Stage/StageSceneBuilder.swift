@@ -81,6 +81,8 @@ final class StageReceptacleNode {
     /// are the moments they started, on the scene's elapsed time.
     var attentionStarted: Double?
     var bloomStarted: Double?
+    /// §S8: when the returning pulse reached this receptacle and bloomed.
+    var handoffBloomStarted: Double?
 
     init(
         id: String, kind: FeatureKind, face: PortFace, root: Entity, proxy: Entity,
@@ -111,6 +113,11 @@ struct StageSceneGraph {
     var receptacles: [StageReceptacleNode]
     /// §4.4's ribbons, one per tie between two members of a bridge.
     var ribbons: [StageRibbonLink]
+    /// §S8's ghost second Mac, off stage until a handoff is up.
+    var ghost: StageGhostNode
+    /// §6.2 R2's thread between the two ends of one cable, built when
+    /// preflight names a pair and taken down when it stops.
+    var loop: StageLoopThread?
     var keyLight: DirectionalLight
     var fillLight: DirectionalLight
     var rimLight: DirectionalLight
@@ -167,6 +174,13 @@ enum StageSceneBuilder {
         )
         for link in ribbons { body.addChild(link.root) }
 
+        // §S8's ghost lives beside the chassis, not on it, so it hangs off the
+        // stage root and not the body.
+        let ghost = StageGhostNode(chassis: chassis, palette: palette, appearance: appearance)
+        root.addChild(ghost.root)
+        root.addChild(ghost.cable)
+        root.addChild(ghost.pulse)
+
         let lights = makeLights(chassis: chassis, palette: palette, appearance: appearance)
         root.addChild(lights.key)
         root.addChild(lights.fill)
@@ -174,7 +188,7 @@ enum StageSceneBuilder {
 
         return StageSceneGraph(
             root: root, body: body, chassis: chassis, receptacles: receptacles,
-            ribbons: ribbons, keyLight: lights.key, fillLight: lights.fill,
+            ribbons: ribbons, ghost: ghost, keyLight: lights.key, fillLight: lights.fill,
             rimLight: lights.rim
         )
     }
@@ -244,12 +258,34 @@ enum StageSceneBuilder {
             }
         }
 
-        // §3.4 allows "no vent pattern beyond a soft inset, no trade dress of
-        // any kind", and the soft inset it does allow is the base band above.
-        // A dot field at the prototype's grille rectangle would be the Mac
-        // Studio's own vent by placement whatever pitch it was drawn at, so
-        // the stage leaves the back face plain — and the catalogue no longer
-        // carries a rectangle no renderer is allowed to read.
+        if let grille = chassis.grille {
+            body.addChild(makeGrille(grille, chassis: chassis, palette: palette))
+        }
+    }
+
+    /// The perforated grille the catalogue puts on a face: one strip on the
+    /// shell's outline wearing one alpha-masked tile, never a hole per hole —
+    /// the Mac Studio's is some 9,900 of them, and a `studioSix` rebuild is
+    /// already a visible hitch at 130 entities.
+    ///
+    /// It carries no collider, no input target and no `StagePortIdentity`, so
+    /// `StageScene.portID(at:)` never sees it, exactly like the shell under it.
+    private static func makeGrille(
+        _ grille: Grille, chassis: Chassis, palette: StagePalette
+    ) -> Entity {
+        let room = chassis.height - chassis.baseBand
+        guard
+            let texture = try? StageMesh.grille(),
+            let mesh = try? StageMesh.grilleStrip(
+                face: grille.face, u0: grille.u0, u1: grille.u1,
+                y0: chassis.baseBand + grille.v0 * room,
+                y1: chassis.baseBand + grille.v1 * room,
+                width: chassis.width, depth: chassis.depth, cornerRadius: chassis.cornerRadius
+            )
+        else { return Entity() }
+        let strip = ModelEntity(mesh: mesh, materials: [palette.grilleMaterial(texture: texture)])
+        strip.name = "stage.grille"
+        return strip
     }
 
     private static func buildNotebook(

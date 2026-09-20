@@ -17,8 +17,9 @@ struct WizardReady: View {
     let flow: SetUpFlow
     let model: InventoryModel
     let perform: (WizardAction) -> Void
-    /// `What to Do on the Other Mac`, which opens the Help sheet the window
-    /// owns. Absent by default rather than present and inert.
+    /// `What to Do on the Other Mac`, which closes the assistant and opens
+    /// §S8's screen in its place. Absent by default rather than present and
+    /// inert.
     var showOtherMac: (() -> Void)?
 
     var body: some View {

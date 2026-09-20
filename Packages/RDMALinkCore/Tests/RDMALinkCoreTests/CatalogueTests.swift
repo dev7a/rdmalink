@@ -124,6 +124,7 @@ struct CatalogueTests {
         #expect(chassis.bevel == 0.22)
         #expect(chassis.baseBand == 1.0)
         #expect(chassis.lid == nil)
+        #expect(chassis.grille?.face == .back)
     }
 
     @Test("The Mac mini's box, in centimetres")
@@ -147,6 +148,46 @@ struct CatalogueTests {
         #expect(chassis.bevel == 0.22)
         #expect(chassis.baseBand == 0)
         #expect(chassis.lid == Lid(depth: 22.0, thickness: 0.42, openAngle: 104))
+    }
+
+    // MARK: The grille
+
+    @Test("The Mac Studio carries the prototype's back grille, and the others carry none")
+    func transcribesTheGrille() {
+        let grille = Grille(face: .back, u0: 0.06, u1: 0.94, v0: 0.40, v1: 0.94)
+        #expect(ReceptacleCatalogue.studioSix.grille == grille)
+        #expect(ReceptacleCatalogue.studioFour.grille == grille)
+        #expect(ReceptacleCatalogue.mini.grille == nil)
+        #expect(ReceptacleCatalogue.notebook.grille == nil)
+        #expect(ReceptacleCatalogue.generic(receptacleCount: 6).grille == nil)
+    }
+
+    @Test("The grille is a surface, not a feature: it adds no row to the face")
+    func grilleIsNotAFeature() {
+        // The counts `countsEveryFeature` pins are the prototype's rows; the
+        // rectangle is a property of the box, exactly as in `MODELS.studio`.
+        #expect(ReceptacleCatalogue.studioSix.features.count == 15)
+        #expect(ReceptacleCatalogue.studioSix.features(on: .back).count == 11)
+        #expect(ReceptacleCatalogue.studioSix.faces == [.back, .front])
+    }
+
+    @Test("The grille sits on its face and never reaches into an opening",
+          arguments: Archetype.allCases)
+    func grilleClearsEveryOpening(archetype: Archetype) throws {
+        let chassis = ReceptacleCatalogue.chassis(for: archetype, reportedThunderboltPorts: 6)
+        guard let grille = chassis.grille else { return }
+        #expect(grille.u0 > 0 && grille.u0 < grille.u1 && grille.u1 < 1)
+        #expect(grille.v0 > 0 && grille.v0 < grille.v1 && grille.v1 < 1)
+        #expect(chassis.faces.contains(grille.face))
+        // The renderer stands the grille 0.02 cm proud of the face and every
+        // opening 0.01 cm proud, so the two may never overlap in the plane:
+        // the grille's lower edge must clear the top of every hole below it.
+        let room = chassis.height - chassis.baseBand
+        let lowerEdge = chassis.baseBand + grille.v0 * room
+        for feature in chassis.features(on: grille.face) {
+            let top = chassis.baseBand + feature.v * room + feature.opening.height / 2
+            #expect(top < lowerEdge, "\(feature.id) reaches \(top), the grille starts at \(lowerEdge)")
+        }
     }
 
     // MARK: Openings

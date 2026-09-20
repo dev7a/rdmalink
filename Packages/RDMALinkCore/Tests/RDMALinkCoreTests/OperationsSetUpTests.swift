@@ -189,6 +189,31 @@ struct OperationsSetUpTests {
         #expect(writer.calls == [.lock])
     }
 
+    @Test("R2: a cable back into this Mac blocks the apply ahead of R1, and nothing is written")
+    func refusesLoopedCable() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let writer = FakeWriter()
+        // The same two bridged, linked ports as R1's case, but the domain
+        // identities say the cable comes back into this Mac.
+        var first = Fixtures.port
+        first.loopedBackTo = "en5"
+        var second = Fixtures.port
+        second.bsdName = "en5"
+        second.positionName = "Back, far right"
+        second.loopedBackTo = "en6"
+        let world = Fixtures.world(ifconfig: Fixtures.inOneBridge, ports: [first, second])
+        #expect(SetUpPorts(ports: [first]).preview(world: world).refusal?.code
+            == .loopedBackIntoThisMac)
+        #expect {
+            try SetUpPorts(ports: [first]).perform(
+                writer: writer, world: world,
+                environment: Fixtures.environment(store: store), progress: { _, _ in })
+        } throws: { ($0 as? Refusal)?.code == .loopedBackIntoThisMac }
+        #expect(writer.calls == [.lock])
+        #expect(!FileManager.default.fileExists(atPath: store.directory.path))
+    }
+
     @Test("R5: Thunderbolt being the only way in blocks the apply")
     func refusesWhenThunderboltIsTheOnlyRoute() throws {
         let world = Fixtures.world(ifconfig: Fixtures.inOneBridge, primary: ["bridge0"])

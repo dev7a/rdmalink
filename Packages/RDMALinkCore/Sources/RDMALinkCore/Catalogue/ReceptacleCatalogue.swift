@@ -50,6 +50,9 @@ public enum ReceptacleCatalogue {
             cornerRadius: 2.4, bevel: 0.22, baseBand: 1.0,
             verticalReceptacles: true,
             resting: RestingPose(yaw: .pi - 0.55, pitch: 0.30, radiusScale: 1.0),
+            // The prototype's `grille`: the whole back above the port row,
+            // from corner to corner. The other chassis carry `grille: null`.
+            grille: Grille(face: .back, u0: 0.06, u1: 0.94, v0: 0.40, v1: 0.94),
             rows: [
                 .init(.thunderbolt, .back, u: 0.157, v: 0.20, "Back, far left"),
                 .init(.thunderbolt, .back, u: 0.207, v: 0.20, "Back, middle left"),

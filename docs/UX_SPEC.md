@@ -175,7 +175,7 @@ No custom glyphs. **No Thunderbolt trade-dress mark anywhere**, in the UI or on 
 
 ### 3.4 3D materials and lighting
 
-- **One generic rounded-box chassis per archetype.** Correct proportions and correct receptacle placement. No logo, no engraved text, no vent pattern beyond a soft inset, no trade dress of any kind.
+- **One generic rounded-box chassis per archetype.** Correct proportions and correct receptacle placement. No logo, no engraved text, no trade dress of any kind, and no vent pattern beyond a soft inset — except the Mac Studio's perforated back grille, drawn as a hole field in the recess tone above the port row, which carries no logo and no trade dress.
 - `PhysicallyBasedMaterial`, roughness 0.38, metallic 0.85, base color a neutral aluminium that shifts with appearance (light: 0.78 luminance; dark: 0.22). Two finishes selectable from the detected model: neutral aluminium and a graphite variant.
 - **Receptacles are true geometry** — a 3 mm-scale inset slot with a darker interior — so an unlit port reads as a hole and not a sticker. USB-only receptacles use their correct, slightly different geometry with a matte, non-reflective interior, so they look different before anyone explains why.
 - **Lighting:** one neutral studio IBL (≈900 lux equivalent) plus a single key `DirectionalLight` from upper-left for a defined top edge; a soft contact shadow on an invisible ground plane. No mirror reflection, no floor grid, no diorama.
@@ -804,7 +804,7 @@ Documented once so they all read the same.
 
 ---
 
-**R2 — Both ends of one cable are in this Mac.** *Blocks preflight.*
+**R2 — Both ends of one cable are in this Mac.** *Blocks preflight and any apply.*
 - Headline: **Both ends of that cable are in this Mac**
 - Body: **Back, far left and Back, far right are talking to each other — the cable goes out of this Mac and straight back in. It's harmless, but it isn't a link to anywhere. Unplug one end and put it in the other Mac.**
 - Buttons: none; self-clearing.

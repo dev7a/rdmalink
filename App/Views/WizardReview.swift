@@ -160,15 +160,7 @@ struct WizardReviewRow: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 6) {
-                    WizardChip(text: row.before)
-                    Image(systemName: "arrow.right")
-                        .imageScale(.small)
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
-                    WizardChip(text: row.after, isAfter: true)
-                }
-                .accessibilityElement(children: .combine)
+                WizardChipPair(before: row.before, after: row.after)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -179,18 +171,66 @@ struct WizardReviewRow: View {
     }
 }
 
+/// §S5's "before → after pair of chips".
+///
+/// The pair is one line when the column has room for it and stacks when it
+/// does not — the after chip under the before chip, the arrow leading it —
+/// and either way every word is drawn. Row 4's pair is 60-odd characters,
+/// which no working area between §2.1's 840 pt minimum and its 1000 pt
+/// default can hold on one line; the old single `HStack` answered that by
+/// cutting both chips to an ellipsis, which §8.5 forbids ("nothing is
+/// truncated") and which turned the one row that names the real change
+/// into "IPv4 automatic, IPv6 auto…".
+///
+/// `ViewThatFits` measures the one-line pair at its ideal width, so a chip
+/// never wraps on its own inside the line; the stacked pair lets each chip
+/// wrap in the ordinary way should a translation outgrow even that.
+struct WizardChipPair: View {
+    let before: String
+    let after: String
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                WizardChip(text: before).fixedSize()
+                arrow
+                WizardChip(text: after, isAfter: true).fixedSize()
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                WizardChip(text: before)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    arrow
+                    WizardChip(text: after, isAfter: true)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var arrow: some View {
+        Image(systemName: "arrow.right")
+            .imageScale(.small)
+            .foregroundStyle(.tertiary)
+            .accessibilityHidden(true)
+    }
+}
+
 /// A before or after chip. §3.1: no colour carries meaning — the difference
 /// between the two is weight, and the arrow between them is the sentence.
+///
+/// `.callout`, the smallest role §3.2 gives a row's own words; a chip that
+/// wraps is read at the same size as the sentence above it.
 struct WizardChip: View {
     let text: String
     var isAfter = false
 
     var body: some View {
         Text(text)
-            .font(.caption)
+            .font(.callout)
             .foregroundStyle(isAfter ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
-            .padding(.horizontal, 7)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(.background.secondary, in: .capsule)
+            .background(.background.secondary, in: .rect(cornerRadius: 10))
     }
 }

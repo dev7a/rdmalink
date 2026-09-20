@@ -52,6 +52,46 @@ enum IORegistry {
         return nil
     }
 
+    /// Every non-nil value `transform` produces anywhere in `entry`'s subtree,
+    /// walking `plane` depth-first. `entry` itself is not visited.
+    ///
+    /// The collecting twin of ``firstDescendant(of:plane:_:)``: a controller
+    /// with a dock on it can hold more than one `IOThunderboltXDomainLink`,
+    /// and taking the first would hide the second cable.
+    static func descendants<Value>(
+        of entry: io_registry_entry_t,
+        plane: String,
+        _ transform: (io_registry_entry_t) -> Value?
+    ) -> [Value] {
+        var iterator: io_iterator_t = 0
+        guard IORegistryEntryCreateIterator(
+            entry, plane, IOOptionBits(kIORegistryIterateRecursively), &iterator
+        ) == KERN_SUCCESS else { return [] }
+        defer { IOObjectRelease(iterator) }
+        var values: [Value] = []
+        while true {
+            let child = IOIteratorNext(iterator)
+            if child == 0 { break }
+            defer { IOObjectRelease(child) }
+            if let value = transform(child) { values.append(value) }
+        }
+        return values
+    }
+
+    /// `entry`'s parent in `plane`, handed to `body` and released afterwards.
+    /// `nil` when there is no parent, or when `body` says nil.
+    static func withParent<Value>(
+        of entry: io_registry_entry_t,
+        plane: String,
+        _ body: (io_registry_entry_t) -> Value?
+    ) -> Value? {
+        var parent: io_registry_entry_t = 0
+        guard IORegistryEntryGetParentEntry(entry, plane, &parent) == KERN_SUCCESS,
+              parent != 0 else { return nil }
+        defer { IOObjectRelease(parent) }
+        return body(parent)
+    }
+
     /// The first non-nil value `transform` produces among `entry`'s direct
     /// children in `plane`.
     static func firstChild<Value>(

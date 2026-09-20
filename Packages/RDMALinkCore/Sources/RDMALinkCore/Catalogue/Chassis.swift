@@ -145,6 +145,31 @@ public struct Lid: Sendable, Equatable {
     }
 }
 
+/// The perforated grille on one face of a chassis: the Mac Studio's back.
+///
+/// A surface, not a feature, which is how the prototype models it too
+/// (`MODELS.studio.grille`): it cuts nothing, it has no rank on its face, and
+/// the port list never prints it. The rectangle is in the same face fractions
+/// as ``ChassisFeature/u`` and ``ChassisFeature/v`` — `u` from the viewer's
+/// left, `v` up the face above the base band — so one entry serves the box at
+/// any size. The hole pattern is the renderer's business, like the depth of a
+/// recess.
+public struct Grille: Sendable, Equatable {
+    public var face: PortFace
+    public var u0: Double
+    public var u1: Double
+    public var v0: Double
+    public var v1: Double
+
+    public init(face: PortFace, u0: Double, u1: Double, v0: Double, v1: Double) {
+        self.face = face
+        self.u0 = u0
+        self.u1 = u1
+        self.v0 = v0
+        self.v1 = v1
+    }
+}
+
 /// Where the camera sits when nothing has asked it to move: the resting
 /// three-quarter pose of UX_SPEC §3.4, transcribed from the prototype's `rest`.
 ///
@@ -184,6 +209,8 @@ public struct Chassis: Sendable, Equatable {
     public var baseBand: Double
     /// The lid, on a notebook only.
     public var lid: Lid?
+    /// The perforated grille, on the Mac Studio's back and nowhere else.
+    public var grille: Grille?
     /// Where the camera rests on this chassis.
     public var resting: RestingPose
     /// Every feature, back face first, and left to right along each face.
@@ -258,6 +285,7 @@ extension Chassis {
         verticalReceptacles: Bool,
         resting: RestingPose,
         lid: Lid? = nil,
+        grille: Grille? = nil,
         rows: [Row]
     ) -> Chassis {
         let ordered = rows.sorted { left, right in
@@ -295,6 +323,7 @@ extension Chassis {
             bevel: bevel,
             baseBand: baseBand,
             lid: lid,
+            grille: grille,
             resting: resting,
             features: features
         )

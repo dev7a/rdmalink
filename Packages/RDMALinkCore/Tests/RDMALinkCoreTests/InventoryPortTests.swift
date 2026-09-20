@@ -173,3 +173,113 @@ struct InventoryPortTests {
         #expect(port.linkLocal.isEmpty)
     }
 }
+
+/// The Thunderbolt domain identities behind R2, as `ioreg` printed them on the
+/// rig on 2026-09-20 (Mac Studio M3 Ultra, macOS 27.2): six local nodes, one
+/// per receptacle, and two cross-domain links — both to the MacBook Pro
+/// (`Mac17,7`) on the front ports. Docks and empty receptacles have no link.
+@Suite("Thunderbolt domain identity")
+struct DomainIdentityTests {
+    private static let acio0 = "25FABFC5-ADB1-4CFF-8F2C-B0DDB355D95E"
+    private static let acio1 = "E9444509-1D36-41AA-89C5-D898E7747649"
+    private static let acio2 = "177E0353-6447-4F22-AB8B-276E12B7E3B9"
+    private static let acio3 = "8FE237A7-666F-4AF5-A6C1-B63C1B260260"
+    private static let acio4 = "54719E74-925A-4EED-A4CD-766B620335E0"
+    private static let acio5 = "F09EA43C-9CF8-4ABC-8952-C32AB6983451"
+    /// The MacBook's two controllers, as this Mac's XDomain links report them.
+    private static let macBookOnEn6 = "537F4213-9E40-4E35-A37A-762A2ACCA158"
+    private static let macBookOnEn7 = "C353FA51-755F-4DEE-9A09-27C2ED2ACEA2"
+
+    private static let rig: [PortInventory.PortRow] = [
+        .init(receptacle: 1, bsdName: "en2", linkStatus: 1, domainUUID: acio0),
+        .init(receptacle: 2, bsdName: "en3", linkStatus: 1, domainUUID: acio1),
+        .init(receptacle: 3, bsdName: "en4", linkStatus: 1, domainUUID: acio2),
+        .init(receptacle: 4, bsdName: "en5", linkStatus: 1, domainUUID: acio3),
+        .init(receptacle: 5, bsdName: "en6", linkStatus: 3, domainUUID: acio4,
+              peerDomainUUIDs: [macBookOnEn6]),
+        .init(receptacle: 6, bsdName: "en7", linkStatus: 3, domainUUID: acio5,
+              peerDomainUUIDs: [macBookOnEn7]),
+    ]
+
+    /// The rig with one cable moved: en5's far end is now en6, and en6's is en5.
+    private static let looped: [PortInventory.PortRow] = [
+        rig[0], rig[1], rig[2],
+        .init(receptacle: 4, bsdName: "en5", linkStatus: 3, domainUUID: acio3,
+              peerDomainUUIDs: [acio4]),
+        .init(receptacle: 5, bsdName: "en6", linkStatus: 3, domainUUID: acio4,
+              peerDomainUUIDs: [acio3]),
+        rig[5],
+    ]
+
+    @Test("A Domain UUID is compared in one spelling, and only when it is a UUID")
+    func parsesDomainUUID() {
+        #expect(PortInventory.domainUUID(Self.acio4) == Self.acio4)
+        #expect(PortInventory.domainUUID(Self.acio4.lowercased()) == Self.acio4)
+        #expect(PortInventory.domainUUID(" \(Self.acio4)\n") == Self.acio4)
+        #expect(PortInventory.domainUUID("") == nil)
+        #expect(PortInventory.domainUUID("Mac17,7") == nil)
+        #expect(PortInventory.domainUUID("54719E74-925A-4EED-A4CD") == nil)
+    }
+
+    @Test("Two cables to another Mac are not a loop")
+    func rigIsNotLooped() {
+        #expect(PortInventory.loopedBackPartners(Self.rig).isEmpty)
+        let ports = PortInventory.assemble(rows: Self.rig, archetype: .studioSix, enrichment: [:])
+        #expect(ports.allSatisfy { $0.loopedBackTo == nil })
+        #expect(ports.map(\.domainUUID) == [Self.acio0, Self.acio1, Self.acio2, Self.acio3,
+                                            Self.acio4, Self.acio5])
+        #expect(ports.map(\.peerDomainUUIDs) == [[], [], [], [], [Self.macBookOnEn6],
+                                                 [Self.macBookOnEn7]])
+    }
+
+    @Test("A cable whose far end is another receptacle of this Mac pairs the two")
+    func pairsALoopedCable() {
+        #expect(PortInventory.loopedBackPartners(Self.looped) == ["en5": "en6", "en6": "en5"])
+        let ports = PortInventory.assemble(rows: Self.looped, archetype: .studioSix,
+                                           enrichment: [:])
+        #expect(ports.map(\.loopedBackTo) == [nil, nil, nil, "en6", "en5", nil])
+    }
+
+    @Test("Docks, empty receptacles and a Mac that says nothing are never paired")
+    func silentWhenUnknown() {
+        // No identity at all: the key is private and may not exist.
+        let mute: [PortInventory.PortRow] = [
+            .init(receptacle: 1, bsdName: "en2", linkStatus: 1),
+            .init(receptacle: 2, bsdName: "en3", linkStatus: 3),
+        ]
+        #expect(PortInventory.loopedBackPartners(mute).isEmpty)
+        // A dock: own domain, no link.
+        #expect(PortInventory.loopedBackPartners([Self.rig[0], Self.rig[1]]).isEmpty)
+        // A peer that is nobody's own domain: another Mac.
+        #expect(PortInventory.loopedBackPartners([Self.rig[4], Self.rig[5]]).isEmpty)
+    }
+
+    @Test("The match has to be mutual")
+    func requiresMutualClaim() {
+        var oneSided = Self.looped
+        oneSided[4].peerDomainUUIDs = []
+        #expect(PortInventory.loopedBackPartners(oneSided).isEmpty)
+        // A port that names itself is not a loop either.
+        var selfClaim = Self.rig
+        selfClaim[3].peerDomainUUIDs = [Self.acio3]
+        #expect(PortInventory.loopedBackPartners(selfClaim).isEmpty)
+    }
+
+    @Test("Two receptacles on one controller set nothing rather than guess")
+    func refusesSharedDomains() {
+        // en4 and en5 claim the same own domain; en6 links to it. Which
+        // receptacle the cable is in cannot be known, so nothing is said.
+        var shared = Self.looped
+        shared[2].domainUUID = Self.acio3
+        shared[2].peerDomainUUIDs = [Self.acio4]
+        #expect(PortInventory.loopedBackPartners(shared).isEmpty)
+        // A dock on en6 with two cables back into this Mac: en6's controller
+        // sees two peers, and both name it back. en6 has two candidate
+        // partners, so it pairs with neither — and without en6 naming one of
+        // them uniquely, neither of them pairs with en6. Nothing is guessed.
+        var twoPeers = Self.looped
+        twoPeers[4].peerDomainUUIDs = [Self.acio3, Self.acio2]
+        twoPeers[2].peerDomainUUIDs = [Self.acio4]
+        #expect(PortInventory.loopedBackPartners(twoPeers).isEmpty)
+    }
+}

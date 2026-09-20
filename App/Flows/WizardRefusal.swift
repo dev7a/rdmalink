@@ -389,7 +389,7 @@ extension WizardRefusal {
 
     private static func symbol(for code: RefusalCode) -> String {
         switch code {
-        case .twoMacsConnected: "cable.connector"
+        case .twoMacsConnected, .loopedBackIntoThisMac: "cable.connector"
         case .volumeMounted: "externaldrive"
         case .rolledBack: "arrow.uturn.backward.circle"
         case .rollbackFailed: "hand.raised"
@@ -419,7 +419,8 @@ extension WizardRefusal {
     /// that watches itself and clears, which has no button at all.
     private static func actions(for code: RefusalCode) -> [WizardAction] {
         switch code {
-        case .twoMacsConnected: []
+        // R1 and R2: "Buttons: none; self-clearing."
+        case .twoMacsConnected, .loopedBackIntoThisMac: []
         case .volumeMounted: [.showInFinder]
         case .onlyRouteIsThunderbolt: [.openNetworkSettings, .checkAgain]
         case .portStillInBridge: [.openNetworkSettings, .checkAgain, .copyDetails]
@@ -435,12 +436,12 @@ extension WizardRefusal {
         case .bridgeUnreadable: [.openNetworkSettings, .checkAgain, .copyDetails]
         case .foreignService: [.openNetworkSettings, .pickADifferentPort, .copyDetails]
         case .topologyChanged: [.takeAnotherLook]
-        // R19–R21, R28 and R29 are raised inside the Restore and Adopt sheets,
+        // R19–R21 and R28–R30 are raised inside the Restore and Adopt sheets,
         // which own their own button rows (§6.1 rule 1's one exception). If one
         // reaches the assistant it gets the two actions every refusal can
         // honour rather than a guess at the spec's row.
         case .undoNoteMissing, .notBackInBridge, .originalBridgeGone,
-            .createdServiceEdited, .noBridgeToReturnTo:
+            .createdServiceEdited, .noBridgeToReturnTo, .noteIsAReturnRecord:
             [.checkAgain, .copyDetails]
         }
     }

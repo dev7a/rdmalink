@@ -51,6 +51,9 @@ final class StageScene {
     private var pitch = 0.30
     private var radius = 0.5
     private var target = SIMD3<Float>(0, 0, 0)
+    /// What the camera looks at when nothing has moved it off this Mac: the
+    /// chassis's focus. §S8 pans away from it and back.
+    private var homeTarget = SIMD3<Float>(0, 0, 0)
     private var arc: Arc?
     private var elapsed = 0.0
     private var reportedFace: PortFace?
@@ -66,11 +69,23 @@ final class StageScene {
     /// §S4b: the last Identify state the scene saw, so the replug bloom starts
     /// once rather than on every frame that reports it.
     private var identifyState: StageIdentify = .off
+    /// §S8: the handoff the ghost is currently placed for, when the ghost
+    /// slid in, whether the far end has been seen to answer, and when the
+    /// returning pulse set off — the scene's own clocks for the one beat in
+    /// the app that means *the other Mac exists*.
+    private var handoff: StageHandoff?
+    private var handoffStarted: Double?
+    private var handoffAnswered = false
+    private var pulseStarted: Double?
+    /// The distance §S8's pair is framed at, which the dolly may go out to
+    /// while the handoff is up.
+    private var handoffRadius: Double?
 
     private struct Arc {
         var yaw: Double, deltaYaw: Double
         var pitch: Double, deltaPitch: Double
         var radius: Double, deltaRadius: Double
+        var target: SIMD3<Float>, deltaTarget: SIMD3<Float>
         var elapsed = 0.0
         var duration: Double
         var bumps: Bool
@@ -101,7 +116,10 @@ final class StageScene {
         self.graph = graph
         content.entities.append(graph.root)
         content.entities.append(camera)
-        target = SIMD3(0, StageMesh.metres(graph.chassis.focus), 0)
+        homeTarget = SIMD3(0, StageMesh.metres(graph.chassis.focus), 0)
+        // The ghost in this graph has never been placed; the next frame places
+        // it again for whatever handoff is up, without sliding it in again.
+        handoff = nil
         if keepingPose, hadGraph {
             // The pose survives; only the dolly limits are re-derived, because
             // a new chassis could have moved them.
@@ -109,6 +127,9 @@ final class StageScene {
         } else {
             yaw = graph.chassis.resting.yaw
             pitch = StageMath.clampPitch(graph.chassis.resting.pitch)
+            target = homeTarget
+            handoffRadius = nil
+            handoffStarted = nil
             radius = StageMath.clamp(restingRadius, dollyRange)
             arc = nil
             // `reportedFace` is left nil so the first frame — not this view
@@ -198,7 +219,12 @@ final class StageScene {
         )
         // `StageMath` collapses the far end onto the near one rather than
         // inverting; a range with no room at all would lock the wheel.
-        return (minimum: min(limits.minimum, limits.maximum), maximum: limits.maximum)
+        //
+        // §S8 frames two machines, which is further out than one; the range
+        // reaches that far for as long as the handoff is up, so a scroll of
+        // the wheel does not snap the pair back to one.
+        let maximum = max(limits.maximum, handoffRadius ?? 0)
+        return (minimum: min(limits.minimum, maximum), maximum: maximum)
     }
 
     /// Where the camera opens: the chassis's own resting distance, clamped.
@@ -256,10 +282,51 @@ final class StageScene {
         case .turn(let face): turn(to: face)
         case .squareOn(let face): turn(to: face, squareOn: true)
         case .survey(let faces): survey(faces)
+        case .handoff(let face): handoff(on: face)
+        case .endHandoff: endHandoff()
         case .fit: animate(yaw: yaw, pitch: pitch, radius: fitDistance, bumps: false)
         case .reset: reset()
         }
     }
+
+    /// §S8: "The camera pulls back and pans so this Mac occupies the leading
+    /// third of the stage." It looks half way between this Mac and where the
+    /// ghost will settle, from far enough to hold the pair, at a shallow
+    /// three-quarter on the handoff's face so the cable reads as leaving it.
+    private func handoff(on face: PortFace) {
+        guard let graph else { return }
+        let layout = StageHandoffLayout(face: face, chassis: graph.chassis)
+        let midpoint = layout.midpoint
+        let destination = homeTarget
+            + SIMD3(StageMesh.metres(midpoint.x), 0, StageMesh.metres(midpoint.z))
+        let distance = StageMath.fitDistance(
+            width: layout.framingWidth * 0.01, height: graph.chassis.visibleHeight * 0.01,
+            viewport: viewport, verticalFieldOfView: Self.verticalFieldOfView,
+            margin: StageMath.fitMargin
+        )
+        handoffRadius = distance
+        let facing = StageSceneBuilder.yaw(for: face) - Self.handoffOffset
+        animate(
+            yaw: yaw + StageMath.shortestAngleDelta(from: yaw, to: facing),
+            pitch: StageMath.clampPitch(Self.handoffPitch),
+            radius: distance, target: destination, bumps: false
+        )
+    }
+
+    /// §S8 is over: back to this Mac alone, from where the camera is, without
+    /// turning it — the ghost fades and the pan reverses, nothing more.
+    private func endHandoff() {
+        handoffRadius = nil
+        animate(
+            yaw: yaw, pitch: pitch, radius: StageMath.clamp(radius, dollyRange),
+            target: homeTarget, bumps: false
+        )
+    }
+
+    /// A shallower three-quarter than the resting pose's 0.55, so the ghost on
+    /// the far side is not foreshortened into a sliver.
+    private static let handoffOffset = 0.40
+    private static let handoffPitch = 0.22
 
     /// §3.5: a spherical arc with a simultaneous 4 % dolly-out and back.
     ///
@@ -313,11 +380,16 @@ final class StageScene {
         )
     }
 
-    private func animate(yaw destination: Double, pitch: Double, radius: Double, bumps: Bool) {
+    private func animate(
+        yaw destination: Double, pitch: Double, radius: Double,
+        target: SIMD3<Float>? = nil, bumps: Bool
+    ) {
+        let target = target ?? self.target
         arc = Arc(
             yaw: self.yaw, deltaYaw: destination - self.yaw,
             pitch: self.pitch, deltaPitch: pitch - self.pitch,
             radius: self.radius, deltaRadius: radius - self.radius,
+            target: self.target, deltaTarget: target - self.target,
             duration: appearance.reduceMotion ? Self.reducedArcDuration : Self.arcDuration,
             bumps: bumps && !appearance.reduceMotion
         )
@@ -423,6 +495,7 @@ final class StageScene {
         pitch = StageMath.clampPitch(current.pitch + current.deltaPitch * eased)
         radius = current.radius + current.deltaRadius * eased
             + (current.bumps ? StageMath.dollyBump(t, radius: current.radius) : 0)
+        target = current.target + current.deltaTarget * Float(eased)
         arc = t >= 1 ? nil : current
     }
 
@@ -452,6 +525,7 @@ final class StageScene {
 
         let moment = model.moment(focused: focusedID)
         syncRibbons(moment: moment)
+        syncLoop(moment: moment)
         noteTransitions(moment: moment)
 
         // One clock for the whole scene, which is what makes §S4b's shimmer
@@ -481,6 +555,14 @@ final class StageScene {
             pulse(node)
 
             let awake = isAwake(index: port.physicalIndex)
+            // §S8: the returning pulse "blooms at the near receptacle, once" —
+            // a glow that lands and then goes, on the scene's clock.
+            let handoffBloom = Float(
+                node.handoffBloomStarted.map {
+                    max(0, 1 - (elapsed - $0) / Self.handoffBloomDuration)
+                } ?? 0
+            )
+            if handoffBloom <= 0 { node.handoffBloomStarted = nil }
             // §S3: the attention ring's single breath, measured from the beat
             // the check named this receptacle.
             let attention = Float(
@@ -493,7 +575,8 @@ final class StageScene {
                 let target = awake
                     ? Self.targetOpacity(
                         role, port: port, moment: moment, breath: breath,
-                        attentionBreath: attention, focused: port.id == focusedID
+                        attentionBreath: attention, handoffBloom: handoffBloom,
+                        focused: port.id == focusedID
                     )
                     : 0
                 fade(node: node, role: role, to: target, deltaTime: deltaTime)
@@ -501,6 +584,74 @@ final class StageScene {
         }
 
         updateRibbons(moment: moment, deltaTime: deltaTime)
+        updateLoop(moment: moment, deltaTime: deltaTime)
+        updateHandoff(moment: moment, deltaTime: deltaTime)
+    }
+
+    // MARK: - §S8's ghost second Mac
+
+    /// How long the returning pulse takes to run the cable, and how long the
+    /// bloom it ends in lasts.
+    private static let pulseTravel = 0.7
+    private static let handoffBloomDuration = 0.9
+
+    /// The ghost slides in over the same 0.7 s the camera pulls back in, on a
+    /// cross-fade under Reduce Motion; the cable comes with it. When the far
+    /// end answers — a Mac at the far end of the near port's cable — a pulse
+    /// runs the cable back to this Mac and blooms at the receptacle, once per
+    /// answer, and not before the ghost has arrived.
+    private func updateHandoff(moment: StageMoment, deltaTime: TimeInterval) {
+        guard let graph else { return }
+        let ghost = graph.ghost
+        if moment.handoff != handoff {
+            if let intent = moment.handoff {
+                if handoff == nil, handoffStarted == nil {
+                    handoffStarted = elapsed
+                    handoffAnswered = false
+                    pulseStarted = nil
+                }
+                let near = graph.receptacles.first { $0.id == intent.portID }?.anchor
+                ghost.place(face: intent.face, near: near)
+            } else {
+                handoffStarted = nil
+                pulseStarted = nil
+                handoffAnswered = false
+                ghost.showPulse(at: nil)
+            }
+            handoff = moment.handoff
+        }
+
+        let duration = appearance.reduceMotion ? Self.reducedArcDuration : Self.arcDuration
+        let t = handoffStarted.map { min((elapsed - $0) / duration, 1) } ?? 1
+        let arrived = appearance.reduceMotion ? t : StageMath.easeInOut(t)
+        if handoff != nil {
+            ghost.show(slide: 1 - arrived, opacity: Float(arrived) * StageGhostNode.restingOpacity)
+        } else {
+            ghost.show(
+                slide: 0,
+                opacity: step(ghost.opacity, to: 0, over: Self.crossFade, deltaTime: deltaTime)
+            )
+            return
+        }
+
+        guard let intent = handoff else { return }
+        let answered = intent.portID.flatMap { id in
+            moment.ports.first { $0.id == id }
+        }?.link == .macLinked
+        if !answered { handoffAnswered = false }
+        if answered, !handoffAnswered, t >= 1 {
+            handoffAnswered = true
+            pulseStarted = elapsed
+        }
+        guard let started = pulseStarted else { return }
+        let along = appearance.reduceMotion ? 1 : (elapsed - started) / Self.pulseTravel
+        if along < 1 {
+            ghost.showPulse(at: along)
+        } else {
+            ghost.showPulse(at: nil)
+            pulseStarted = nil
+            graph.receptacles.first { $0.id == intent.portID }?.handoffBloomStarted = elapsed
+        }
     }
 
     /// The two beats that need to know *when* they started rather than only
@@ -598,7 +749,7 @@ final class StageScene {
     /// graph (see App/Stage/StageSnapshot.swift) — and a graph no `StageScene`
     /// has ever ticked has every ring disabled at opacity 0, which is a picture
     /// of bare aluminium with §4.2, §4.3 and §4.4 missing from it entirely.
-    static func settle(_ graph: StageSceneGraph, moment: StageMoment) {
+    static func settle(_ graph: StageSceneGraph, moment: StageMoment, palette: StagePalette) {
         for node in graph.receptacles {
             guard let port = moment.ports.first(where: { $0.id == node.id }) else { continue }
             setStub(node, to: port.link != .empty)
@@ -613,7 +764,7 @@ final class StageScene {
                 guard let entity = node.layers[role] else { continue }
                 let target = targetOpacity(
                     role, port: port, moment: moment, breath: Float(StageMath.restingBreath),
-                    attentionBreath: 1, focused: port.id == moment.focused
+                    attentionBreath: 1, handoffBloom: 0, focused: port.id == moment.focused
                 )
                 node.fades[role] = (target, target)
                 entity.isEnabled = target > 0.001
@@ -625,6 +776,23 @@ final class StageScene {
             link.retractionFromA = retractionTarget(for: link.a, moment: moment)
             link.retractionFromB = retractionTarget(for: link.b, moment: moment)
             show(link)
+        }
+        // §6.2 R2's thread, built for this graph and shown whole.
+        if let pair = moment.loopedPair,
+            let loop = StageLoopThread.make(
+                pair: pair, nodes: graph.receptacles, chassis: graph.chassis,
+                palette: palette
+            ) {
+            loop.opacity = loopStrength(moment: moment)
+            loop.show()
+            graph.body.addChild(loop.root)
+        }
+        // §S8's ghost, already arrived: the slide is a beat the review hook
+        // waits out, not a state it pictures.
+        if let intent = moment.handoff {
+            let near = graph.receptacles.first { $0.id == intent.portID }?.anchor
+            graph.ghost.place(face: intent.face, near: near)
+            graph.ghost.show(slide: 0, opacity: StageGhostNode.restingOpacity)
         }
     }
 
@@ -641,7 +809,7 @@ final class StageScene {
 
     private static func targetOpacity(
         _ role: StageRingRole, port: StagePort, moment: StageMoment, breath: Float,
-        attentionBreath: Float, focused: Bool
+        attentionBreath: Float, handoffBloom: Float, focused: Bool
     ) -> Float {
         // §S6: while a real operation is running on this receptacle, the
         // progress ring *is* the outer track. The state rings stand down for
@@ -657,6 +825,10 @@ final class StageScene {
             case .empty, .device: return 0
             }
         case .thread:
+            // §6.2 R2: while the one thread between the two ends of the cable
+            // is up, neither end sends its own thread out to the frame edge —
+            // that is the picture of two Macs, which R2 is there to correct.
+            if moment.loopedPair?.contains(port.id) == true { return 0 }
             if port.link == .macLinked { return 1 }
             // §S3: with two Macs connected "both receptacles ring
             // simultaneously and a faint light thread leaves each one", which
@@ -692,7 +864,9 @@ final class StageScene {
             return port.selected ? 1 : 0
         case .bloom:
             if case .confirmed(let id) = moment.identify, id == port.id { return 0.22 }
-            return port.selected ? 0.16 : (port.cfg == .ready ? 0.10 : 0)
+            let resting: Float = port.selected ? 0.16 : (port.cfg == .ready ? 0.10 : 0)
+            // §S8: the returning pulse lands here and the glow goes again.
+            return max(resting, 0.45 * handoffBloom)
         case .focus:
             return focused ? 1 : 0
         case .serviceNode:
@@ -726,6 +900,58 @@ final class StageScene {
         if entity.isEnabled != visible { entity.isEnabled = visible }
         guard visible, !settled else { return }
         entity.components.set(OpacityComponent(opacity: fade.current))
+    }
+
+    // MARK: - §6.2 R2's thread between two ports of the same machine
+
+    /// Built when preflight names a pair and taken down once it has faded:
+    /// the pair is two ids, so a re-read that names the same two is one
+    /// comparison a frame, and a different pair — or none — swaps the thread
+    /// out under the same cross-fade the rings use.
+    private func syncLoop(moment: StageMoment) {
+        guard let graph else { return }
+        if let loop = graph.loop {
+            if loop.pair == moment.loopedPair { return }
+            // Let the old one fade out before it goes; a new pair replaces it
+            // at once, because the two would cross the machine together.
+            guard moment.loopedPair != nil || loop.opacity > 0.001 else {
+                loop.root.removeFromParent()
+                self.graph?.loop = nil
+                return
+            }
+            if moment.loopedPair == nil { return }
+            loop.root.removeFromParent()
+            self.graph?.loop = nil
+        }
+        guard let pair = moment.loopedPair,
+            let loop = StageLoopThread.make(
+                pair: pair, nodes: graph.receptacles, chassis: graph.chassis,
+                palette: StagePalette(appearance: appearance)
+            )
+        else { return }
+        graph.body.addChild(loop.root)
+        self.graph?.loop = loop
+    }
+
+    private func updateLoop(moment: StageMoment, deltaTime: TimeInterval) {
+        guard let loop = graph?.loop else { return }
+        let opacity = step(
+            loop.opacity, to: Self.loopStrength(moment: moment), over: Self.crossFade,
+            deltaTime: deltaTime
+        )
+        guard opacity != loop.opacity else { return }
+        loop.opacity = opacity
+        loop.show()
+    }
+
+    /// Up while the pair is named and both ends are ringed, and faded with the
+    /// rings: R2 "self-clearing" is the thread and the rings going together.
+    /// Identify owns the thin ring while it runs (§S4b), and the thread waits
+    /// with it.
+    private static func loopStrength(moment: StageMoment) -> Float {
+        guard let pair = moment.loopedPair, moment.identify == .off else { return 0 }
+        let ringed = moment.ports.filter { pair.contains($0.id) && $0.attention }
+        return ringed.count == 2 ? 1 : 0
     }
 
     // MARK: - §4.4's bridge ribbon

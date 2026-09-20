@@ -1,25 +1,29 @@
 //
-//  OtherMacSheet.swift
+//  OtherMacScreen.swift
 //
-//  S8's four steps, reached from the Help menu's "What to Do on the Other Mac".
+//  S8 — Now the other Mac (UX_SPEC §S8). "Close the loop the app cannot
+//  cross." Reached from S7's footer and from the Help menu. **A screen, not a
+//  sheet**, because the stage does the talking: while this is up, the camera
+//  pulls back, a featureless ghost of a second Mac slides in beside this one
+//  with a single thin line between them, and when the far end answers a pulse
+//  travels back along that line and blooms at the near receptacle, once.
 //
-//  UX_SPEC §S8 makes this a *screen* rather than a sheet, because there the
-//  stage performs the handoff with the ghost second Mac. That screen, and the
-//  ghost, belong to ML3 and to the stage. Until then the copy is offered where
-//  the spec also says it is reachable from — the Help menu — as a sheet with no
-//  3D content, which is the honest subset: every word is §S8's, and nothing
-//  claims a picture it isn't drawing.
+//  It takes the working area's place the way §S11's change log does, so the
+//  port list — compact, per §2.3 — and the model stay beside it.
 //
 
 import AppKit
 import SwiftUI
 
-struct OtherMacSheet: View {
-    /// The `fe80::` address of the first ready port, when there is one.
-    let address: String?
-    @Environment(\.dismiss) private var dismiss
+struct OtherMacScreen: View {
+    let model: InventoryModel
+    /// §S8's 3D behaviour is the stage's; this screen only tells it when the
+    /// handoff begins and ends, and which port it is about.
+    let stage: StageModel
+    let done: () -> Void
 
     var body: some View {
+        let report = OtherMacReport(ports: model.ports)
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Now the other Mac")
@@ -33,7 +37,7 @@ struct OtherMacSheet: View {
                 NumberedStep(number: 1, text: "Copy RDMALink across, or download it again on the other Mac.")
                 NumberedStep(number: 2, text: "Open it and walk the same short path.")
                 NumberedStep(number: 3, text: "Pick the port with the other end of this cable in it. Identify makes that painless.")
-                if let address {
+                if let address = report.address {
                     NumberedStep(
                         number: 4,
                         text: "When both sides are done, each Mac has its own address on this link. This one is \(address)."
@@ -45,6 +49,12 @@ struct OtherMacSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Leave this one cable connected while you're over there — and keep it to one cable between the pair.")
                 Text("I can only see this Mac. Nothing I did crossed that cable — that's deliberate.")
+                if report.answered {
+                    // §S8's live line, in the same beat as the stage's
+                    // returning pulse: one event, two places.
+                    Text("Something answered on this link. That's a good sign — the other end is awake.")
+                        .transition(.opacity)
+                }
             }
             .font(.callout)
             .foregroundStyle(.secondary)
@@ -54,18 +64,25 @@ struct OtherMacSheet: View {
                 // §S8's button row is "**Copy These Steps** → **Copied** ·
                 // **Done**": a state the button passes through, not an end
                 // state (§9.14).
-                CopyButton(title: "Copy These Steps") { plainTextSteps }
-                Button("Done") { dismiss() }
+                CopyButton(title: "Copy These Steps") { plainTextSteps(address: report.address) }
+                Button("Done", action: done)
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(24)
-        .frame(width: 500, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.smooth(duration: 0.25), value: report)
+        // §S8: the stage performs the handoff for as long as the screen is up,
+        // about the port step 4 names — and re-aims if a later reading
+        // changes which port that is.
+        .onChange(of: report.subjectID, initial: true) { _, id in
+            stage.beginHandoff(for: id)
+        }
+        .onDisappear { stage.endHandoff() }
     }
 
     /// The same four sentences, as plain text, for the other Mac's notes app.
-    private var plainTextSteps: String {
+    private func plainTextSteps(address: String?) -> String {
         var lines = [
             String(localized: "Now the other Mac"),
             "",

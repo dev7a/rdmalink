@@ -210,7 +210,8 @@ extension ThunderboltPort {
             bsdName: bsdName,
             positionName: positionName,
             hasLinkedMac: link == .macLinked,
-            bridges: bridges.map(\.name)
+            bridges: bridges.map(\.name),
+            loopedBackTo: loopedBackTo
         )
     }
 }

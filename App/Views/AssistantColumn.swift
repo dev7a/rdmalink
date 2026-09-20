@@ -31,13 +31,15 @@ struct AssistantColumn: View {
     /// §S5's hover-to-preview, which only the window can wire: the stage is
     /// its own.
     var preview: (ReviewPreview?, String) -> Void = { _, _ in }
-    /// S7's `What to Do on the Other Mac`.
+    /// S7's `What to Do on the Other Mac`, which closes the assistant and
+    /// opens §S8 in its place.
     var showOtherMac: (() -> Void)?
 
     /// §2.3 band 3: **full** on the hub, Choose a port and Identify; compact
-    /// on the RDMA screen, preflight, review, apply, done and the change log.
+    /// on the RDMA screen, preflight, review, apply, done, other Mac and the
+    /// change log.
     private var density: PortListDensity {
-        if actions.showsChangeLog { return .compact }
+        if actions.showsChangeLog || router.showsOtherMac { return .compact }
         guard let flow else { return .full }
         if flow.identify != nil { return .full }
         return flow.step == .choose ? .full : .compact
@@ -50,29 +52,52 @@ struct AssistantColumn: View {
         return flow.selection
     }
 
+    /// §2.3 band 3's floor: the list "is never truncated away". Band 2 is
+    /// offered what is left above this and no more — a face header and three
+    /// compact rows, enough to keep every receptacle a scroll away rather
+    /// than a step away.
+    private static let portListFloor: CGFloat = 120
+
+    /// What band 2 measures at its natural height, so the scroll view around
+    /// it is exactly as tall as its content while the content fits and no
+    /// taller — on the hub the column lays out as if there were no scroll
+    /// view at all.
+    @State private var workingAreaHeight: CGFloat?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Absent on the hub by design (§2.3 band 1); the wizard steps in
             // ML2 pass a title and a `Step n of 5` caption.
             AssistantHeaderRow(title: nil, stepCaption: nil)
-            // §S11: "The working area is replaced by a scrolling list… The
-            // port list stays in place beside it."
-            if let flow {
-                WizardWorkingArea(
-                    flow: flow, model: model, stage: stage, preview: preview,
-                    turnAndBreathe: turnAndBreathe, recheck: recheck,
-                    showOtherMac: showOtherMac
-                )
-                .padding(.bottom, 12)
-            } else if actions.showsChangeLog {
+            // §S8 and §S11 each take the working area's place — "The port
+            // list stays in place beside it." — and neither interrupts the
+            // assistant: asked for while it is up, they wait for it to close.
+            if flow == nil, !router.showsOtherMac, actions.showsChangeLog {
+                // §S11's list scrolls on its own, under its own buttons.
                 ChangeLogView(hub: actions, stage: stage, model: model)
                     .padding(.bottom, 12)
             } else {
-                WorkingArea(
-                    model: model, stage: stage, usbTip: usbTip,
-                    dismissUSBTip: dismissUSBTip, turnAndBreathe: turnAndBreathe
-                )
-                .padding(.bottom, 12)
+                // Band 2 is the one band that changes between steps, and the
+                // one that can outgrow the window: §S5 lists four changes and
+                // two disclosures over a six-port list. When it cannot fit
+                // it scrolls — the list keeps its floor and scrolls on its
+                // own (§2.3 band 3), and the footer stays put (§2.3 band 4,
+                // §2.5) — so `Back` and the primary button are never below
+                // the window's edge.
+                ScrollView(.vertical) {
+                    workingArea
+                        .padding(.bottom, 12)
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.height
+                        } action: { height in
+                            workingAreaHeight = height
+                        }
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(maxHeight: workingAreaHeight ?? .infinity)
+                // Laid out before the list, which is offered what is left
+                // above its floor.
+                .layoutPriority(1)
             }
             PortList(
                 ports: model.ports,
@@ -90,7 +115,10 @@ struct AssistantColumn: View {
                         ? { flow.extendSelection($0) } : nil
                 }
             )
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(
+                maxWidth: .infinity, minHeight: Self.portListFloor, maxHeight: .infinity,
+                alignment: .top
+            )
             if let flow {
                 WizardFooter(flow: flow)
                     .padding(.top, 12)
@@ -102,6 +130,25 @@ struct AssistantColumn: View {
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(.windowBackground)
+    }
+
+    /// Band 2, by precedence: the assistant, then §S8, then the hub.
+    @ViewBuilder
+    private var workingArea: some View {
+        if let flow {
+            WizardWorkingArea(
+                flow: flow, model: model, stage: stage, preview: preview,
+                turnAndBreathe: turnAndBreathe, recheck: recheck,
+                showOtherMac: showOtherMac
+            )
+        } else if router.showsOtherMac {
+            OtherMacScreen(model: model, stage: stage) { router.showsOtherMac = false }
+        } else {
+            WorkingArea(
+                model: model, stage: stage, usbTip: usbTip,
+                dismissUSBTip: dismissUSBTip, turnAndBreathe: turnAndBreathe
+            )
+        }
     }
 }
 

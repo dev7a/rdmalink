@@ -134,6 +134,15 @@ func runInventory() throws {
         print("    link: \(describe(port.link))")
         print("    bridges: \(list(port.bridges.map(describe)))")
         print("    fe80: \(list(port.linkLocal))")
+        // Thunderbolt domain identity, from private IOThunderboltFamily keys:
+        // absent on a USB-only receptacle and on a Mac that does not publish
+        // them. The peer domain is what the far end calls itself, so a peer
+        // that is one of this Mac's own domains is a cable looped back.
+        if port.isThunderbolt {
+            print("    own domain: \(port.domainUUID ?? "not published")")
+            print("    peer domains: \(list(port.peerDomainUUIDs))")
+            print("    looped back to: \(port.loopedBackTo ?? "none")")
+        }
     }
 }
 
@@ -205,6 +214,7 @@ func runRefusals() throws {
         names[bridge.bsdName] = bridge.displayName
     }
 
+    report("R2", "No cable comes back into this Mac", Refusals.loopedBackIntoThisMac(observed))
     report("R1", "Only one Mac is connected", Refusals.oneCableOnly(observed))
     report("R5", "Something other than Thunderbolt reaches this Mac", Refusals.managementPathExists(
         in: snapshot, thunderboltPorts: inventory.thunderboltBSDNames,
@@ -413,9 +423,15 @@ func runRestore(_ bsdName: String?) throws {
             + "return record: \(returned)")
     }
     // A return record is not one Restore… lists (§7.5 step 5); the sheet
-    // never reaches this preview for one, so the tool says in its own words
-    // what the note is and which actions apply, and stops.
+    // never reaches this preview for one, so the tool prints §6.2 R30 and
+    // then, in its own technical words, what the note is and which actions
+    // apply, and stops.
     if let returned = plan.returnedToBridge, let note {
+        if let refusal = plan.refusal {
+            print("")
+            print("In the way:")
+            show(refusal)
+        }
         print("")
         print("Refusing: \(bsdName)'s note is a return record, not an undo note — Return to "
             + "Bridge put the port in \(returned.name) (\(returned.bsdName)) on "

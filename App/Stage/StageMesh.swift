@@ -8,6 +8,8 @@
 
 import CoreGraphics
 import Foundation
+import Metal
+import RDMALinkCore
 import RealityKit
 import simd
 
@@ -162,6 +164,7 @@ enum StageMesh {
 
     @MainActor private static var rings: [RingKey: MeshResource] = [:]
     @MainActor private static var threadSegments: [ThreadSegment]?
+    @MainActor private static var grilleTile: TextureResource?
 
     /// A flat rounded-rectangle outline in the XY plane, facing `+z`.
     ///
@@ -322,7 +325,7 @@ enum StageMesh {
 
     @MainActor
     private static func makeThread(
-        segments count: Int = 8, peakOpacity: Float = 0.35
+        segments count: Int = 8, peakOpacity: Float = threadPeakOpacity
     ) -> [ThreadSegment] {
         let start = SIMD3<Float>(0, 0, metres(0.4))
         let control = SIMD3<Float>(0, metres(-0.5), metres(6))
@@ -333,30 +336,246 @@ enum StageMesh {
             return inverse * inverse * start + 2 * inverse * t * control + t * t * end
         }
 
-        return (0..<count).map { index in
+        return (0..<count).compactMap { index in
             let t0 = Float(index) / Float(count)
             let t1 = Float(index + 1) / Float(count)
-            let a = point(t0), b = point(t1)
-            let axis = b - a
-            let length = simd_length(axis)
-            let radius = metres(0.09) * (1 - 0.75 * t0)
-            let mesh = MeshResource.generateCylinder(height: length, radius: max(radius, 0.0002))
-            // generateCylinder is built along +y; aim it along the segment.
-            // `simd_quatf(from:to:)` is undefined for antiparallel vectors, so
-            // a segment that happens to point straight down gets the half turn
-            // spelled out rather than a NaN transform.
-            let direction = simd_normalize(axis)
-            let rotation = direction.y < -0.9999
-                ? simd_quatf(angle: .pi, axis: SIMD3<Float>(1, 0, 0))
-                : simd_quatf(from: SIMD3<Float>(0, 1, 0), to: direction)
-            let transform = Transform(
-                scale: .one, rotation: rotation, translation: (a + b) / 2
-            )
             let fade = 1 - Float(index) / Float(count)
-            return ThreadSegment(
-                mesh: mesh, transform: transform, opacity: peakOpacity * fade * fade
+            return threadSegment(
+                from: point(t0), to: point(t1), radius: metres(0.09) * (1 - 0.75 * t0),
+                opacity: peakOpacity * fade * fade
             )
         }
+    }
+
+    /// The light thread's own opacity where it leaves the receptacle, and
+    /// its radius there. §6.2 R2's loop is drawn at the same values from end
+    /// to end, so the two threads are recognisably the same light.
+    static let threadPeakOpacity: Float = 0.35
+    static let threadRadius = 0.09
+
+    /// One straight run of thread between two points, in metres. Nil for a
+    /// run too short to aim.
+    @MainActor
+    static func threadSegment(
+        from a: SIMD3<Float>, to b: SIMD3<Float>, radius: Float, opacity: Float
+    ) -> ThreadSegment? {
+        let axis = b - a
+        let length = simd_length(axis)
+        guard length > 1e-6 else { return nil }
+        let mesh = MeshResource.generateCylinder(height: length, radius: max(radius, 0.0002))
+        // generateCylinder is built along +y; aim it along the segment.
+        // `simd_quatf(from:to:)` is undefined for antiparallel vectors, so
+        // a segment that happens to point straight down gets the half turn
+        // spelled out rather than a NaN transform.
+        let direction = axis / length
+        let rotation = direction.y < -0.9999
+            ? simd_quatf(angle: .pi, axis: SIMD3<Float>(1, 0, 0))
+            : simd_quatf(from: SIMD3<Float>(0, 1, 0), to: direction)
+        let transform = Transform(scale: .one, rotation: rotation, translation: (a + b) / 2)
+        return ThreadSegment(mesh: mesh, transform: transform, opacity: opacity)
+    }
+
+    /// UX_SPEC §6.2 R2: "a single light thread is drawn between them, arcing
+    /// across the chassis". The same light as ``thread()``, run end to end
+    /// along a path in centimetres in the chassis's own frame — the one the
+    /// ribbon walks, lifted further off the surface.
+    @MainActor
+    static func loopThread(along path: [SIMD3<Double>]) -> [ThreadSegment] {
+        zip(path, path.dropFirst()).compactMap { start, end in
+            threadSegment(
+                from: SIMD3(metres(start.x), metres(start.y), metres(start.z)),
+                to: SIMD3(metres(end.x), metres(end.y), metres(end.z)),
+                radius: metres(threadRadius), opacity: threadPeakOpacity
+            )
+        }
+    }
+
+    // MARK: - The grille
+
+    /// The hole pattern of a `Chassis.grille`, in centimetres: the prototype's
+    /// `grilleTexture()`, which draws a 640 × 512 px tile at 100 px/cm.
+    ///
+    /// These are renderer numbers, like the 0.16 and 0.22 cm recess depths:
+    /// the catalogue says where the grille is, and this says what it is made
+    /// of. One tile is an exact number of periods — 64 columns by 64 rows,
+    /// the row count even so the half-pitch stagger of the odd rows continues
+    /// across both wrap edges — which is what lets the strip repeat it a
+    /// fractional number of times with no seam.
+    enum GrillePattern {
+        /// Hole pitch across a row.
+        static let pitch = 0.10
+        /// Pitch between rows.
+        static let rowPitch = 0.08
+        /// The hole's radius.
+        static let radius = 0.032
+        static let columns = 64
+        static let rows = 64
+        /// One tile, across and up.
+        static var tileWidth: Double { pitch * Double(columns) }
+        static var tileHeight: Double { rowPitch * Double(rows) }
+        /// How far the strip stands proud of the shell. Scenery holes stand at
+        /// 0.01, which is why the catalogue keeps the two apart in the plane.
+        static let standoff = 0.02
+        static let pixelsPerCentimetre = 100.0
+    }
+
+    /// The grille tile: one texture, generated the first time a chassis with a
+    /// grille is built and shared by every one after it, in both appearances.
+    ///
+    /// White holes on transparent, so the tint comes from the palette and the
+    /// same tile serves light and dark. It is read as an opacity mask with a
+    /// threshold, which makes the material a cut-out: the aluminium shows
+    /// through between the holes. Mipmapped, so the field does not moiré at
+    /// the resting distance, where a 0.1 cm pitch is under a point.
+    @MainActor
+    static func grille() throws -> TextureResource {
+        if let grilleTile { return grilleTile }
+        let tile = try makeGrilleTile()
+        grilleTile = tile
+        return tile
+    }
+
+    @MainActor
+    private static func makeGrilleTile() throws -> TextureResource {
+        let scale = GrillePattern.pixelsPerCentimetre
+        let width = Int((GrillePattern.tileWidth * scale).rounded())
+        let height = Int((GrillePattern.tileHeight * scale).rounded())
+        guard
+            let space = CGColorSpace(name: CGColorSpace.sRGB),
+            let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8,
+                bytesPerRow: 0, space: space,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else { throw StageMeshError.textureUnavailable }
+
+        context.clear(CGRect(x: 0, y: 0, width: width, height: height))
+        context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+        let step = GrillePattern.pitch * scale
+        let rowStep = GrillePattern.rowPitch * scale
+        let radius = GrillePattern.radius * scale
+        // One column and one row past each edge, so a hole that crosses the
+        // tile's edge is completed on the other side and the wrap is exact.
+        for row in -1...GrillePattern.rows {
+            for column in -1...GrillePattern.columns {
+                let stagger = row & 1 == 0 ? 0 : step / 2
+                let x = Double(column) * step + stagger + step / 4
+                let y = Double(row) * rowStep + rowStep / 2
+                context.fillEllipse(
+                    in: CGRect(x: x - radius, y: y - radius, width: 2 * radius, height: 2 * radius)
+                )
+            }
+        }
+        guard let image = context.makeImage() else { throw StageMeshError.textureUnavailable }
+        return try TextureResource(
+            image: image, withName: "grille",
+            options: .init(
+                semantic: PhysicallyBasedMaterial.Opacity.textureSemantic,
+                mipmapsMode: .allocateAndGenerateAll
+            )
+        )
+    }
+
+    /// How the tile is sampled: repeating, so the strip's UVs can run past 1,
+    /// and anisotropic, because the back face is seen at a slant from the
+    /// resting pose.
+    @MainActor
+    static func grilleSampler() -> MaterialParameters.Texture.Sampler {
+        let descriptor = MTLSamplerDescriptor()
+        descriptor.sAddressMode = .repeat
+        descriptor.tAddressMode = .repeat
+        descriptor.minFilter = .linear
+        descriptor.magFilter = .linear
+        descriptor.mipFilter = .linear
+        descriptor.maxAnisotropy = 8
+        return .init(descriptor)
+    }
+
+    /// The strip a grille is drawn on: a vertical band on the shell's own
+    /// outline, standing `GrillePattern.standoff` proud of it, in the chassis's
+    /// frame with `y` up and the base band already added.
+    ///
+    /// The prototype draws its grille as a flat plane, and its rectangle
+    /// reaches past the flat part of the back face into both corners, where a
+    /// plane floats up to 0.35 cm off the shell. This follows the corner
+    /// instead: it walks the same `roundedRectPath` the shell is extruded
+    /// from, so the strip lies on the aluminium for its whole length. The
+    /// tile's repeat is baked into the texture coordinates — one tile per
+    /// `GrillePattern.tileWidth` of arc and `tileHeight` of rise — so the
+    /// hole pitch is the same centimetre everywhere on the curve.
+    @MainActor
+    static func grilleStrip(
+        face: PortFace, u0: Double, u1: Double, y0: Double, y1: Double,
+        width: Double, depth: Double, cornerRadius: Double, samples: Int = 64
+    ) throws -> MeshResource {
+        // The same outline, in the same chords, the shell's side band is
+        // extruded from (`prism`), so every point here lies on the aluminium.
+        let cornerSegments = 8
+        let path = StageMath.roundedRectPath(
+            width: width, height: depth, cornerRadius: cornerRadius, cornerSegments: cornerSegments
+        )
+        guard let perimeter = path.last?.distance, perimeter > 0, u1 > u0, y1 > y0 else {
+            throw StageMeshError.degenerateRing
+        }
+        let across = (face == .back || face == .front) ? width : depth
+        let radius = min(max(cornerRadius, 0), min(width, depth) / 2)
+        let centres = StageMath.faceCentreDistances(
+            width: width, depth: depth, cornerRadius: radius, cornerSegments: cornerSegments
+        )
+        let centre = switch face {
+        case .back: centres.back
+        case .right: centres.right
+        case .front: centres.front
+        case .left: centres.left
+        }
+        // `u` runs from the viewer's left, which is against the path's
+        // direction on every face. `arc` is the path distance from the
+        // face's middle to the point across from `u`, through the corner
+        // where the rectangle reaches one.
+        func arc(_ u: Double) -> Double {
+            StageMath.arcOffset(
+                fromFaceCentre: -(u - 0.5) * across, across: across, cornerRadius: radius,
+                cornerSegments: cornerSegments
+            )
+        }
+        let start = arc(u0), end = arc(u1)
+        let (first, last) = start < end ? (start, end) : (end, start)
+        let steps = max(samples, 1)
+
+        var positions: [SIMD3<Float>] = []
+        var normals: [SIMD3<Float>] = []
+        var coordinates: [SIMD2<Float>] = []
+        var indices: [UInt32] = []
+
+        for step in 0...steps {
+            let along = first + (last - first) * Double(step) / Double(steps)
+            var distance = (centre + along).truncatingRemainder(dividingBy: perimeter)
+            if distance < 0 { distance += perimeter }
+            let sample = StageMath.sample(path, at: distance)
+            let planar = sample.point + sample.normal * GrillePattern.standoff
+            // Profile `x` is the chassis's `x`, and profile `y` is its `z`:
+            // the same quarter turn `standing` gives the shell.
+            let normal = SIMD3(Float(sample.normal.x), 0, Float(sample.normal.y))
+            let u = Float((along - first) / GrillePattern.tileWidth)
+            for (y, v) in [(y0, Float(0)), (y1, Float((y1 - y0) / GrillePattern.tileHeight))] {
+                positions.append(SIMD3(metres(planar.x), metres(y), metres(planar.y)))
+                normals.append(normal)
+                coordinates.append(SIMD2(u, v))
+            }
+        }
+        for step in 0..<steps {
+            let a = UInt32(step * 2), d = a + 1, b = a + 2, c = a + 3
+            // The path is counter-clockwise seen from above, so `along × up`
+            // points into the box; wound the other way, the strip faces out.
+            indices.append(contentsOf: [a, c, b, a, d, c])
+        }
+
+        var descriptor = MeshDescriptor(name: "grille")
+        descriptor.positions = MeshBuffers.Positions(positions)
+        descriptor.normals = MeshBuffers.Normals(normals)
+        descriptor.textureCoordinates = MeshBuffers.TextureCoordinates(coordinates)
+        descriptor.primitives = .triangles(indices)
+        return try MeshResource.generate(from: [descriptor])
     }
 
     // MARK: - The surround

@@ -22,6 +22,9 @@ public struct OperationPort: Sendable, Equatable {
     /// The BSD names of every bridge this port is in, kernel or saved
     /// settings, as ``ThunderboltPort/bridges`` had them. R1's other input.
     public var bridges: [String]
+    /// The receptacle on this Mac the same cable comes back into, as
+    /// ``ThunderboltPort/loopedBackTo`` had it. R2's input.
+    public var loopedBackTo: String?
 
     public init(
         bsdName: String,
@@ -29,7 +32,8 @@ public struct OperationPort: Sendable, Equatable {
         positionName: String,
         link: LinkState = .empty,
         linkLocalAddresses: [String] = [],
-        bridges: [String] = []
+        bridges: [String] = [],
+        loopedBackTo: String? = nil
     ) {
         self.bsdName = bsdName
         self.receptacle = receptacle
@@ -37,6 +41,7 @@ public struct OperationPort: Sendable, Equatable {
         self.link = link
         self.linkLocalAddresses = linkLocalAddresses
         self.bridges = bridges
+        self.loopedBackTo = loopedBackTo
     }
 
     public init(_ port: ThunderboltPort) {
@@ -46,7 +51,8 @@ public struct OperationPort: Sendable, Equatable {
             positionName: port.positionName,
             link: port.link,
             linkLocalAddresses: port.linkLocal,
-            bridges: port.bridges.map(\.name))
+            bridges: port.bridges.map(\.name),
+            loopedBackTo: port.loopedBackTo)
     }
 
     /// True when another Mac is on the end of this cable — R1's input.
@@ -55,7 +61,8 @@ public struct OperationPort: Sendable, Equatable {
     /// This port as the refusal functions see it.
     public var observed: ObservedPort {
         ObservedPort(bsdName: bsdName, positionName: positionName,
-                     hasLinkedMac: hasLinkedMac, bridges: bridges)
+                     hasLinkedMac: hasLinkedMac, bridges: bridges,
+                     loopedBackTo: loopedBackTo)
     }
 }
 

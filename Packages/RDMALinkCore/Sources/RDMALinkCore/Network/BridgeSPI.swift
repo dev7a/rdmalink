@@ -33,7 +33,10 @@ public struct BridgeSPIAvailability: Sendable, Equatable {
         ]
         return needed.allSatisfy(resolved.contains)
     }
-    /// The private configuration push is available.
+    /// The private configuration push, `_SCBridgeInterfaceUpdateConfiguration`,
+    /// resolves. Reported by `rdmalink bridge-probe` and nothing else: the
+    /// call is root-only in practice (`docs/ARCHITECTURE.md`), so no operation
+    /// makes it — configd runs it itself after every apply.
     public var canUpdateConfiguration: Bool {
         resolved.contains("_SCBridgeInterfaceUpdateConfiguration")
     }
@@ -197,7 +200,6 @@ public enum BridgeSPI {
     private typealias GetFlag = @convention(c) (SCBridgeInterfaceRef) -> DarwinBoolean
     private typealias SetMembers =
         @convention(c) (SCBridgeInterfaceRef, CFArray) -> DarwinBoolean
-    private typealias UpdateConfiguration = @convention(c) (SCPreferences) -> DarwinBoolean
 
     // MARK: - Reads
 
@@ -267,12 +269,11 @@ public enum BridgeSPI {
     /// the port is not a member, nothing is written and
     /// ``BridgeSPIError/memberNotFound(bsdName:bridge:)`` is thrown.
     ///
-    /// **Internal on purpose.** This only changes an open preferences session,
-    /// and ``updateConfiguration(in:)`` — which the kernel adopts immediately,
-    /// with no commit — has to follow it. Both are reachable only through
-    /// ``BridgeMembershipChange``, which owns the authorized session, honours
-    /// ``AuthorizedSession/Mode/dryRun``, requires the undo note first, and
-    /// verifies the kernel afterwards.
+    /// **Internal on purpose.** This only changes an open preferences session;
+    /// the commit and the apply that realise it are the caller's. It is
+    /// reachable only through ``NetworkWriter``, which owns the authorized
+    /// session, honours ``AuthorizedSession/Mode/dryRun``, requires the undo
+    /// note first, and verifies the kernel afterwards.
     ///
     /// - Returns: what the bridge's membership should now be.
     @discardableResult
@@ -324,30 +325,6 @@ public enum BridgeSPI {
         members.insert(interface, at: min(max(position ?? members.count, 0), members.count))
         try setMemberInterfaces(members, of: bridge, step: "Add \(bsdName) to \(bridgeName)")
         return try describe(bridge)
-    }
-
-    /// Pushes the bridge configuration.
-    ///
-    /// **Root only in practice.** From the authorized but non-root CLI it fails
-    /// with `bridge0: could not set MAC address: Operation not permitted`
-    /// (2026-09-20), so the operations never call it: configd runs this very
-    /// call on every `SCPreferencesApplyChanges`, and they apply again instead.
-    ///
-    /// **This is what configd itself uses to realise a bridge change**: it
-    /// issues the `SIOCSDRVSPEC` ioctls that add and remove members, so the
-    /// kernel has it the moment the call returns and `SCPreferencesCommitChanges`
-    /// is never consulted. There is no such thing as a dry run of this call —
-    /// ``BridgeMembershipChange`` never reaches it outside
-    /// ``AuthorizedSession/Mode/live``.
-    static func updateConfiguration(in preferences: SCPreferences) throws {
-        let call = unsafeBitCast(try symbol("_SCBridgeInterfaceUpdateConfiguration"),
-                                 to: UpdateConfiguration.self)
-        guard call(preferences).boolValue else {
-            let code = SCError()
-            throw BridgeSPIError.callFailed(
-                step: "Update the bridge configuration", code: code,
-                message: NetworkConfigurationError.message(code))
-        }
     }
 
     /// Every mutation starts here: a missing symbol is a supervised System

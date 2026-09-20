@@ -135,6 +135,12 @@ final class SetUpFlow {
         }
     }
 
+    /// §6.2 R2's pair, for the thread the stage draws between them. Only
+    /// preflight names it: the same two receptacles are ringed there.
+    var loopedPortIDs: [String] {
+        step == .preflight ? preflight.loopedPortIDs : []
+    }
+
     // MARK: - The footer
 
     /// §S4b: `Cancel` leading while Identify is up, `Back` everywhere else.

@@ -45,6 +45,21 @@ public struct ThunderboltPort: Sendable, Identifiable, Equatable {
     public var bridges: [BridgeMembership]
     /// `fe80::` addresses on this interface, without the `%scope` suffix.
     public var linkLocal: [String]
+    /// This receptacle's own Thunderbolt domain — the private
+    /// `IOThunderboltLocalNode` key `Domain UUID`, one per controller and so
+    /// one per receptacle on Apple Silicon. `nil` when this Mac did not say.
+    public var domainUUID: String?
+    /// The domain on the far end of each cross-domain link on this
+    /// receptacle's controller — the same key on `IOThunderboltXDomainLink`.
+    /// Another Mac's local node reports exactly this value as its own, which
+    /// is what lets a cable that comes back into this Mac be recognized.
+    /// Empty for a dock, an empty receptacle, or a Mac that does not publish
+    /// the key.
+    public var peerDomainUUIDs: [String]
+    /// The BSD name of the receptacle on this Mac the same cable is plugged
+    /// into, when there is one — R2's finding. Set only on a mutual, unique
+    /// domain match, so it is never a guess.
+    public var loopedBackTo: String?
 
     /// One bridge a port belongs to, as the kernel or the stored network
     /// configuration has it.
@@ -148,7 +163,10 @@ public struct ThunderboltPort: Sendable, Identifiable, Equatable {
         isThunderbolt: Bool = true,
         link: LinkState,
         bridges: [BridgeMembership] = [],
-        linkLocal: [String] = []
+        linkLocal: [String] = [],
+        domainUUID: String? = nil,
+        peerDomainUUIDs: [String] = [],
+        loopedBackTo: String? = nil
     ) {
         self.id = id
         self.receptacle = receptacle
@@ -159,6 +177,9 @@ public struct ThunderboltPort: Sendable, Identifiable, Equatable {
         self.link = link
         self.bridges = bridges
         self.linkLocal = linkLocal
+        self.domainUUID = domainUUID
+        self.peerDomainUUIDs = peerDomainUUIDs
+        self.loopedBackTo = loopedBackTo
     }
 
     /// The merge point for what only `ifconfig` can say.

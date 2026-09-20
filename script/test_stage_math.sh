@@ -181,6 +181,40 @@ check(
     "the stadium's ends are round, not clipped"
 )
 
+// The grille strip's walk round the footprint (StageMesh.grilleStrip). Face
+// middles lie where the path puts them -- in the path's own chords, not the
+// analytic arc -- and an offset along a face turns into the corner rather
+// than floating off it.
+let studioPath = StageMath.roundedRectPath(width: 19.7, height: 19.7, cornerRadius: 2.4, cornerSegments: 8)
+let studioPerimeter = studioPath.last!.distance
+let corner = StageMath.cornerLength(radius: 2.4, cornerSegments: 8)
+check(corner < .pi * 2.4 / 2 && corner > .pi * 2.4 / 2 - 0.01, "eight chords are a hair under the quarter arc")
+check(near(4 * corner + 4 * 14.9, studioPerimeter, 1e-9), "and four of them plus the flats are the path's own perimeter")
+let centres = StageMath.faceCentreDistances(width: 19.7, depth: 19.7, cornerRadius: 2.4, cornerSegments: 8)
+check(near(centres.back, 7.45, 1e-12), "the back face's middle is half a flat from where the path starts")
+check(near(centres.right, 7.45 + 7.45 + corner + 7.45, 1e-12), "the right face's middle is a flat, a corner and a flat on")
+check(near(centres.front, 7.45 + studioPerimeter / 2, 1e-9), "the front face's middle is half way round from the back's")
+check(near(centres.left, 7.45 + studioPerimeter * 3 / 4, 1e-9), "the left face's middle is three quarters round from the back's")
+let backFaceMiddle = StageMath.sample(studioPath, at: centres.back)
+check(abs(backFaceMiddle.point.x) < 1e-9 && near(backFaceMiddle.point.y, -9.85, 1e-9), "the back middle lands on the back face")
+let rightMiddle = StageMath.sample(studioPath, at: centres.right)
+check(near(rightMiddle.point.x, 9.85, 1e-9) && abs(rightMiddle.point.y) < 1e-9, "the right middle lands on the right face")
+let frontMiddle = StageMath.sample(studioPath, at: centres.front)
+check(near(frontMiddle.point.y, 9.85, 1e-9) && abs(frontMiddle.point.x) < 1e-9, "the front middle lands on the front face")
+let oblongPath = StageMath.roundedRectPath(width: 31.26, height: 22.12, cornerRadius: 1.0, cornerSegments: 8)
+let oblong = StageMath.faceCentreDistances(width: 31.26, depth: 22.12, cornerRadius: 1.0, cornerSegments: 8)
+let oblongLeft = StageMath.sample(oblongPath, at: oblong.left)
+check(near(oblongLeft.point.x, -15.63, 1e-9) && abs(oblongLeft.point.y) < 1e-9, "an oblong's left middle is on the left, not at three quarters")
+check(near(StageMath.arcOffset(fromFaceCentre: 3.0, across: 19.7, cornerRadius: 2.4), 3.0, 1e-12), "on the flat the arc is the offset")
+check(near(StageMath.arcOffset(fromFaceCentre: -7.45, across: 19.7, cornerRadius: 2.4), -7.45, 1e-12), "the end of the flat is the end of the flat")
+let intoCorner = StageMath.arcOffset(fromFaceCentre: 8.668, across: 19.7, cornerRadius: 2.4, cornerSegments: 8)
+check(intoCorner > 8.668 && intoCorner < 7.45 + corner, "past the flat the outline is longer than the offset and shorter than the corner")
+let cornerPoint = StageMath.sample(studioPath, at: centres.back + intoCorner)
+check(near(cornerPoint.point.x, 8.668, 0.01), "and it lands at the asked x on the outline")
+check(cornerPoint.point.y > -9.85 && cornerPoint.point.y < -9.4, "on the corner, not floating off the face")
+check(near(StageMath.arcOffset(fromFaceCentre: 50, across: 19.7, cornerRadius: 2.4, cornerSegments: 8), 7.45 + corner, 1e-12), "past the footprint the outline stops at the corner's end")
+check(near(StageMath.arcOffset(fromFaceCentre: 0.7, across: 1, cornerRadius: 0), 0.7, 1e-12), "a square corner has no arc")
+
 // Sampling by arc length.
 let middle = StageMath.sample(path, at: perimeter / 2)
 check(abs(middle.distance - perimeter / 2) < 1e-9, "sample lands at the asked distance")
@@ -381,6 +415,46 @@ let sides = StageMath.surveyYaw(facing: [-.pi / 2, .pi / 2], from: 0.2)
 check(abs(StageMath.shortestAngleDelta(from: sides, to: 0)) < 1e-9
       || abs(StageMath.shortestAngleDelta(from: sides, to: .pi)) < 1e-9,
       "two side faces survey from the front or the back")
+
+// UX_SPEC S8: the ghost second Mac sits to the screen's right and the cable
+// leaves the face straight out, whichever face the camera is square on to.
+let rightOfFront = StageMath.screenRight(yaw: 0)
+check(near(rightOfFront.x, 1) && near(rightOfFront.z, 0), "looking at the front, right is +x")
+let rightOfBack = StageMath.screenRight(yaw: .pi)
+check(near(rightOfBack.x, -1) && near(rightOfBack.z, 0, 1e-9), "looking at the back, right is -x")
+let backNormal = StageMath.outwardNormal(yaw: .pi)
+check(near(backNormal.x, 0, 1e-9) && near(backNormal.z, -1), "the back's outward normal is -z")
+for yaw in stride(from: -Double.pi, through: .pi, by: 0.37) {
+    check(near(simd_dot(StageMath.screenRight(yaw: yaw), StageMath.outwardNormal(yaw: yaw)), 0, 1e-9),
+          "right is always perpendicular to the face normal")
+    check(near(StageMath.screenRight(yaw: yaw).y, 0), "right is always level")
+}
+check(near(StageMath.handoffGap(extentAlongRight: 19.7, across: 27.86), 9.85 + 13.93 + 6),
+      "the gap is half the ghost, half this Mac's silhouette, and the clearance")
+let nearPort = SIMD3<Double>(8, 4, -9.85), farPort = SIMD3<Double>(-22, 4, -9.85)
+let cable = StageMath.handoffCable(from: nearPort, to: farPort, normal: backNormal)
+check(cable.count == 4, "the cable is out, across and in")
+check(near(cable[0].z, -9.85 - StageMath.handoffStandoff) && near(cable[3].z, -9.85 - StageMath.handoffStandoff),
+      "both ends stand off their face")
+check(near(cable[1].z, cable[2].z) && near(cable[1].z, -9.85 - StageMath.handoffReach),
+      "the run between the Macs is clear of both faces")
+check(cable.allSatisfy { near($0.y, 4) }, "the cable stays at the ports' height")
+let farEnd = StageMath.cablePoint(cable, at: 0), nearEnd = StageMath.cablePoint(cable, at: 1)
+check(near(farEnd.x, cable[3].x) && near(farEnd.z, cable[3].z), "the pulse starts at the far end")
+check(near(nearEnd.x, cable[0].x) && near(nearEnd.z, cable[0].z), "and ends at the near port")
+let midway = StageMath.cablePoint(cable, at: 0.5)
+check(near(midway.z, -9.85 - StageMath.handoffReach) && midway.x > -22 && midway.x < 8,
+      "half way, the pulse is on the run between the two")
+
+// UX_SPEC 6.2 R2: the one thread between two ports of the same machine
+// stands further off the chassis than a ribbon, never below the ring tracks
+// and never so far that it leaves the machine.
+let loopA = SIMD3<Double>(-6, 3.4, -9.85), loopB = SIMD3<Double>(6, 3.4, -9.85)
+check(near(StageMath.loopLift(from: loopA, to: loopB), StageMath.ribbonLift(from: loopA, to: loopB) * 2, 1e-12),
+      "the loop stands off at twice the ribbon's lift")
+check(StageMath.loopLift(from: loopA, to: loopA + SIMD3(0.5, 0, 0)) >= 0.6, "and never under 6 mm")
+check(StageMath.loopLift(from: SIMD3(-9.85, 3.4, -9.85), to: SIMD3(9.85, 3.4, 9.85)) <= 2.2,
+      "and never over 2.2 cm, even back to front")
 
 if failures > 0 {
     FileHandle.standardError.write(Data("test_stage_math: \(failures) failed\n".utf8))

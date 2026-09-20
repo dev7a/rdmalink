@@ -119,8 +119,8 @@ public struct CreatedService: Sendable, Equatable {
 /// link-local only — everything RDMA needs and nothing else.
 ///
 /// Bridge membership is not this type's business: the port must already be out
-/// of every bridge (see ``BridgeMembershipChange``), and ``preview(snapshot:services:context:bridgeNames:)``
-/// refuses while it is not.
+/// of every bridge (``NetworkWriter`` moves the members), and
+/// ``preview(snapshot:services:context:bridgeNames:)`` refuses while it is not.
 public struct StandalonePortSetup: Sendable {
     public let port: ObservedPort
 
@@ -180,10 +180,10 @@ public struct StandalonePortSetup: Sendable {
 
     /// Every refusal that blocks an apply, in the order the spec raises them.
     ///
-    /// R1 and R5 are marked "blocks preflight and any apply" / "hard refusal at
-    /// preflight and at review" (UX_SPEC §6.2), so they belong here and not
-    /// only in the preflight screen — a cable that arrives while the review is
-    /// on screen has to be caught by the last gate.
+    /// R1, R2 and R5 are marked "blocks preflight and any apply" / "hard
+    /// refusal at preflight and at review" (UX_SPEC §6.2), so they belong here
+    /// and not only in the preflight screen — a cable that arrives while the
+    /// review is on screen has to be caught by the last gate.
     public func blockingRefusal(
         snapshot: InterfaceSnapshot,
         services: [NetworkServiceInfo],
@@ -191,6 +191,9 @@ public struct StandalonePortSetup: Sendable {
         storedBridges: [BridgeSPI.Membership],
         bridgeNames: [String: String] = [:]
     ) -> Refusal? {
+        // §6.2 R2 first: a cable looped back into two bridged ports would read
+        // as two Macs otherwise, and the sentence for it is R2's.
+        if let refusal = Refusals.loopedBackIntoThisMac(context.observedPorts) { return refusal }
         if let refusal = Refusals.oneCableOnly(context.observedPorts) { return refusal }
         if let refusal = Refusals.managementPathExists(
             in: snapshot,

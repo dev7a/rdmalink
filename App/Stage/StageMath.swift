@@ -92,6 +92,74 @@ enum StageMath {
         )
     }
 
+    // MARK: - §S8's handoff
+
+    /// The world direction that is screen-right for a camera at `yaw`: the
+    /// side the ghost second Mac slides in from, and where it comes to rest.
+    static func screenRight(yaw: Double) -> SIMD3<Double> {
+        SIMD3(cos(yaw), 0, -sin(yaw))
+    }
+
+    /// The outward normal of the face a camera at `yaw` looks square on to,
+    /// which is the direction a cable leaves a receptacle on that face.
+    static func outwardNormal(yaw: Double) -> SIMD3<Double> {
+        SIMD3(sin(yaw), 0, cos(yaw))
+    }
+
+    /// Daylight between this Mac and the ghost, in centimetres: enough that
+    /// the two read as two, not so much that the pair leaves the frame.
+    static let handoffClearance = 6.0
+
+    /// Centre-to-centre distance to the ghost. `extentAlongRight` is the ghost
+    /// box's width along ``screenRight(yaw:)``; `across` is this Mac's
+    /// footprint circumcircle, which is its silhouette at any pose.
+    static func handoffGap(extentAlongRight: Double, across: Double) -> Double {
+        extentAlongRight / 2 + across / 2 + handoffClearance
+    }
+
+    /// How far the ghost starts beyond its resting place before it slides in.
+    static let handoffSlide = 10.0
+
+    /// The cable stands off each face by this much before it turns.
+    static let handoffStandoff = 0.3
+    /// How far out of the faces the run between the two Macs is drawn.
+    static let handoffReach = 3.2
+
+    /// §S8's "single thin connecting line": out of the near port, across, and
+    /// into the far one. Four points in the chassis's own centimetres, near
+    /// end first. A straight line between two ports on the same face would
+    /// lie *on* that face, over every other receptacle on it.
+    static func handoffCable(
+        from near: SIMD3<Double>, to far: SIMD3<Double>, normal: SIMD3<Double>
+    ) -> [SIMD3<Double>] {
+        [
+            near + normal * handoffStandoff,
+            near + normal * handoffReach,
+            far + normal * handoffReach,
+            far + normal * handoffStandoff,
+        ]
+    }
+
+    /// Where the returning pulse is at `t` along the cable: `0` at the far
+    /// end, `1` at the near port, moving at one speed over the whole run.
+    static func cablePoint(_ path: [SIMD3<Double>], at t: Double) -> SIMD3<Double> {
+        guard let first = path.first else { return .zero }
+        guard path.count > 1 else { return first }
+        let lengths = zip(path, path.dropFirst()).map { simd_length($1 - $0) }
+        let total = lengths.reduce(0, +)
+        guard total > 1e-9 else { return first }
+        // From the far end back towards the near one.
+        var remaining = (1 - min(max(t, 0), 1)) * total
+        for (index, length) in lengths.enumerated() {
+            if remaining <= length {
+                let along = length > 1e-9 ? remaining / length : 0
+                return path[index] + (path[index + 1] - path[index]) * along
+            }
+            remaining -= length
+        }
+        return path[path.count - 1]
+    }
+
     // MARK: - Easing
 
     /// Ease-in-ease-out over `0...1` (§3.5: camera moves are 0.7 s,
@@ -355,6 +423,15 @@ enum StageMath {
         return min(max(span * 0.09, 0.32), 1.2)
     }
 
+    /// UX_SPEC §6.2 R2's thread stands further off the chassis than a ribbon
+    /// does: it is a cable's worth of light, not a tie on the surface, and
+    /// "arcing across the chassis" has to read as *across* rather than
+    /// *along*. Twice the ribbon's lift, with the same floor over the ring
+    /// tracks and a ceiling that keeps a back-to-front loop on the machine.
+    static func loopLift(from start: SIMD3<Double>, to end: SIMD3<Double>) -> Double {
+        min(max(ribbonLift(from: start, to: end) * 2, 0.6), 2.2)
+    }
+
     /// How far a ribbon arcs up the face, given how far apart its ends are and
     /// how much face there is above them.
     ///
@@ -392,7 +469,7 @@ enum StageMath {
     }
 
     /// The closed rounded-rectangle centreline, walked counter-clockwise from
-    /// the middle of the bottom edge, with exact outward normals.
+    /// the left end of the bottom edge's flat, with exact outward normals.
     ///
     /// The last sample repeats the first point with the full perimeter as its
     /// distance, so a span that wraps past the start still interpolates.
@@ -440,6 +517,59 @@ enum StageMath {
         corner(center: SIMD2(-insetX, -insetY), from: .pi, to: 1.5 * .pi)
         append(SIMD2(-insetX, -halfHeight), down)
         return samples
+    }
+
+    /// The length of one corner of ``roundedRectPath(width:height:cornerRadius:cornerSegments:)``
+    /// as that path actually walks it: `cornerSegments` chords, which is a
+    /// hair under the arc. Anything that places itself along the path by
+    /// distance has to count the way the path counts.
+    static func cornerLength(radius: Double, cornerSegments: Int) -> Double {
+        let segments = Double(max(cornerSegments, 1))
+        return segments * 2 * radius * sin(.pi / (4 * segments))
+    }
+
+    /// Where the middle of each face lies along ``roundedRectPath(width:height:cornerRadius:cornerSegments:)``
+    /// walked as a footprint — `width` across, `depth` front to back — with
+    /// `cornerSegments` chords per corner, the same count the path was built
+    /// with.
+    ///
+    /// The path starts at the left end of the back face's flat and runs
+    /// counter-clockwise seen from above: back, then the right side, the
+    /// front, the left. A footprint is not square, so these are not quarters
+    /// of the perimeter.
+    static func faceCentreDistances(
+        width: Double, depth: Double, cornerRadius: Double, cornerSegments: Int = 8
+    ) -> (back: Double, right: Double, front: Double, left: Double) {
+        let radius = min(max(cornerRadius, 0), min(width, depth) / 2)
+        let flatAcross = width / 2 - radius, flatDeep = depth / 2 - radius
+        let corner = cornerLength(radius: radius, cornerSegments: cornerSegments)
+        let back = flatAcross
+        let right = back + flatAcross + corner + flatDeep
+        let front = right + flatDeep + corner + flatAcross
+        let left = front + flatAcross + corner + flatDeep
+        return (back, right, front, left)
+    }
+
+    /// The path distance from a face's middle to the point on the outline
+    /// directly across from a position `offset` along that face, for a face
+    /// `across` wide with `cornerRadius` corners walked in `cornerSegments`
+    /// chords.
+    ///
+    /// On the flat part of the face this is the offset itself; past the end
+    /// of the flat, the outline turns into the corner, and the point at that
+    /// `x` is further along the outline than it is across. An offset beyond
+    /// the footprint lands at the corner's end.
+    static func arcOffset(
+        fromFaceCentre offset: Double, across: Double, cornerRadius: Double,
+        cornerSegments: Int = 8
+    ) -> Double {
+        let radius = min(max(cornerRadius, 0), across / 2)
+        let flat = across / 2 - radius
+        let magnitude = abs(offset)
+        guard magnitude > flat, radius > 0 else { return offset }
+        let into = min((magnitude - flat) / radius, 1)
+        let corner = cornerLength(radius: radius, cornerSegments: cornerSegments)
+        return (flat + corner * asin(into) / (.pi / 2)) * (offset < 0 ? -1 : 1)
     }
 
     /// The point and normal `distance` along `path`, interpolated.

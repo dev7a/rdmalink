@@ -218,6 +218,12 @@ public struct SetUpPorts: Sendable {
     /// The refusals that are about this Mac rather than one port, in the order
     /// the spec raises them.
     func wholeMacRefusal(world: ObservedWorld) -> Refusal? {
+        // UX_SPEC §6.2 R2 "blocks preflight and any apply", the same scope as
+        // R1, and it comes first: a cable looped back into two bridged ports
+        // would read as two Macs otherwise, and the sentence for it is R2's.
+        if let refusal = Refusals.loopedBackIntoThisMac(world.context.observedPorts) {
+            return refusal
+        }
         if let refusal = Refusals.oneCableOnly(world.context.observedPorts) { return refusal }
         if let refusal = Refusals.nothingMountedOverThunderbolt(world.mountedVolumes) {
             return refusal

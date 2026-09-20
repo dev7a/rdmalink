@@ -18,6 +18,10 @@
 import Foundation
 import RDMALinkCore
 
+// The list joins below use `ThisMacPresentation.english` for the reason given
+// there: the app's sentences are English, and a list joined in the user's
+// locale would put a French "et" inside one.
+
 /// One receptacle as the preflight checks name it.
 struct PreflightPort: Sendable, Equatable {
     var id: String
@@ -54,8 +58,14 @@ struct PreflightFindings: Sendable, Equatable {
     /// between the two cables — R1's subjects, from Core's own rule. Empty
     /// when no bridge holds more than one of them, however many there are.
     var portsInALoop: [PreflightPort] = []
-    /// True when those two are the two ends of the same cable (R2).
-    var isLoopedBackIntoThisMac = false
+    /// The two receptacles one cable's ends are both in — R2's subjects, from
+    /// Core's own rule. Empty when no cable comes back into this Mac, or when
+    /// this Mac cannot say. Independent of `portsWithAMac`: the rule rests on
+    /// the Thunderbolt domain identities, not on both ends reading as linked
+    /// in the same tick.
+    var portsLoopedBack: [PreflightPort] = []
+    /// True when a cable's two ends are both in this Mac (R2).
+    var isLoopedBackIntoThisMac: Bool { !portsLoopedBack.isEmpty }
     /// Volumes mounted over Thunderbolt (R4). `nil` until something looks.
     var mountedThunderboltVolumes: [String]?
     /// R5.
@@ -81,6 +91,16 @@ struct PreflightFindings: Sendable, Equatable {
         self.portsInALoop = ports.inALoop.map {
             PreflightPort(id: $0.port.bsdName, positionName: $0.port.positionName)
         }
+        self.portsLoopedBack = Self.loopedBack(ports.map(\.observed))
+    }
+
+    /// R2's two receptacles, in the order the refusal names them.
+    private static func loopedBack(_ observed: [ObservedPort]) -> [PreflightPort] {
+        Refusals.loopedBackIntoThisMac(observed)?.subjects.compactMap { subject in
+            observed.first { $0.bsdName == subject }.map {
+                PreflightPort(id: $0.bsdName, positionName: $0.positionName)
+            }
+        } ?? []
     }
 
     /// Everything S3 asks, from the one read Core already does for the
@@ -98,6 +118,7 @@ struct PreflightFindings: Sendable, Equatable {
         }
         let inALoop = Set(Refusals.oneCableOnly(world.context.observedPorts)?.subjects ?? [])
         self.portsInALoop = portsWithAMac.filter { inALoop.contains($0.id) }
+        self.portsLoopedBack = Self.loopedBack(world.context.observedPorts)
         self.mountedThunderboltVolumes = world.mountedVolumes.map(\.name)
         // §S3 row 3's satisfied finding names Wi-Fi by name, so the row needs
         // to know what kind of interface the route is on.
@@ -185,6 +206,9 @@ struct PreflightReport: Sendable, Equatable {
     var canContinue: Bool
     /// The receptacles an unsatisfied check names, for the attention ring.
     var attentionPortIDs: Set<String>
+    /// §6.2 R2's two receptacles, in the order the refusal names them, for
+    /// the thread the stage draws between them. Empty for every other row 1.
+    var loopedPortIDs: [String]
 
     static let headline: LocalizedStringResource = "Before we change anything"
 
@@ -206,6 +230,7 @@ struct PreflightReport: Sendable, Equatable {
             self.continueReason = nil
             self.canContinue = false
             self.attentionPortIDs = []
+            self.loopedPortIDs = []
             return
         }
         let rows = [
@@ -219,18 +244,34 @@ struct PreflightReport: Sendable, Equatable {
         self.continueReason = findings.isRechecking ? nil : Self.reason(rows: rows, findings)
         self.canContinue =
             !findings.isRechecking && rows.allSatisfy { $0.state == .satisfied }
-        // R1 rings the ports in the loop; R2 rings the two ends of the cable.
+        // R2 rings the two ends of the cable; R1 rings the ports in the loop.
+        // Each follows its refusal's subjects, so an end that is unplugged
+        // stops ringing on the next read rather than staying with a pair.
         self.attentionPortIDs =
             rows[0].state == .unsatisfied
-            ? Set((findings.portsInALoop.isEmpty ? findings.portsWithAMac : findings.portsInALoop)
-                .map(\.id))
+            ? Set((findings.isLoopedBackIntoThisMac ? findings.portsLoopedBack
+                   : findings.portsInALoop.isEmpty ? findings.portsWithAMac
+                   : findings.portsInALoop).map(\.id))
             : []
+        self.loopedPortIDs =
+            rows[0].state == .unsatisfied && findings.isLoopedBackIntoThisMac
+            ? findings.portsLoopedBack.map(\.id) : []
     }
 
     // MARK: - Row 1
 
     private static func oneCable(_ findings: PreflightFindings) -> PreflightRow {
         let title: LocalizedStringResource = "One Thunderbolt cable to another Mac"
+        // R2 first, and independent of how many ports read as linked: the
+        // cable's two ends are known from the domain identities, and a looped
+        // cable on two bridged ports would otherwise be reported as R1.
+        if findings.isLoopedBackIntoThisMac {
+            let named = findings.portsLoopedBack.map(\.positionName).formatted(.list(type: .and).locale(ThisMacPresentation.english))
+            return PreflightRow(
+                check: .oneCable, state: .unsatisfied, title: title,
+                finding: "Both ends of one cable are in this Mac, on \(named). Unplug one end and put it in the other Mac."
+            )
+        }
         let macs = findings.portsWithAMac
         switch macs.count {
         case 0:
@@ -244,19 +285,12 @@ struct PreflightReport: Sendable, Equatable {
                 finding: "Just one, in \(macs[0].positionName). Perfect."
             )
         default:
-            if findings.isLoopedBackIntoThisMac {
-                let named = macs.map(\.positionName).formatted(.list(type: .and))
-                return PreflightRow(
-                    check: .oneCable, state: .unsatisfied, title: title,
-                    finding: "Both ends of one cable are in this Mac, on \(named). Unplug one end and put it in the other Mac."
-                )
-            }
             let loop = findings.portsInALoop
             guard loop.count >= 2 else {
                 // Two or more cables, and no bridge holds more than one of
                 // their ports: nothing on this Mac can forward between them.
                 // A finished set-up looks exactly like this.
-                let named = macs.map(\.positionName).formatted(.list(type: .and))
+                let named = macs.map(\.positionName).formatted(.list(type: .and).locale(ThisMacPresentation.english))
                 return PreflightRow(
                     check: .oneCable, state: .satisfied, title: title,
                     finding: "Cables in \(named), and no bridge holds more than one of them — nothing can loop."
@@ -264,7 +298,7 @@ struct PreflightReport: Sendable, Equatable {
             }
             // §6.2 R1 keeps its headline for any count above one, and names
             // every receptacle in the loop; the row's finding does the same.
-            let named = loop.map(\.positionName).formatted(.list(type: .and))
+            let named = loop.map(\.positionName).formatted(.list(type: .and).locale(ThisMacPresentation.english))
             return PreflightRow(
                 check: .oneCable, state: .unsatisfied, title: title,
                 finding: "Two Macs are connected, on \(named). Unplug one and I'll pick this back up."
@@ -290,7 +324,7 @@ struct PreflightReport: Sendable, Equatable {
         let finding: LocalizedStringResource =
             volumes.count == 1
             ? "The volume \(first) is mounted over Thunderbolt. Eject it in Finder so nothing gets interrupted."
-            : "\(volumes.formatted(.list(type: .and))) are mounted over Thunderbolt."
+            : "\(volumes.formatted(.list(type: .and).locale(ThisMacPresentation.english))) are mounted over Thunderbolt."
         return PreflightRow(
             check: .nothingMounted, state: .unsatisfied, title: title,
             finding: finding, action: .showInFinder

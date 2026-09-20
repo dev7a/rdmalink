@@ -77,12 +77,16 @@ struct RootView: View {
             switch sheet {
             case .whatThisAllMeans:
                 WhatThisAllMeansSheet()
-            case .otherMac:
-                // §S8 step 4 names *this Mac's* address on the link, which is
-                // an address RDMALink put there. A port somebody else set up
-                // is not RDMALink's to hand out (§7.3), and `ready` now agrees.
-                OtherMacSheet(address: model.ports.ready.compactMap(\.linkLocalAddress).first)
             }
+        }
+        // §S8 and §S11 both take the working area, and the one asked for last
+        // is the one shown; the other is put away rather than left waiting
+        // underneath to reappear on `Done`.
+        .onChange(of: router.showsOtherMac) { _, shows in
+            if shows { actions.closeChangeLog() }
+        }
+        .onChange(of: actions.showsChangeLog) { _, shows in
+            if shows { router.showsOtherMac = false }
         }
         .task { await model.start() }
         // §2.8: `Restore…` is offered whenever a note exists, including a note
@@ -144,7 +148,6 @@ struct RootView: View {
             } present: { surface in
                 switch surface {
                 case .whatThisAllMeans: router.sheet = .whatThisAllMeans
-                case .otherMac: router.sheet = .otherMac
                 case .settings: openSettings()
                 }
             } open: { route in
@@ -211,7 +214,7 @@ struct RootView: View {
             preview: { preview, portID in
                 stage.preview(preview.map(StagePreview.init), for: portID)
             },
-            showOtherMac: { router.sheet = .otherMac }
+            showOtherMac: showOtherMac
         )
         // §S1's rows and situation rows raise their own actions, wherever the
         // list is drawn.
@@ -263,7 +266,18 @@ struct RootView: View {
             actions.perform(.adopt(portID: port.id))
         case .changelog:
             actions.perform(.changeLog)
+        case .otherMac:
+            router.showsOtherMac = true
         }
+    }
+
+    /// S7's `What to Do on the Other Mac`. §S8 is reached from S7, whose work
+    /// is finished, so the assistant closes exactly as `Done` closes it and
+    /// the screen takes the working area it leaves. The Help menu reaches the
+    /// same screen without an assistant to close.
+    private func showOtherMac() {
+        if let flow, flow.step == .ready { flow.goForward() }
+        router.showsOtherMac = true
     }
 
     // MARK: - The set-up assistant (S3–S7)

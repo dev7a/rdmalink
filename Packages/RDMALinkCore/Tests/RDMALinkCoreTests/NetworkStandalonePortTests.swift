@@ -124,6 +124,26 @@ struct StandalonePortPlanTests {
         #expect(plan.refusal?.code == .twoMacsConnected)
     }
 
+    @Test("A cable back into this Mac blocks the apply, and is named before R1")
+    func refusesLoopedCableAtReview() {
+        // Both ends in the bridge and both reading as linked: R1's inputs are
+        // all there, and R2 is still the one that is raised.
+        var left = port
+        left.hasLinkedMac = true
+        left.bridges = ["bridge0"]
+        left.loopedBackTo = "en7"
+        let right = ObservedPort(bsdName: "en7", positionName: "Back, far right",
+                                 hasLinkedMac: true, bridges: ["bridge0"], loopedBackTo: "en6")
+        let plan = StandalonePortSetup(port: left).preview(
+            snapshot: snapshot(bridgedFixture), services: [],
+            context: context(ports: [left, right]),
+            storedBridges: stored(bridgedFixture))
+        #expect(!plan.canProceed)
+        #expect(plan.outcome == .refused)
+        #expect(plan.refusal?.code == .loopedBackIntoThisMac)
+        #expect(plan.refusal?.subjects == ["en6", "en7"])
+    }
+
     @Test("Losing Wi-Fi while the review is on screen blocks the apply")
     func refusesWhenThunderboltBecomesTheOnlyRoute() {
         // The chosen port is standalone, but the Mac is reachable only over a
@@ -254,63 +274,5 @@ struct StandalonePortRemovalPlanTests {
         #expect(plan.isAlreadyGone)
         #expect(plan.refusal == nil)
         #expect(plan.interfaceBSDName == "en1")
-    }
-}
-
-@Suite("Moving one member in and out of a bridge")
-struct BridgeMembershipChangeTests {
-    private static let note = BridgeMembership(
-        bridgeName: "bridge0",
-        serviceIdentifier: "B0B0B0B0-0000-0000-0000-000000000001",
-        displayName: "Thunderbolt Bridge",
-        members: ["en5", "en6", "en7", "en8"],
-        isActive: true)
-
-    private static let live = BridgeSPI.Membership(
-        bsdName: "bridge0", displayName: "Thunderbolt Bridge",
-        members: ["en5", "en6", "en7", "en8"])
-
-    @Test("Leaving takes out exactly one member and leaves the rest alone")
-    func previewsALeave() {
-        let plan = BridgeMembershipChange(port: port, bridge: Self.note, direction: .leave)
-            .preview(bridges: [Self.live])
-        #expect(plan.membersBefore == ["en5", "en6", "en7", "en8"])
-        #expect(plan.membersAfter == ["en5", "en7", "en8"])
-        #expect(!plan.isAlreadyDone)
-        #expect(plan.bridgeDisplayName == "Thunderbolt Bridge")
-    }
-
-    @Test("Rejoining puts the port back where the note says it sat")
-    func previewsARejoin() {
-        let without = BridgeSPI.Membership(bsdName: "bridge0", displayName: "Thunderbolt Bridge",
-                                           members: ["en5", "en7", "en8"])
-        let plan = BridgeMembershipChange(port: port, bridge: Self.note,
-                                          direction: .rejoin(position: 1))
-            .preview(bridges: [without])
-        #expect(plan.membersAfter == ["en5", "en6", "en7", "en8"])
-        #expect(!plan.isAlreadyDone)
-    }
-
-    @Test("A bridge that is already in the state asked for has nothing to do")
-    func noticesThereIsNothingToDo() {
-        let without = BridgeSPI.Membership(bsdName: "bridge0", members: ["en5", "en7", "en8"])
-        let leave = BridgeMembershipChange(port: port, bridge: Self.note, direction: .leave)
-            .preview(bridges: [without])
-        #expect(leave.isAlreadyDone)
-        #expect(leave.membersAfter == without.members)
-
-        let rejoin = BridgeMembershipChange(port: port, bridge: Self.note,
-                                            direction: .rejoin(position: 1))
-            .preview(bridges: [Self.live])
-        #expect(rejoin.isAlreadyDone)
-    }
-
-    @Test("A position past the end of the list goes on the end")
-    func clampsThePosition() {
-        let without = BridgeSPI.Membership(bsdName: "bridge0", members: ["en5"])
-        let plan = BridgeMembershipChange(port: port, bridge: Self.note,
-                                          direction: .rejoin(position: 9))
-            .preview(bridges: [without])
-        #expect(plan.membersAfter == ["en5", "en6"])
     }
 }

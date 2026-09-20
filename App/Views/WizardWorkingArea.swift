@@ -28,8 +28,9 @@ struct WizardWorkingArea: View {
     /// `Check Again` and ⌘R: re-run the full probe **and** S3's own reads, so
     /// a check that is not about a cable can clear (§S3, §6.2 R4, R5, R14).
     var recheck: () -> Void = {}
-    /// S7's `What to Do on the Other Mac`, which opens the Help sheet the
-    /// window owns. Absent by default rather than present and inert.
+    /// S7's `What to Do on the Other Mac`, which closes the assistant and
+    /// opens §S8's screen in its place — the window's to do, since it owns
+    /// both. Absent by default rather than present and inert.
     var showOtherMac: (() -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -56,6 +57,11 @@ struct WizardWorkingArea: View {
             if let face = model.ports.first(where: { ids.contains($0.id) })?.port.face {
                 stage.turnTo(face)
             }
+        }
+        .onChange(of: flow.loopedPortIDs, initial: true) { _, ids in
+            // §6.2 R2: "a single light thread is drawn between them" — the
+            // one time a thread connects two ports of the same machine.
+            stage.loopedBack(ids)
         }
         .onChange(of: flow.selection) { _, selection in
             // One receptacle can be lit at a time on the model today, so the
@@ -121,6 +127,7 @@ struct WizardWorkingArea: View {
         }
         .onDisappear {
             stage.attention(ids: [])
+            stage.loopedBack([])
             stage.stopIdentify()
             stage.clearAllProgress()
             stage.clearPreview()

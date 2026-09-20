@@ -31,6 +31,10 @@ enum RestoreAction: String, Sendable, Equatable, Identifiable, CaseIterable {
     case openNetworkSettings
     case copyTheseSteps
     case stopManagingThisPort
+    /// §6.2 R28's and R30's `Stop Managing…`: the Port menu's title for
+    /// forgetting a note, with its ellipsis, where R19 spells the port out.
+    case stopManagingEllipsis
+    case setItUpAgain
     case removeMyServiceOnly
     case leaveEverythingAlone
     case copyDetails
@@ -51,6 +55,8 @@ enum RestoreAction: String, Sendable, Equatable, Identifiable, CaseIterable {
         case .openNetworkSettings: "Open Network Settings"
         case .copyTheseSteps: "Copy These Steps"
         case .stopManagingThisPort: "Stop Managing This Port"
+        case .stopManagingEllipsis: "Stop Managing…"
+        case .setItUpAgain: "Set It Up Again"
         case .removeMyServiceOnly: "Remove My Service Only"
         case .leaveEverythingAlone: "Leave Everything Alone"
         case .copyDetails: "Copy Details"
@@ -92,8 +98,14 @@ enum RestoreRefusals {
             [.leaveEverythingAlone, .removeMyServiceOnly]
         case .noBridgeToReturnTo:
             [.cancel, .openNetworkSettings]
+        // §6.2 R28 and R30 both write `Stop Managing…`; only R19 spells the
+        // port out. The three do the same thing.
         case .createdServiceEdited:
-            [.copyDetails, .stopManagingThisPort, .openNetworkSettings]
+            [.copyDetails, .stopManagingEllipsis, .openNetworkSettings]
+        // R30's row, in §6.2's order with the default last: `Cancel` ·
+        // `Stop Managing…` · `Set It Up Again`.
+        case .noteIsAReturnRecord:
+            [.cancel, .stopManagingEllipsis, .setItUpAgain]
         // R12 polls quietly and clears itself when the lock does, so its
         // default looks again rather than asking for another password.
         case .networkBusy:
