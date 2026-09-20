@@ -135,11 +135,13 @@ enum StageSceneBuilder {
     ) -> StageSceneGraph {
         StagePortIdentity.registerComponent()
 
-        // Only ``Archetype/unknown`` uses the count, and only Thunderbolt
+        // Only ``Archetype/unknown`` uses the faces, and only Thunderbolt
         // receptacles are ever numbered onto the stand-in box: catalogue
-        // USB-only rows belong to a chassis the catalogue already knows.
+        // USB-only rows belong to a chassis the catalogue already knows. The
+        // faces go in the ports' own order, which is the order `bind` walks
+        // them in, so the k-th port on a face lands in the k-th hole (§3.4).
         let chassis = ReceptacleCatalogue.chassis(
-            for: archetype, reportedThunderboltPorts: ports.count(where: \.isThunderbolt)
+            for: archetype, reportedFaces: ports.filter(\.isThunderbolt).map(\.face)
         )
         let root = Entity()
         root.name = "stage.root"

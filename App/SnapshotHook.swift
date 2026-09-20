@@ -32,6 +32,13 @@
 //  `RDMALINK_SNAPSHOT_STAGE` (App/Stage/StageSnapshot.swift) poses the stage
 //  in a state that only exists while something is happening.
 //
+//  `RDMALINK_SNAPSHOT_FIXTURE` stands a Mac this machine is not in for the
+//  live inventory — `standin-notebook`, an unrecognized Mac whose three ports
+//  macOS places two on the left side and one on the right — so §3.4's
+//  stand-in can be reviewed on a Mac the catalogue knows. It replaces every
+//  read of this Mac's identity and ports for the run and nothing else; the
+//  services, notes and stored bridges are still this Mac's.
+//
 //  `RDMALINK_SNAPSHOT_ROUTE` opens one of the app's own routes on the live
 //  inventory first: `hub`, `preflight`, `choose`, `review`, `restore-sheet`,
 //  `adopt-sheet`, `changelog` or `other-mac` (§S8, a screen in the working
@@ -100,6 +107,50 @@ enum SnapshotHook {
     static var route: Route? {
         ProcessInfo.processInfo.environment["RDMALINK_SNAPSHOT_ROUTE"]
             .flatMap(Route.init(rawValue:))
+    }
+
+    /// A Mac to draw instead of this one. `RDMALINK_SNAPSHOT_FIXTURE`.
+    enum Fixture: String, Sendable {
+        /// An unrecognized Mac shaped like a notebook: no catalogue row, no
+        /// product family, and three Thunderbolt ports reported on the left,
+        /// left and right faces in that order — the MacBook Pro M5 Max as it
+        /// looked before family-and-layout recognition existed.
+        case standInNotebook = "standin-notebook"
+
+        /// What `Inventory.read()` would have returned on that Mac.
+        var inventory: Inventory {
+            switch self {
+            case .standInNotebook:
+                let bridge = ThunderboltPort.BridgeMembership(
+                    name: "bridge0", displayName: "Thunderbolt Bridge", isUp: false,
+                    source: .stored
+                )
+                let ports = zip([PortFace.left, .left, .right], 1...).map { face, receptacle in
+                    ThunderboltPort(
+                        id: "en9\(receptacle)", receptacle: receptacle,
+                        bsdName: "en9\(receptacle)", face: face,
+                        positionName: ThunderboltPort.numberedName(receptacle: receptacle),
+                        link: receptacle == 2 ? .macLinked : .empty, bridges: [bridge]
+                    )
+                }
+                return Inventory(
+                    model: HardwareModel(
+                        identifier: "Mac99,99", marketingName: "Mac", chip: "M5 Max",
+                        archetype: .unknown, recognition: Recognition.none
+                    ),
+                    ports: ports,
+                    rdma: .off
+                )
+            }
+        }
+    }
+
+    /// Only while a capture is armed: a fixture must never reach a normal
+    /// launch, however the environment is set.
+    static var fixture: Fixture? {
+        guard destination != nil else { return nil }
+        return ProcessInfo.processInfo.environment["RDMALINK_SNAPSHOT_FIXTURE"]
+            .flatMap(Fixture.init(rawValue:))
     }
 
     /// How long a route is given to land: a sheet reads this Mac when it

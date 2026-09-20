@@ -100,7 +100,8 @@ final class InventoryModel {
         beginSlowProbeWatch()
         // §S0: the window subtitle appears "as soon as the model is known", and
         // the stage draws the right chassis from the first frame. Knowing the
-        // model is three `sysctl` calls; the Thunderbolt, network and NVRAM
+        // model is three `sysctl` calls and one pass over the device tree
+        // (§4.7's family-and-layout rule); the Thunderbolt, network and NVRAM
         // reads underneath are the slow part, so identity is published first
         // rather than held back until the whole probe lands.
         let identity = await Task.detached(priority: .userInitiated) { Probe.identity() }.value
@@ -217,12 +218,17 @@ private enum Probe {
     }
 
     static func identity() -> Identity {
-        Identity(hardware: HardwareModel.read(), sharingName: sharingName())
+        if let fixture = SnapshotHook.fixture {
+            return Identity(hardware: fixture.inventory.model, sharingName: sharingName())
+        }
+        return Identity(hardware: Inventory.readModel(), sharingName: sharingName())
     }
 
     static func everything() -> Snapshot {
         do {
-            let inventory = try Inventory.read()
+            // Review hook only; see App/SnapshotHook.swift. A fixture stands
+            // in for this Mac's identity and ports and nothing else.
+            let inventory = try SnapshotHook.fixture?.inventory ?? Inventory.read()
             return Snapshot(
                 hardware: inventory.model,
                 ports: PortReading.join(inventory.ports),
@@ -234,7 +240,7 @@ private enum Probe {
             // The registry or `ifconfig` refused. That is not "no Thunderbolt
             // hardware": the switch is left `unknown` and the ports unclaimed.
             return Snapshot(
-                hardware: HardwareModel.read(), ports: nil, rdma: .unknown,
+                hardware: Inventory.readModel(), ports: nil, rdma: .unknown,
                 sharingName: sharingName(), failure: "\(error)"
             )
         }
@@ -246,7 +252,8 @@ private enum Probe {
     /// either way.
     static func ports(archetype: Archetype) -> PortRead {
         do {
-            let ports = try Inventory.readPorts(archetype: archetype)
+            let ports = try SnapshotHook.fixture?.inventory.ports
+                ?? Inventory.readPorts(archetype: archetype)
             return PortRead(ports: PortReading.join(ports), failure: nil)
         } catch {
             return PortRead(ports: nil, failure: "\(error)")

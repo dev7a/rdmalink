@@ -65,15 +65,74 @@ public struct Inventory: Sendable, Equatable {
     /// An empty ``ports`` array is not an error. It is R24's other half: this
     /// Mac reports no Thunderbolt-IP ports.
     public static func read(runner: CommandRunner = CommandRunner()) throws -> Inventory {
-        let model = HardwareModel.read()
+        // One pass over the registry serves both halves: the model is decided
+        // from the receptacles macOS reports and the positions the device tree
+        // gives them (UX_SPEC §4.7, Recognition), and the ports are then named
+        // for the archetype that decision produced.
+        let rows = try PortInventory.readRows()
+        let enrichment = ChassisProbe.read()
+        let model = resolveModel(HardwareModel.read(), rows: rows, enrichment: enrichment)
         let stored = StoredBridges.read()
         return Inventory(
             model: model,
-            ports: try readPorts(archetype: model.archetype, runner: runner,
-                                 storedBridges: stored),
+            ports: try readPorts(rows: rows, archetype: model.archetype, runner: runner,
+                                 storedBridges: stored, enrichment: enrichment),
             rdma: RDMAStatus.read(runner: runner),
             storedBridges: stored
         )
+    }
+
+    /// What this Mac is, decided the way ``read(runner:)`` decides it, without
+    /// the `ifconfig` and NVRAM reads underneath — for the window subtitle and
+    /// the stage, which UX_SPEC §S0 wants "as soon as the model is known".
+    /// Never fails: when the registry refuses the receptacle list, the layout
+    /// is unknown and only the identifier catalogue decides, which is what
+    /// ``read(runner:)``'s failure path leaves the caller with too.
+    ///
+    /// A Mac the catalogue lists is decided by three `sysctl` calls and
+    /// nothing else: the registry is walked only when the identifier rule
+    /// has already failed, so the subtitle on a known Mac is as quick as it
+    /// was before the second rule existed.
+    public static func readModel() -> HardwareModel {
+        let model = HardwareModel.read()
+        guard model.archetype == .unknown else { return model }
+        return resolveModel(model, rows: try? PortInventory.readRows(), enrichment: ChassisProbe.read())
+    }
+
+    /// Both rules of UX_SPEC §4.7's recognition: the identifier catalogue
+    /// first, then the product family with the Thunderbolt layout this Mac
+    /// reports. A Mac the catalogue lists is never re-decided.
+    ///
+    /// - Parameter model: the identifier half, ``HardwareModel/read()``.
+    /// - Parameter rows: every Thunderbolt receptacle macOS reports, or `nil`
+    ///   when that read failed and the layout cannot be known.
+    static func resolveModel(
+        _ model: HardwareModel,
+        rows: [PortInventory.PortRow]?,
+        enrichment: ChassisEnrichment
+    ) -> HardwareModel {
+        guard let rows else { return model }
+        return model.recognizing(
+            thunderboltPositions: thunderboltPositions(rows: rows, enrichment: enrichment)
+        )
+    }
+
+    /// One position per Thunderbolt receptacle macOS reports, `nil` for a
+    /// receptacle the device-tree probe could not place.
+    ///
+    /// Keyed on the receptacle list rather than on the probe's own map: the
+    /// probe holds an entry only for the receptacles whose `port-location`
+    /// node it joined to a Thunderbolt-IP port, so a receptacle it missed is
+    /// absent from the map, not nil in it. Read from the map alone, a Studio
+    /// whose two front nodes failed to join would show exactly the back four
+    /// and match the four-port Studio — the wrong picture §4.7 forbids ("no
+    /// table position is missing"). Every receptacle counts, and one the
+    /// probe did not place refuses.
+    static func thunderboltPositions(
+        rows: [PortInventory.PortRow],
+        enrichment: ChassisEnrichment
+    ) -> [PortPosition?] {
+        rows.map { enrichment.byReceptacle[$0.receptacle]?.position }
     }
 
     /// The port half on its own, for the cheap re-read a link event wants: the
@@ -87,8 +146,22 @@ public struct Inventory: Sendable, Equatable {
         runner: CommandRunner = CommandRunner(),
         storedBridges: StoredBridgeReading? = nil
     ) throws -> [ThunderboltPort] {
-        let rows = try PortInventory.readRows()
-        let enrichment = ChassisProbe.read()
+        try readPorts(
+            rows: try PortInventory.readRows(), archetype: archetype, runner: runner,
+            storedBridges: storedBridges, enrichment: ChassisProbe.read()
+        )
+    }
+
+    /// ``readPorts(archetype:runner:storedBridges:)`` with the registry passes
+    /// already made, so ``read(runner:)`` walks it once and the model and the
+    /// ports are decided from the same receptacle list.
+    static func readPorts(
+        rows: [PortInventory.PortRow],
+        archetype: Archetype,
+        runner: CommandRunner,
+        storedBridges: StoredBridgeReading?,
+        enrichment: ChassisEnrichment
+    ) throws -> [ThunderboltPort] {
         var ports = PortInventory.assemble(
             rows: rows, archetype: archetype, enrichment: enrichment.byReceptacle
         )

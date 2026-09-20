@@ -14,20 +14,20 @@ public enum ReceptacleCatalogue {
 
     /// The chassis for an archetype.
     ///
-    /// - Parameter reportedThunderboltPorts: how many Thunderbolt receptacles
-    ///   macOS reports on this Mac. Used by ``Archetype/unknown`` alone, whose
-    ///   shape is not known in advance; a recognized archetype's chassis is
-    ///   fixed data and ignores it.
+    /// - Parameter reportedFaces: the face of every Thunderbolt receptacle
+    ///   macOS reports on this Mac, in physical order. Used by
+    ///   ``Archetype/unknown`` alone, whose shape is not known in advance; a
+    ///   recognized archetype's chassis is fixed data and ignores it.
     public static func chassis(
         for archetype: Archetype,
-        reportedThunderboltPorts: Int = 0
+        reportedFaces: [PortFace] = []
     ) -> Chassis {
         switch archetype {
         case .studioFour: studioFour
         case .studioSix: studioSix
         case .mini: mini
         case .notebook: notebook
-        case .unknown: generic(receptacleCount: reportedThunderboltPorts)
+        case .unknown: generic(reportedFaces: reportedFaces)
         }
     }
 
@@ -122,36 +122,76 @@ public enum ReceptacleCatalogue {
 
     // MARK: - The stand-in
 
-    /// A plain box with `receptacleCount` numbered Thunderbolt receptacles in
-    /// a row on one face.
+    /// A plain box with one numbered Thunderbolt receptacle per reported port,
+    /// each on the face macOS reported it on.
     ///
-    /// This is UX_SPEC §S1's "I don't recognize this Mac, so the picture is a
-    /// stand-in and the ports are numbered the way macOS reports them": it
-    /// deliberately looks like no Apple product, and its names are
-    /// ``ThunderboltPort/numberedName(receptacle:)`` — which the inventory
-    /// takes from the real receptacle indices, not from this table.
+    /// This is UX_SPEC §3.4's "The stand-in is a plain box" and §S1's "I don't
+    /// recognize this Mac, so the picture is a stand-in and the ports are
+    /// numbered the way macOS reports them": it deliberately looks like no
+    /// Apple product, and it never draws a receptacle on a face other than
+    /// the reported one — a MacBook whose ports macOS places on its sides is
+    /// drawn with them on its sides, so the stage's binder, which matches a
+    /// port to a hole by face and rank, finds a hole for every port.
     ///
-    /// A count of zero is a box with nothing on it, and no faces at all.
-    public static func generic(receptacleCount: Int) -> Chassis {
-        let count = max(0, receptacleCount)
+    /// - Parameter reportedFaces: one entry per Thunderbolt port, in physical
+    ///   order; ``PortFace/back`` for a port with no reported face. The names
+    ///   are ``ThunderboltPort/numberedName(receptacle:)`` over that order.
+    ///   They are placeholders: the binder matches by face and order, and the
+    ///   port list and the callout use the port's own name.
+    ///
+    /// No ports is a box with nothing on it, and no faces at all.
+    ///
+    /// The box comes to rest facing the first of its faces that carries a
+    /// port, in the port list's order (§3.4): a Mac whose ports are all on
+    /// its sides would otherwise open on a blank back, and a blank first frame
+    /// is exactly what the stand-in is there to avoid.
+    public static func generic(reportedFaces: [PortFace]) -> Chassis {
+        var onFace: [PortFace: Int] = [:]
+        for face in reportedFaces { onFace[face, default: 0] += 1 }
+        let firstFace = [PortFace.back, .front, .left, .right].first { onFace[$0, default: 0] > 0 } ?? .back
         // The box grows with the row rather than the row crowding into the box,
         // so the receptacles keep a real 1.6 cm pitch however many there are.
-        let width = max(16.0, Double(count) * 2.2 + 6)
-        let rows = (0..<count).map { index in
-            Chassis.Row(
-                .thunderbolt, .back,
-                u: 0.5 + (Double(index) - Double(count - 1) / 2) * (1.6 / width),
+        // A side row runs along the depth, a back or front row along the width.
+        let acrossBack = max(onFace[.back] ?? 0, onFace[.front] ?? 0)
+        let acrossSide = max(onFace[.left] ?? 0, onFace[.right] ?? 0)
+        let width = max(16.0, Double(acrossBack) * 2.2 + 6)
+        let depth = max(16.0, Double(acrossSide) * 2.2 + 6)
+        var rankOnFace: [PortFace: Int] = [:]
+        let rows = reportedFaces.enumerated().map { index, face -> Chassis.Row in
+            let rank = rankOnFace[face, default: 0]
+            rankOnFace[face] = rank + 1
+            let count = onFace[face] ?? 1
+            let across = (face == .back || face == .front) ? width : depth
+            // Centred on the face, in the reported order along it. On a side
+            // face `u` ascends towards the front (see `notebook`), so the
+            // first port reported on a side is the rearmost.
+            return Chassis.Row(
+                .thunderbolt, face,
+                u: 0.5 + (Double(rank) - Double(count - 1) / 2) * (1.6 / across),
                 v: 0.45,
                 ThunderboltPort.numberedName(receptacle: index + 1)
             )
         }
         return Chassis.make(
             archetype: .unknown,
-            width: width, height: 7.0, depth: 16.0,
+            width: width, height: 7.0, depth: depth,
             cornerRadius: 1.6, bevel: 0.2, baseBand: 0,
             verticalReceptacles: true,
-            resting: RestingPose(yaw: .pi - 0.55, pitch: 0.30, radiusScale: 1.0),
+            resting: RestingPose(yaw: restingYaw(facing: firstFace), pitch: 0.30, radiusScale: 1.0),
             rows: rows
         )
+    }
+
+    /// The camera yaw that shows `face` the way the recognized chassis show
+    /// theirs: the Mac Studio's pose for the back, its mirror for the front,
+    /// and the notebook's pose and its mirror for the two sides. Yaw 0 looks
+    /// at the front and π at the back (`StageMath.faceIndex(forYaw:)`).
+    static func restingYaw(facing face: PortFace) -> Double {
+        switch face {
+        case .back: .pi - 0.55
+        case .front: 0.55
+        case .left: -.pi / 2 + 0.75
+        case .right: .pi / 2 - 0.75
+        }
     }
 }

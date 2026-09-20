@@ -113,6 +113,19 @@ enum IORegistry {
         return nil
     }
 
+    /// The registry entry at `path`, for example `IODeviceTree:/product`,
+    /// handed to `body` and released afterwards. `nil` when there is no such
+    /// entry, or when `body` says nil.
+    static func withEntry<Value>(
+        atPath path: String,
+        _ body: (io_registry_entry_t) -> Value?
+    ) -> Value? {
+        let entry = IORegistryEntryFromPath(kIOMainPortDefault, path)
+        guard entry != 0 else { return nil }
+        defer { IOObjectRelease(entry) }
+        return body(entry)
+    }
+
     /// This entry's name in `plane`, for example `acio0`.
     static func name(_ entry: io_registry_entry_t, plane: String) -> String? {
         var buffer = [CChar](repeating: 0, count: 128)

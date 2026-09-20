@@ -38,6 +38,9 @@ enum Diagnostics {
             lines.append("Model: \(hardware.marketingName) (\(hardware.identifier))")
             lines.append("Chip: \(hardware.chip)")
             lines.append("Chassis: \(hardware.archetype.rawValue)")
+            // UX_SPEC §4.7 has two ways to recognize a Mac; a bug report has
+            // to say which one fired, or that neither did.
+            lines.append("Recognized: \(hardware.recognition)")
             lines.append("Thunderbolt: \(generation(hardware))")
         } else {
             lines.append("Model: not read")
@@ -83,7 +86,7 @@ enum Diagnostics {
             )
         } catch {
             return text(
-                hardware: HardwareModel.read(),
+                hardware: Inventory.readModel(),
                 ports: [],
                 rdma: .unknown,
                 switchState: .unobserved,

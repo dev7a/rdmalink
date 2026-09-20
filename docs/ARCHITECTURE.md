@@ -58,6 +58,24 @@ from `StageMath.project`.
   that resolves to the `acioN` node holding the `AppleThunderboltIPPort`.
   Treat as best-effort enrichment behind a public-key fallback; unverified on
   other models.
+- **What macOS calls this Mac** (verified on Mac15,14 2026-09-20): the device
+  tree's `product` node, `IORegistryEntryFromPath(kIOMainPortDefault,
+  "IODeviceTree:/product")`, carries `product-name` and `product-description`
+  (`Mac Studio (2025)`), `product-soc-name` (`Apple M3 Ultra`),
+  `builtin-battery` (0) and `fdr-product-type` (`Mac15,14`, the same as
+  `hw.model` and `hw.product`), each a NUL-terminated C string in `Data`.
+  Recognition (UX_SPEC §4.7) is the identifier catalogue first; a Mac it does
+  not list is recognized when the family parsed from `product-name` (the
+  text before the parenthesis) and the `port-location` layout it reports
+  match one archetype's Thunderbolt table exactly, and stays unknown
+  otherwise. The layout is one position per Thunderbolt-IP receptacle
+  macOS lists, not per position the probe placed: a receptacle the probe
+  could not join to a `port-location` node counts as a hole and refuses,
+  so a partial probe can never shrink a six-port Studio into the four-port
+  table. Undocumented, so enrichment under rule 5: absent, the Mac is
+  called `Mac` and drawn as the stand-in. The MacBook Pro's `port-location`
+  spellings are not yet recorded; `PortPosition.parse` accepts `left-rear`,
+  `left-front` and `right`.
 - The only public live event is `SCDynamicStore`
   `State:/Network/Interface/<bsd>/Link` (and `/IPv6`), which fires on
   Thunderbolt-IP link transitions only. Dock plug/unplug may not fire
@@ -204,12 +222,15 @@ These types are the seams between modules. Keep them small and value-typed.
 
 ```swift
 public enum Archetype: Sendable { case studioFour, studioSix, mini, notebook, unknown }
+public enum Recognition: Sendable { case identifier, familyAndLayout, none }
 
 public struct HardwareModel: Sendable {
     public var identifier: String        // hw.model, e.g. "Mac15,14"
-    public var marketingName: String     // "Mac Studio"
+    public var marketingName: String     // "Mac Studio": the catalogue's name, else the
+                                         // device tree's product family, else "Mac"
     public var chip: String              // "M3 Ultra"
     public var archetype: Archetype
+    public var recognition: Recognition  // which UX_SPEC §4.7 rule decided the archetype
 }
 
 public enum PortFace: String, Sendable { case back, front, left, right }

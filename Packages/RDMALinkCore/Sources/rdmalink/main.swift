@@ -101,9 +101,9 @@ func runInventory() throws {
     let inventory = try Inventory.read()
     let model = inventory.model
     print("\(model.marketingName) · \(model.identifier) · \(model.chip) · \(model.archetype.rawValue)")
-    if !model.isRecognized {
-        print("  (unrecognized model: ports are numbered, not named)")
-    }
+    // Which of UX_SPEC §4.7's two rules decided the archetype, or neither —
+    // on an unrecognized Mac the ports below are numbered, not named.
+    print("Recognized: \(model.recognition)")
     print("RDMA over Thunderbolt: \(describe(inventory.rdma))")
     // Bridge membership is two facts, not one: what the kernel is running and
     // what the saved network settings still hold. A port either read lists is
@@ -140,6 +140,9 @@ func runInventory() throws {
 /// cannot change and has to hand off to System Settings for.
 func runStatus() {
     let status = RDMAStatus.read()
+    let model = Inventory.readModel()
+    print("\(model.marketingName) · \(model.identifier) · \(model.chip) · \(model.archetype.rawValue)")
+    print("Recognized: \(model.recognition)")
     print("RDMA over Thunderbolt: \(describe(status))")
     print("devices: \(list(status.devices))")
     print("settings link: \(RDMAStatus.developerToolsSettingsLink)")
