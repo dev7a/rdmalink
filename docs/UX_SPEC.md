@@ -44,7 +44,7 @@ The RealityKit model is the hero because it is the fastest way to answer *"which
 One window, no sidebar, no tabs, no document model, no menu bar extra, no notifications, no dock badge, no background agent. RDMALink is a tool you open, not a thing that lives on your Mac.
 
 - **Title:** `RDMALink`
-- **Window subtitle** (set as soon as the model is known): `Studio — Mac Studio (M3 Ultra)` — the Mac's own sharing name, an em dash, the model and chip.
+- **Window subtitle** (set as soon as the model is known): `Studio — Mac Studio (M3 Ultra)` — the Mac's own sharing name, an em dash, the model and chip. The model is the catalogue's name for the identifier, or the product family macOS itself publishes for the Mac when the catalogue has none, and plain `Mac` only when neither exists.
 - **Default size** 1000 × 720 pt, so a six-port hub fits without scrolling. **Minimum** 840 × 600 pt. Resizable, remembers frame, not full-screen-oriented.
 
 ### 2.2 Toolbar
@@ -65,7 +65,7 @@ A horizontal split: **STAGE** on the left, **ASSISTANT COLUMN** on the right.
 
 **STAGE** — the `RealityView`, edge-to-edge, with two floating controls and nothing else:
 
-- **Bottom-center:** the face selector — a segmented control inside a `Capsule` of `.regularMaterial`, Maps-style. `Back / Front` on Mac Studio and Mac mini; `Left / Right` on notebooks (`Back` is offered only if that face carries ports; on current notebooks it does not, so it is absent rather than empty). Hidden entirely when the model has one relevant face (Mac mini with no cable in front; generic box).
+- **Bottom-center:** the face selector — a segmented control inside a `Capsule` of `.regularMaterial`, Maps-style. `Back / Front` on Mac Studio and Mac mini; `Left / Right` on notebooks (`Back` is offered only if that face carries ports; on current notebooks it does not, so it is absent rather than empty). Hidden entirely when the model has one relevant face (Mac mini with no cable in front; a stand-in whose reported ports all sit on one face).
 - **Bottom-trailing:** two small borderless buttons, `Fit` (`arrow.up.left.and.arrow.down.right`) and `Reset View`.
 
 **ASSISTANT COLUMN** — a `VStack` on `.windowBackground` with 24 pt margins, in four fixed bands, top to bottom:
@@ -176,6 +176,7 @@ No custom glyphs. **No Thunderbolt trade-dress mark anywhere**, in the UI or on 
 ### 3.4 3D materials and lighting
 
 - **One generic rounded-box chassis per archetype.** Correct proportions and correct receptacle placement. No logo, no engraved text, no trade dress of any kind, and no vent pattern beyond a soft inset — except the Mac Studio's perforated back grille, drawn as a hole field in the recess tone above the port row, which carries no logo and no trade dress.
+- **The stand-in is a plain box.** On an unrecognized Mac it carries every Thunderbolt receptacle macOS reports, each on the face macOS reports it on — the back when no face is reported — in the order macOS reports them. It never draws a receptacle on a face other than the reported one, and never draws a USB-only receptacle, because it does not know where one would be.
 - `PhysicallyBasedMaterial`, roughness 0.38, metallic 0.85, base color the aluminium's own silver (0.78 luminance) in **both** appearances. There is no dark Mac Studio or Mac mini, and macOS does not report a MacBook Pro's finish, so silver is the honest default everywhere: **dark mode changes the light, never the metal.**
 - **Receptacles are true geometry** — a 3 mm-scale inset slot with a darker interior — so an unlit port reads as a hole and not a sticker. USB-only receptacles use their correct, slightly different geometry with a matte, non-reflective interior, so they look different before anyone explains why.
 - **Lighting:** one neutral studio IBL (≈900 lux equivalent) plus a single key `DirectionalLight` from upper-left for a defined top edge; a soft contact shadow on an invisible ground plane. No mirror reflection, no floor grid, no diorama.
@@ -294,6 +295,8 @@ Always physical, never numeric unless nothing better exists.
 | Mac mini (M4 Pro) | `Back, left` · `Back, middle` · `Back, right` · `Front, left` (USB only) · `Front, right` (USB only) |
 | MacBook Pro 14/16 | `Left side, rear` · `Left side, front` · `Right side` |
 | Unknown / positions unavailable | `Thunderbolt port 1` … `Thunderbolt port N`, and **Identify is promoted** to compensate |
+
+**Recognition.** A Mac is recognized by its model identifier when the catalogue lists it. Otherwise it is recognized by two facts it states itself: the product family macOS publishes for it (`Mac Studio`, `Mac mini`, `MacBook Pro`) together with a Thunderbolt receptacle layout that matches that family's table exactly, receptacle for receptacle — every reported position has a name in the table, no two share one, and no table position is missing. Both must agree. When either is absent or differs, the Mac is unrecognized: its ports are numbered, the picture is the stand-in (§3.4), and the S1 note says so. Nothing is ever inferred from the chip or from the port count alone.
 
 With **Show technical names** on, a `.caption` tertiary suffix is appended to the row's detail line only — `en6` — and nowhere else. **No text is ever drawn on the 3D model, regardless of this toggle.**
 
