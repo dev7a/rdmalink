@@ -142,19 +142,7 @@ public struct BridgeMembershipChange: Sendable {
         }
         try BridgeSPI.requireMembershipEditing()
         let preferences = try session.preferences
-        let resolved = try BridgeSPI.bridge(
-            serviceIdentifier: bridge.serviceIdentifier,
-            bsdName: bridge.bridgeName,
-            in: preferences)
-        let current = try BridgeSPI.describe(resolved)
-
-        // The note's own member list is the proof that this is the bridge the
-        // note is about: a `bridgeN` name freed by a delete and handed to a
-        // different virtual interface would otherwise be edited as if it were.
-        guard Set(current.members).isSubset(of: Set(bridge.members)) else {
-            throw BridgeSPIError.notTheRecordedBridge(
-                bridge: current.bsdName, members: current.members, recorded: bridge.members)
-        }
+        let (resolved, current) = try BridgeSPI.resolveRecorded(bridge, in: preferences)
 
         let projected = try projectedMembers(of: current)
         guard session.mode == .live else {

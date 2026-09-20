@@ -21,12 +21,21 @@ enum StageRingRole: Hashable, CaseIterable, Sendable {
     case inner
     /// Outer track (§4.3).
     case bridge, ready, outside, drift
-    /// §S3's attention ring.
+    /// §S6 and §S10: the same outer-track geometry part way through closing or
+    /// re-opening. It stands in for ``bridge`` and ``ready`` for as long as a
+    /// real operation is running on the receptacle, and its mesh is swapped —
+    /// not cross-faded — because the five shapes *are* the progress (§3.5).
+    case progress
+    /// §S3's attention ring, which is also §S4b's Identify shimmer: one thin
+    /// `.secondary` track, two behaviours, never both at once.
     case attention
     /// Interaction track (§4.6).
     case hover, selection, focus, bloom
     /// The light thread (§4.2, §9.7).
     case thread
+    /// §S5's hover-to-preview: the service node beside the receptacle, and the
+    /// hairline ring it gains when the addresses row is hovered.
+    case serviceNode, serviceRing
 }
 
 /// Marks a collider with the port it stands for, so a hit test answers an id.
@@ -43,19 +52,49 @@ final class StageReceptacleNode {
     let root: Entity
     let proxy: Entity
     let stub: Entity
+    /// Where this receptacle sits on the chassis, in centimetres in the
+    /// chassis's own frame. §4.4's ribbon is drawn between these, which is why
+    /// the node carries the number rather than only the transform it became.
+    let anchor: SIMD3<Double>
+    /// The opening the ring tracks were generated around, and the §3.6 scale
+    /// they were generated at — everything ``StageScene`` needs to ask
+    /// `StageMesh` for the same ring in a different shape.
+    let opening: FeatureKind.Opening
+    let ringScale: Double
     var layers: [StageRingRole: Entity] = [:]
+    /// What each ring layer was generated from, so a ring whose *shape* has to
+    /// change — §S6's closing gaps, §S5's widened ones — can be asked for again
+    /// at the same size rather than guessed at from a number copied elsewhere.
+    var ringSpec: [StageRingRole: (grow: Double, thickness: Double)] = [:]
     /// Current and target opacity per layer, for the 150 ms cross-fade (§3.5).
     var fades: [StageRingRole: (current: Float, target: Float)] = [:]
     /// The whole-receptacle dim a hovered USB-only hole takes (§4.5).
     var dim: Float = 1
+    /// §S6: the ring whose mesh is swapped as gaps close, and the shape it is
+    /// currently wearing.
+    var progressRing: ModelEntity?
+    var progressShape: StageMath.RingPattern?
+    /// §4.3's bridge ring, held so §S5's hover-to-preview can widen its gaps.
+    var bridgeRing: ModelEntity?
+    var bridgeShape: StageMath.RingPattern = .segmented
+    /// §S3's single breath and §S4b's bloom need a clock of their own; these
+    /// are the moments they started, on the scene's elapsed time.
+    var attentionStarted: Double?
+    var bloomStarted: Double?
 
-    init(id: String, kind: FeatureKind, face: PortFace, root: Entity, proxy: Entity, stub: Entity) {
+    init(
+        id: String, kind: FeatureKind, face: PortFace, root: Entity, proxy: Entity,
+        stub: Entity, anchor: SIMD3<Double>, opening: FeatureKind.Opening, ringScale: Double
+    ) {
         self.id = id
         self.kind = kind
         self.face = face
         self.root = root
         self.proxy = proxy
         self.stub = stub
+        self.anchor = anchor
+        self.opening = opening
+        self.ringScale = ringScale
     }
 
     var isThunderbolt: Bool { kind == .thunderbolt }
@@ -65,8 +104,13 @@ final class StageReceptacleNode {
 @MainActor
 struct StageSceneGraph {
     var root: Entity
+    /// The chassis and everything on it. Ribbons are added and removed here as
+    /// bridge membership changes, without rebuilding the machine underneath.
+    var body: Entity
     var chassis: Chassis
     var receptacles: [StageReceptacleNode]
+    /// §4.4's ribbons, one per tie between two members of a bridge.
+    var ribbons: [StageRibbonLink]
     var keyLight: DirectionalLight
     var fillLight: DirectionalLight
     var rimLight: DirectionalLight
@@ -116,14 +160,22 @@ enum StageSceneBuilder {
             receptacles.append(node)
         }
 
+        // §4.4: the ribbons come last, so they lie over the chassis rather
+        // than inside anything placed on it.
+        let ribbons = StageRibbonBuilder.links(
+            nodes: receptacles, ports: ports, chassis: chassis, palette: palette
+        )
+        for link in ribbons { body.addChild(link.root) }
+
         let lights = makeLights(chassis: chassis, palette: palette, appearance: appearance)
         root.addChild(lights.key)
         root.addChild(lights.fill)
         root.addChild(lights.rim)
 
         return StageSceneGraph(
-            root: root, chassis: chassis, receptacles: receptacles,
-            keyLight: lights.key, fillLight: lights.fill, rimLight: lights.rim
+            root: root, body: body, chassis: chassis, receptacles: receptacles,
+            ribbons: ribbons, keyLight: lights.key, fillLight: lights.fill,
+            rimLight: lights.rim
         )
     }
 
@@ -361,7 +413,10 @@ enum StageSceneBuilder {
         let size = hole.opening
         let root = Entity()
         root.name = "receptacle.\(port.id)"
-        root.position = place(face: hole.face, u: hole.u, v: hole.v, chassis: chassis)
+        let anchor = placeInCentimetres(
+            face: hole.face, u: hole.u, v: hole.v, chassis: chassis
+        )
+        root.position = SIMD3(m(anchor.x), m(anchor.y), m(anchor.z))
         root.orientation = orientation(for: hole.face)
 
         // §3.4: a true inset slot with a darker interior, so an unlit port
@@ -417,24 +472,26 @@ enum StageSceneBuilder {
         root.addChild(proxy)
 
         let node = StageReceptacleNode(
-            id: port.id, kind: hole.kind, face: hole.face, root: root, proxy: proxy, stub: stub
+            id: port.id, kind: hole.kind, face: hole.face, root: root, proxy: proxy,
+            stub: stub, anchor: anchor, opening: size, ringScale: appearance.ringScale
         )
 
         // §4.5: USB-only receptacles never take a ring of any kind.
         guard hole.kind == .thunderbolt else { return node }
 
         let scale = appearance.ringScale
+        @discardableResult
         func add(
             _ role: StageRingRole, grow: Double, thickness: Double,
             pattern: StageMath.RingPattern, accent: Bool, z: Double
-        ) {
+        ) -> ModelEntity? {
             guard
                 let mesh = try? StageMesh.ring(
                     width: size.width + grow, height: size.height + grow,
                     cornerRadius: size.cornerRadius + grow / 2, thickness: thickness * scale,
                     pattern: pattern
                 )
-            else { return }
+            else { return nil }
             let entity = ModelEntity(
                 mesh: mesh,
                 materials: [accent ? palette.accentMaterial : palette.inkMaterial]
@@ -444,16 +501,75 @@ enum StageSceneBuilder {
             entity.isEnabled = false
             root.addChild(entity)
             node.layers[role] = entity
+            node.ringSpec[role] = (grow, thickness)
             node.fades[role] = (0, 0)
+            return entity
         }
 
         add(.inner, grow: 0.16, thickness: 0.07, pattern: .solid, accent: false, z: 0.10)
         add(.attention, grow: 0.30, thickness: 0.07, pattern: .solid, accent: false, z: 0.10)
-        add(.bridge, grow: 0.50, thickness: 0.08, pattern: .segmented, accent: false, z: 0.10)
+        node.bridgeRing = add(
+            .bridge, grow: 0.50, thickness: 0.08, pattern: .segmented, accent: false, z: 0.10
+        )
         add(.ready, grow: 0.50, thickness: 0.09, pattern: .solid, accent: true, z: 0.10)
         add(.drift, grow: 0.50, thickness: 0.08, pattern: .dashed, accent: false, z: 0.10)
         add(.hover, grow: 1.00, thickness: 0.08, pattern: .solid, accent: true, z: 0.12)
         add(.selection, grow: 1.00, thickness: 0.11, pattern: .solid, accent: true, z: 0.12)
+
+        // §S6: the ring the work is drawn on. It is the bridge ring's geometry
+        // in accent, because §S6 ends on "a solid accent ring" and the four
+        // arcs it starts from are the same four the port is already wearing —
+        // "the whole lifecycle of a port is one shape" (§4.3). Its mesh is
+        // swapped as gaps close, so the five states are five shapes and not
+        // five cross-fades.
+        node.progressRing = add(
+            .progress, grow: 0.50, thickness: 0.09, pattern: .closing(gaps: 0),
+            accent: true, z: 0.105
+        )
+        node.progressShape = .closing(gaps: 0)
+
+        // §S5's hover-to-preview: "a small accent node fades in beside the
+        // receptacle", and "the node gains a single hairline ring". Beside is
+        // read as the axis the receptacle is *not* long on — above a standing
+        // desktop slot, off the end of a notebook's — which is the one
+        // direction with room on every chassis in the catalogue.
+        let isStanding = size.height > size.width
+        // Far enough out to clear the selection ring and its bloom. A standing
+        // slot has the whole face above it; a notebook's lies along a 1.55 cm
+        // edge, where the only room is towards the next receptacle, so it gets
+        // what there is and no more.
+        let nodeOffset = max(size.width, size.height) / 2 + (isStanding ? 1.05 : 0.70)
+        let nodeCentre = SIMD3<Float>(
+            isStanding ? 0 : m(nodeOffset), isStanding ? m(nodeOffset) : 0, m(0.11)
+        )
+        let serviceDiameter = 0.30
+        let serviceNode = ModelEntity(
+            mesh: StageMesh.bloom(
+                width: serviceDiameter, height: serviceDiameter,
+                cornerRadius: serviceDiameter / 2
+            ),
+            materials: [palette.accentMaterial]
+        )
+        serviceNode.position = nodeCentre
+        serviceNode.components.set(OpacityComponent(opacity: 0))
+        serviceNode.isEnabled = false
+        root.addChild(serviceNode)
+        node.layers[.serviceNode] = serviceNode
+        node.fades[.serviceNode] = (0, 0)
+
+        if let mesh = try? StageMesh.ring(
+            width: serviceDiameter + 0.26, height: serviceDiameter + 0.26,
+            cornerRadius: (serviceDiameter + 0.26) / 2, thickness: 0.05 * scale,
+            pattern: .solid
+        ) {
+            let serviceRing = ModelEntity(mesh: mesh, materials: [palette.accentMaterial])
+            serviceRing.position = nodeCentre
+            serviceRing.components.set(OpacityComponent(opacity: 0))
+            serviceRing.isEnabled = false
+            root.addChild(serviceRing)
+            node.layers[.serviceRing] = serviceRing
+            node.fades[.serviceRing] = (0, 0)
+        }
 
         // §4.3: "set up outside RDMALink" is complete like ready, but drawn as
         // two thin concentric hairlines and never in accent, because it is not
@@ -577,15 +693,25 @@ enum StageSceneBuilder {
     static func place(
         face: PortFace, u: Double, v: Double, chassis: Chassis
     ) -> SIMD3<Float> {
+        let centimetres = placeInCentimetres(face: face, u: u, v: v, chassis: chassis)
+        return SIMD3(m(centimetres.x), m(centimetres.y), m(centimetres.z))
+    }
+
+    /// The same placement in centimetres, which is what §4.4's ribbon is drawn
+    /// from: it walks the chassis's own footprint between two of these, and
+    /// every number in the catalogue is a centimetre.
+    static func placeInCentimetres(
+        face: PortFace, u: Double, v: Double, chassis: Chassis
+    ) -> SIMD3<Double> {
         let across = (face == .back || face == .front) ? chassis.width : chassis.depth
         let along = (u - 0.5) * across
         let band = chassis.baseBand
         let y = band + v * (chassis.height - band)
         switch face {
-        case .back: return SIMD3(m(-along), m(y), m(-chassis.depth / 2))
-        case .front: return SIMD3(m(along), m(y), m(chassis.depth / 2))
-        case .left: return SIMD3(m(-chassis.width / 2), m(y), m(along))
-        case .right: return SIMD3(m(chassis.width / 2), m(y), m(-along))
+        case .back: return SIMD3(-along, y, -chassis.depth / 2)
+        case .front: return SIMD3(along, y, chassis.depth / 2)
+        case .left: return SIMD3(-chassis.width / 2, y, along)
+        case .right: return SIMD3(chassis.width / 2, y, -along)
         }
     }
 

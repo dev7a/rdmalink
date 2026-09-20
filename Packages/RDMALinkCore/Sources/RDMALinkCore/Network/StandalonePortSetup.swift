@@ -268,14 +268,57 @@ public struct StandalonePortSetup: Sendable {
             token = BaselineToken(portBSDName: port.bsdName)
         }
 
+        let record = try Self.createService(
+            bsdName: port.bsdName, named: plan.serviceName, session: session)
+
+        guard session.mode == .live else {
+            // Everything above happened in memory. Nothing is committed, the
+            // preferences are thrown away with the session, and no note claims
+            // a service that will never exist.
+            return nil
+        }
+
+        // The record goes in the note before the commit: matching is by
+        // identifier, never by name — and the configuration alongside it is
+        // what lets Restore tell RDMALink's own work from a service somebody
+        // has since taken over.
+        do {
+            try baseline.recordCreatedService(record, token)
+        } catch {
+            throw Refusals.baselineUnwritable(detail: "\(error)")
+        }
+
+        try session.commit()
+        try session.apply()
+        return CreatedService(serviceID: record.identifier, serviceName: plan.serviceName,
+                              bsdName: port.bsdName, createdAt: Date())
+    }
+
+    /// Creates one standalone service on `bsdName`, names it, turns IPv4 off
+    /// and sets IPv6 to link-local only.
+    ///
+    /// Writes into the open session and **does not commit**: the caller owns
+    /// the burst, and an operation that has more to do commits once at the end
+    /// of it.
+    ///
+    /// The record that comes back is read off the object macOS actually made
+    /// rather than off what was asked for — Restore compares the live service
+    /// against it, so it has to be what a freshly-made RDMA service looks like
+    /// on this build, not what RDMALink intended.
+    static func createService(
+        bsdName: String,
+        named name: String,
+        session: AuthorizedSession
+    ) throws -> CreatedServiceRecord {
+        let preferences = try session.preferences
         guard let location = SCNetworkSetCopyCurrent(preferences) else {
             throw NetworkConfigurationError.missing("the current network location")
         }
         let interfaces = SCNetworkInterfaceCopyAll() as? [SCNetworkInterface] ?? []
         guard let interface = interfaces.first(where: {
-            SCNetworkInterfaceGetBSDName($0) as String? == port.bsdName
+            SCNetworkInterfaceGetBSDName($0) as String? == bsdName
         }) else {
-            throw NetworkConfigurationError.missing("the interface \(port.bsdName)")
+            throw NetworkConfigurationError.missing("the interface \(bsdName)")
         }
         guard let service = SCNetworkServiceCreate(preferences, interface) else {
             throw NetworkConfigurationError.stepFailed(
@@ -284,7 +327,7 @@ public struct StandalonePortSetup: Sendable {
         }
         try session.check(SCNetworkServiceEstablishDefaultConfiguration(service),
                           "Create the RDMA service")
-        try session.check(SCNetworkServiceSetName(service, plan.serviceName as CFString),
+        try session.check(SCNetworkServiceSetName(service, name as CFString),
                           "Name the RDMA service")
         guard let ipv4 = SCNetworkServiceCopyProtocol(service, kSCNetworkProtocolTypeIPv4),
               let ipv6 = SCNetworkServiceCopyProtocol(service, kSCNetworkProtocolTypeIPv6) else {
@@ -301,40 +344,14 @@ public struct StandalonePortSetup: Sendable {
         guard let serviceID = SCNetworkServiceGetServiceID(service) as String? else {
             throw NetworkConfigurationError.missing("the new service's identifier")
         }
-
-        guard session.mode == .live else {
-            // Everything above happened in memory. Nothing is committed, the
-            // preferences are thrown away with the session, and no note claims
-            // a service that will never exist.
-            return nil
-        }
-
-        // The record goes in the note before the commit: matching is by
-        // identifier, never by name — and the configuration alongside it is
-        // what lets Restore tell RDMALink's own work from a service somebody
-        // has since taken over.
-        // Read back off the object itself rather than recording what was
-        // asked for: Restore compares the live service against this, so it has
-        // to be what macOS says a freshly-made RDMA service looks like, not
-        // what RDMALink intended it to look like.
         let made = NetworkServices.describe(service)
-        let record = CreatedServiceRecord(
+        return CreatedServiceRecord(
             identifier: serviceID,
-            interfaceBSDName: port.bsdName,
-            name: plan.serviceName,
+            interfaceBSDName: bsdName,
+            name: name,
             isEnabled: made?.isEnabled ?? true,
             ipv4: made?.ipv4,
             ipv6: made?.ipv6)
-        do {
-            try baseline.recordCreatedService(record, token)
-        } catch {
-            throw Refusals.baselineUnwritable(detail: "\(error)")
-        }
-
-        try session.commit()
-        try session.apply()
-        return CreatedService(serviceID: serviceID, serviceName: plan.serviceName,
-                              bsdName: port.bsdName, createdAt: Date())
     }
 }
 
@@ -430,16 +447,9 @@ public struct StandalonePortRemoval: Sendable {
         if let refusal = plan.refusal { throw refusal }
         guard !plan.isAlreadyGone else { return plan }
 
-        let all = SCNetworkServiceCopyAll(preferences) as? [SCNetworkService] ?? []
-        guard let service = all.first(where: {
-            SCNetworkServiceGetServiceID($0) as String? == record.identifier
-        }) else { return StandalonePortRemovalPlan(serviceID: record.identifier,
-                                                   isAlreadyGone: true) }
-        // Read one more time off the object that is about to be removed, so
-        // the interface check cannot be defeated by a stale list.
-        let liveInterface = SCNetworkServiceGetInterface(service)
-            .flatMap { SCNetworkInterfaceGetBSDName($0) as String? }
-        guard liveInterface == record.interfaceBSDName else {
+        guard let service = Self.liveService(identifier: record.identifier,
+                                             expectedInterface: record.interfaceBSDName,
+                                             in: preferences) else {
             return StandalonePortRemovalPlan(serviceID: record.identifier,
                                              serviceName: plan.serviceName,
                                              interfaceBSDName: plan.interfaceBSDName,
@@ -452,5 +462,26 @@ public struct StandalonePortRemoval: Sendable {
         try session.commit()
         try session.apply()
         return plan
+    }
+
+    /// The live service object for an identifier, but **only** while it is
+    /// still on the interface the caller expects.
+    ///
+    /// Read one more time off the object that is about to be removed, so the
+    /// interface check cannot be defeated by a stale list — a note carrying
+    /// somebody else's identifier must never delete that Mac's Wi-Fi. `nil`
+    /// means "treat it as already gone", never "remove something else".
+    static func liveService(
+        identifier: String,
+        expectedInterface: String,
+        in preferences: SCPreferences
+    ) -> SCNetworkService? {
+        let all = SCNetworkServiceCopyAll(preferences) as? [SCNetworkService] ?? []
+        guard let service = all.first(where: {
+            SCNetworkServiceGetServiceID($0) as String? == identifier
+        }) else { return nil }
+        let liveInterface = SCNetworkServiceGetInterface(service)
+            .flatMap { SCNetworkInterfaceGetBSDName($0) as String? }
+        return liveInterface == expectedInterface ? service : nil
     }
 }

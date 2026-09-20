@@ -1,17 +1,21 @@
 import Foundation
 import RDMALinkCore
 
-// The command-line companion: read-only diagnostics and the ML0 spikes.
+// The command-line companion: read-only diagnostics, the ML0 spikes, and the
+// ML2 operations.
 //
-// Everything here reads. The one subcommand that takes an authorization
-// credential — `spike-auth` — is behind an explicit `--i-understand` flag and
-// prints what it is about to do first. No subcommand writes network
-// configuration, NVRAM or bridge membership; the Core types that can do that
-// are never reached from this file.
+// Every subcommand prints its preview and stops there. The three that can
+// change this Mac — `setup`, `restore`, `restore-all` and `return-to-bridge` —
+// need **both** `--write` and `--i-understand` before they reach a `perform`,
+// and they print what they are about to do first. `adopt` and `stop-managing`
+// write only RDMALink's own note and never touch the network. Nothing here
+// changes NVRAM.
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 let flags = Set(arguments.filter { $0.hasPrefix("--") })
-let command = arguments.first { !$0.hasPrefix("-") }
+/// Everything that is not a flag: the subcommand, then its arguments.
+let positional = arguments.filter { !$0.hasPrefix("-") }
+let command = positional.first
 
 /// One refusal line, plus the spec's own words when it is not satisfied.
 func report(_ code: String, _ rule: String, _ refusal: Refusal?, indent: String = "") {
@@ -233,6 +237,255 @@ func runAuthorizationSpike(confirmed: Bool) {
     }
 }
 
+/// The port this Mac actually has, by BSD name.
+func operationPort(_ bsdName: String, in inventory: Inventory) -> OperationPort {
+    guard let port = inventory.ports.first(where: { $0.bsdName == bsdName }) else {
+        fail("no port named \(bsdName) on this Mac — run `rdmalink inventory`")
+    }
+    guard port.isThunderbolt else {
+        fail("\(bsdName) is a USB-only receptacle, so there is nothing to configure")
+    }
+    return OperationPort(port)
+}
+
+/// Every write in this tool is behind both flags and prints what it is about
+/// to do first. Without them, only the preview runs.
+func confirmedWrite(_ what: String) -> Bool {
+    guard flags.contains("--write") else { return false }
+    guard flags.contains("--i-understand") else {
+        print("")
+        print("Refusing: `--write` also needs `--i-understand`.")
+        exit(2)
+    }
+    print("")
+    print("WARNING: this changes this Mac's network configuration: \(what)")
+    print("macOS will ask for an administrator name and password.")
+    return true
+}
+
+func show(_ refusal: Refusal) {
+    print("  \(refusal.code.rawValue)  \(refusal.headline)")
+    for line in refusal.body.split(separator: "\n", omittingEmptySubsequences: false) {
+        print("      \(line)")
+    }
+    if let detail = refusal.detail { print("      detail: \(detail)") }
+}
+
+/// Prints every checklist row as the burst reports it. A function rather than
+/// a stored closure: a top-level `let` in `main.swift` is main-actor isolated,
+/// and the burst runs wherever it is called from.
+func checklist(_ step: OperationStep, _ state: StepState) {
+    switch state {
+    case .pending: print("  ·  \(step.pending)")
+    case .running: print("  …  \(step.running)")
+    case .done: print("  ✓  \(step.done)")
+    // §S6's rollback: the checklist reverses with a returning symbol.
+    case .reversing: print("  ↩  \(step.pending)")
+    }
+}
+
+func environment(_ inventory: Inventory) -> OperationEnvironment {
+    OperationEnvironment(archetype: inventory.model.archetype)
+}
+
+/// `setup <bsd…>` — UX_SPEC §S5's review, and §S6's burst behind the flags.
+func runSetUp(_ names: [String]) throws {
+    guard !names.isEmpty else { fail("usage: rdmalink setup <bsd> [<bsd>…]") }
+    let inventory = try Inventory.read()
+    let ports = names.map { operationPort($0, in: inventory) }
+    let world = try ObservedWorld.read(ports: ports, archetype: inventory.model.archetype)
+    let operation = SetUpPorts(ports: ports)
+    let plan = operation.preview(world: world)
+
+    print(SetUpPortsPlan.headline)
+    print(SetUpPortsPlan.body)
+    if let refusal = plan.refusal {
+        print("")
+        print("In the way:")
+        show(refusal)
+    }
+    for port in plan.ports {
+        print("")
+        print("\(port.header)  (\(port.port.bsdName))")
+        if let refusal = port.refusal { show(refusal); continue }
+        if port.routesToAdopt {
+            print("  already set up — this port routes to Adopt, never to set-up")
+        }
+        for row in port.rows {
+            print("  \(row.title): \(row.before) → \(row.after)")
+            print("      \(row.body)")
+        }
+        for warning in port.warnings { print("  warning: \(warning)") }
+        print("  technical names:")
+        for line in port.technicalNames { print("      \(line)") }
+    }
+    print("")
+    print("button: \(plan.defaultButtonTitle ?? "none — nothing to press")")
+    print(SetUpPortsPlan.footnote)
+
+    guard plan.canProceed else { return }
+    guard confirmedWrite("takes \(names.joined(separator: ", ")) out of every bridge "
+        + "and gives each its own service") else { return }
+    let session = try AuthorizedSession.begin(mode: .live)
+    defer { session.end() }
+    let result = try operation.perform(session: session, environment: environment(inventory),
+                                       progress: checklist)
+    print(result.completionLine)
+    for port in result.ports {
+        print("  \(port.positionName): service \(port.createdServiceID ?? "none") · "
+            + "left \(list(port.leftBridges)) · "
+            + "kernel settled \(port.agreement.settledOnItsOwn ? "on its own" : "after the push") "
+            + "in \(port.agreement.reads) reads")
+    }
+}
+
+/// `restore <bsd>` — UX_SPEC §S10.
+func runRestore(_ bsdName: String?) throws {
+    guard let bsdName else { fail("usage: rdmalink restore <bsd>") }
+    let inventory = try Inventory.read()
+    let port = operationPort(bsdName, in: inventory)
+    let world = try ObservedWorld.read(ports: [port], archetype: inventory.model.archetype)
+    let note = try? BaselineStore().load(port: bsdName)
+    let operation = RestorePort(port: port)
+    let plan = operation.preview(note: note, world: world)
+
+    print(plan.headline)
+    print(plan.body)
+    for row in plan.rows { print("  · \(row)") }
+    for note in plan.notes { print("  \(note)") }
+    if let refusal = plan.refusal {
+        print("")
+        print("In the way:")
+        show(refusal)
+        if plan.mayRemoveServiceOnly { print("  offer: Remove My Service Only") }
+    }
+
+    guard plan.canProceed else { return }
+    guard confirmedWrite("deletes the service RDMALink made on \(bsdName) and puts the "
+        + "port back in \(list(plan.bridgesToRejoin))") else { return }
+    let session = try AuthorizedSession.begin(mode: .live)
+    defer { session.end() }
+    let result = try operation.perform(session: session, environment: environment(inventory),
+                                       progress: checklist)
+    print(result.successHeadline)
+    print(result.successBody(bridgeName: plan.bridgesToRejoin.first ?? "Thunderbolt Bridge"))
+    print(result.completionLine)
+}
+
+/// `restore-all` — every port with a note, one after the other.
+func runRestoreAll() throws {
+    let inventory = try Inventory.read()
+    let store = BaselineStore()
+    let names = try store.list()
+    guard !names.isEmpty else {
+        print("Nothing yet. When RDMALink changes something, it'll be listed here with a way back.")
+        return
+    }
+    // §7.3: an adopted port's only actions are Return to Bridge and Stop
+    // Managing — "there's no 'put it back' for an adopted port" — so a restore
+    // of every note skips them exactly as the app's own Restore All does,
+    // rather than silently un-adopting a port under a summary that says it was
+    // put back.
+    var skipped: [String] = []
+    let ports = names.compactMap { name -> OperationPort? in
+        guard let port = inventory.ports.first(where: { $0.bsdName == name }) else { return nil }
+        if let note = try? store.load(port: name), RestorePort.describesNothingToUndo(note) {
+            skipped.append(port.positionName)
+            return nil
+        }
+        return OperationPort(port)
+    }
+    for name in skipped { print("  (skipped \(name): its note records nothing to put back)") }
+    guard !ports.isEmpty else { return }
+    let operation = RestoreAll(ports: ports)
+    print(operation.headline)
+    print(operation.body)
+    for port in ports { print("  · \(port.positionName) (\(port.bsdName))") }
+
+    guard confirmedWrite("puts \(list(ports.map(\.bsdName))) back the way they were")
+    else { return }
+    let session = try AuthorizedSession.begin(mode: .live)
+    defer { session.end() }
+    let outcome = operation.perform(session: session, environment: environment(inventory),
+                                    progress: checklist)
+    for result in outcome.results { print("  done: \(result.positionName)") }
+    for problem in outcome.unfinished {
+        if let refusal = problem.refusal {
+            show(refusal)
+        } else {
+            // §6.1's shared line for a failure with no number of its own.
+            print("  Nothing has been changed.")
+            if let details = problem.details { print("      \(details)") }
+        }
+    }
+    if let summary = outcome.summary { print(summary) }
+}
+
+/// `return-to-bridge <bsd>` — UX_SPEC §7.5.
+func runReturnToBridge(_ bsdName: String?) throws {
+    guard let bsdName else { fail("usage: rdmalink return-to-bridge <bsd>") }
+    let inventory = try Inventory.read()
+    let port = operationPort(bsdName, in: inventory)
+    let world = try ObservedWorld.read(ports: [port], archetype: inventory.model.archetype)
+    let operation = ReturnToBridge(port: port)
+    let plan = operation.preview(world: world)
+
+    print(plan.headline)
+    if !plan.body.isEmpty { print(plan.body) }
+    for row in plan.rows { print("  · \(row)") }
+    if let refusal = plan.refusal {
+        print("")
+        print("In the way:")
+        show(refusal)
+    }
+
+    guard plan.canProceed, let bridge = plan.bridgeName else { return }
+    guard confirmedWrite("adds \(bsdName) to \(bridge) and deletes its standalone service")
+    else { return }
+    let session = try AuthorizedSession.begin(mode: .live)
+    defer { session.end() }
+    let result = try operation.perform(session: session, environment: environment(inventory),
+                                       progress: checklist)
+    print(result.successHeadline)
+    print(result.successBody)
+    print(result.completionLine)
+}
+
+/// `adopt <bsd>` — UX_SPEC §S9. Writes a note and nothing else.
+func runAdopt(_ bsdName: String?) throws {
+    guard let bsdName else { fail("usage: rdmalink adopt <bsd>") }
+    let inventory = try Inventory.read()
+    let port = operationPort(bsdName, in: inventory)
+    let world = try ObservedWorld.read(ports: [port], archetype: inventory.model.archetype)
+    let operation = AdoptPort(port: port)
+    let plan = operation.preview(world: world)
+
+    print(plan.headline)
+    if !plan.body.isEmpty { print(plan.body) }
+    for finding in plan.findings { print("  \(finding.label) — \(finding.value)") }
+    if let steps = plan.steps { print("  steps: \(steps)") }
+    for note in plan.notes { print("  \(note)") }
+    print("buttons: \(list(plan.buttonTitles))")
+
+    guard plan.canAdopt else { return }
+    // Adopting changes nothing on the system and needs no password, so it is
+    // behind `--write` for the note alone.
+    guard flags.contains("--write") else { return }
+    print(try operation.perform(world: world, environment: environment(inventory)))
+}
+
+/// `stop-managing <bsd>` — forgets the note and changes nothing else.
+func runStopManaging(_ bsdName: String?) throws {
+    guard let bsdName else { fail("usage: rdmalink stop-managing <bsd>") }
+    let inventory = try Inventory.read()
+    let port = operationPort(bsdName, in: inventory)
+    let operation = StopManaging(port: port)
+    print(operation.headline)
+    print(operation.body)
+    guard flags.contains("--write") else { return }
+    print(try operation.perform(environment: environment(inventory)))
+}
+
 func printUsage() {
     print("""
     rdmalink \(RDMALinkCore.version) — read-only diagnostics for RDMALink
@@ -243,6 +496,17 @@ func printUsage() {
       refusals       every refusal evaluated against this Mac right now
       spike-auth     the authorization spike (prompts for a password;
                      needs --i-understand)
+
+    Operations. Each prints its preview and stops there; the ones that change
+    the network need both --write and --i-understand.
+
+      setup <bsd…>            take the ports out of every bridge and give each
+                              its own service
+      restore <bsd>           put a port back the way it was found
+      restore-all             every port with an undo note, one at a time
+      return-to-bridge <bsd>  put any standalone port back in Thunderbolt Bridge
+      adopt <bsd>             keep an eye on a port set up by hand (no password)
+      stop-managing <bsd>     forget the note, change nothing (no password)
     """)
 }
 
@@ -253,6 +517,12 @@ do {
     case "bridge-probe": runBridgeProbe()
     case "refusals": try runRefusals()
     case "spike-auth": runAuthorizationSpike(confirmed: flags.contains("--i-understand"))
+    case "setup": try runSetUp(positional.dropFirst().map { $0 })
+    case "restore": try runRestore(positional.dropFirst().first)
+    case "restore-all": try runRestoreAll()
+    case "return-to-bridge": try runReturnToBridge(positional.dropFirst().first)
+    case "adopt": try runAdopt(positional.dropFirst().first)
+    case "stop-managing": try runStopManaging(positional.dropFirst().first)
     case nil, "help", "-h": printUsage()
     case let other?: fail("unknown subcommand: \(other)")
     }

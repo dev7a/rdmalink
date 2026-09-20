@@ -45,7 +45,7 @@ One window, no sidebar, no tabs, no document model, no menu bar extra, no notifi
 
 - **Title:** `RDMALink`
 - **Window subtitle** (set as soon as the model is known): `Studio — Mac Studio (M3 Ultra)` — the Mac's own sharing name, an em dash, the model and chip.
-- **Default size** 1000 × 660 pt. **Minimum** 840 × 560 pt. Resizable, remembers frame, not full-screen-oriented.
+- **Default size** 1000 × 720 pt, so a six-port hub fits without scrolling. **Minimum** 840 × 600 pt. Resizable, remembers frame, not full-screen-oriented.
 
 ### 2.2 Toolbar
 
@@ -98,7 +98,7 @@ Sheets are used for exactly five things: **Adopt**, **Restore**, **Restore All P
 |---|---|
 | **RDMALink** | About RDMALink · Settings… ⌘, · Services · Hide · Quit RDMALink ⌘Q |
 | **Edit** | Undo ⌘Z (text fields only) · Cut/Copy/Paste — Copy works on the address, on every refusal's details, and on the change log |
-| **Port** | Set Up a Port… ⌘N · Identify a Port… ⌘I · Adopt… · Restore… · Restore All Ports… · Stop Managing… |
+| **Port** | Set Up a Port… ⌘N · Identify a Port… ⌘I · Adopt… · Restore… · Restore All Ports… · Return to Bridge… · Stop Managing… |
 | **View** | Back ⌘1 · Front ⌘2 · Left ⌘3 · Right ⌘4 · Fit ⌘0 · Reset View ⇧⌘0 · Show Technical Names ⌘T · Change Log ⌘L |
 | **Window** | standard |
 | **Help** | RDMALink Help · What RDMA over Thunderbolt Is · What to Do on the Other Mac · Save a Diagnostics File… |
@@ -368,7 +368,7 @@ With **Show technical names** on, a `.caption` tertiary suffix is appended to th
 - Set up elsewhere: **Set up outside RDMALink** *[Adopt…]*
 - Drifted: **Not set up any more** *[Set It Up Again]*
 - Trailing buttons, by state: *[Adopt…]* · *[Restore…]* · *[Return to Bridge…]* · *[Stop Managing…]* · *[Set It Up Again]*
-- Ready, adopted or set up elsewhere (any port that is out of the bridge, whoever took it out): the row carries **Return to Bridge…** so putting a port back never depends on how it was removed.
+- Adopted or set up elsewhere (any port that is out of the bridge and that RDMALink did not set up): the row carries **Return to Bridge…**, so putting a port back never depends on how it was removed. A port RDMALink set up carries **Restore…** instead, which returns it exactly.
 
 **Copy — buttons**
 - **Set Up a Port…** · **Set Up Another Port…** · **Restore…** · **Check Again** · **Change Log** · **What This All Means** · **Turn It On…** · **Show Me** · **Forget This Port**
@@ -423,11 +423,11 @@ The camera **holds** the resting three-quarter pose and never moves on its own h
 
 **Purpose.** Check every hard rule the app can measure, so the user is never asked to promise something. **Nothing on this screen is a checkbox, and nothing here can be waved through.**
 
-**Layout.** Stage live at full strength; any port a check refers to takes a soft attention ring. Working area: headline, one body line, then a grouped inset list of five check rows. Each row: symbol (`checkmark.circle.fill` accent when satisfied, `exclamationmark.circle` `.orange` when not, `circle.dotted` while checking), a title, a `.callout` secondary line carrying the **actual finding**, and a trailing borderless action button only where one helps. Port list compact below. Footer: `Back` and `Continue` as the default, disabled whenever a row is unsatisfied, with the reason printed in `.callout` `.orange` directly above the footer separator.
+**Layout.** Stage live at full strength; any port a check refers to takes a soft attention ring. Working area: headline, one body line, then a grouped inset list of four check rows. Each row: symbol (`checkmark.circle.fill` accent when satisfied, `exclamationmark.circle` `.orange` when not, `circle.dotted` while checking), a title, a `.callout` secondary line carrying the **actual finding**, and a trailing borderless action button only where one helps. Port list compact below. Footer: `Back` and `Continue` as the default, disabled whenever a row is unsatisfied, with the reason printed in `.callout` `.orange` directly above the footer separator.
 
 **Copy.**
 - Headline: **Before we change anything**
-- Body: **Five things worth knowing. RDMALink checks them itself — nothing here is a promise you have to make.**
+- Body: **Four things worth knowing. RDMALink checks them itself — nothing here is a promise you have to make.**
 
 | # | Title | Satisfied | Unsatisfied | Button |
 |---|---|---|---|---|
@@ -435,12 +435,11 @@ The camera **holds** the resting three-quarter pose and never moves on its own h
 | 2 | **Nothing mounted over Thunderbolt** | **Nothing is mounted. Good.** | **The volume Vault is mounted over Thunderbolt. Eject it in Finder so nothing gets interrupted.** | **Show in Finder** |
 | 3 | **Another way to reach this Mac** | **Wi-Fi is connected, so changing a Thunderbolt port won't cut you off.** | **Right now, Thunderbolt is the only way this Mac is reachable. Changing a port can briefly interrupt the whole bridge — not just that one port — so connect Wi-Fi or Ethernet before we touch it.** | **Open Network Settings** |
 | 4 | **Room to save an undo note** | **RDMALink can save its notes, so anything it changes can be put back.** | **RDMALink can't write its notes folder, so it couldn't put things back afterwards. It won't change anything it can't undo.** | **Show the Notes Folder** |
-| 5 | **This Mac only** | **RDMALink changes the Mac it's running on and nothing else. You'll run it on the other Mac when we're done here.** | *(always satisfied — informational)* | — |
 
 - Disabled-`Continue` reasons: **Unplug one of the two cables to continue.** · **Unplug one end of that cable to continue.** · **Eject Vault to continue.** · **Connect Wi-Fi or Ethernet to continue.** · **RDMALink needs somewhere to save its notes before it can continue.**
 - Buttons: **Continue** · **Back** · **Check Again**
 
-**States.** All five satisfied · Two Macs connected (R1) · Cable looped back into this Mac (R2) · No Mac connected (satisfied, with the gentle note) · A volume mounted over Thunderbolt (R4) · Only reachable over Thunderbolt (R5, **hard refusal**) · Baseline folder unwritable (R14, **hard refusal**) · Managed by a configuration profile (R13, hard refusal, replaces the whole list) · Re-checking (rows animate individually, `Continue` greys for the duration).
+**States.** All four satisfied · Two Macs connected (R1) · Cable looped back into this Mac (R2) · No Mac connected (satisfied, with the gentle note) · A volume mounted over Thunderbolt (R4) · Only reachable over Thunderbolt (R5, **hard refusal**) · Baseline folder unwritable (R14, **hard refusal**) · Managed by a configuration profile (R13, hard refusal, replaces the whole list) · Re-checking (rows animate individually, `Continue` greys for the duration).
 
 **3D behavior.** When a check names a port, that receptacle takes a 1.5 pt attention ring in `.secondary` and a single 1.6 s breath, and the camera turns to the face it is on if it isn't already visible — with the working area printing **"Let me turn it around"** for the duration of the move. With two Macs connected, both receptacles ring simultaneously and a faint light thread leaves each one, **making the loop visible rather than described**; when the user unplugs one, its ring and thread fade and the check flips to satisfied in the same beat, with no click.
 
@@ -651,7 +650,7 @@ You can watch each sentence mean something before you agree to it.
 - Body: **Back, far right isn't in any bridge and already has its own service with IPv4 off and IPv6 link-local only. That's exactly what RDMALink would have made. Adopt it and RDMALink will keep an eye on it — without changing a thing.**
 - Findings: **Service — Thunderbolt Bridge Free** · **IPv4 — Off** · **IPv6 — Link-local only** · **Bridge membership — None**
 - Note: **Adopting changes nothing and needs no password. RDMALink is only writing itself a note.**
-- Honesty note: **One thing to be straight about: RDMALink never saw this port before, so it doesn't know which bridge it came from. There's no "put it back" for an adopted port — only "stop looking after it", which leaves the port exactly as it is.**
+- Honesty note: **One thing to be straight about: RDMALink never saw this port before, so it doesn't know which bridge it came from. There's no exact "put it back" for an adopted port — Return to Bridge does the ordinary thing instead, and "stop looking after it" leaves the port exactly as it is.**
 - Buttons: **Adopt** · **Leave As Is**
 - Confirmation: **Adopted. Back, far right is in RDMALink's care now.**
 

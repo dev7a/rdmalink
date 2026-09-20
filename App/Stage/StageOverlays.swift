@@ -144,3 +144,31 @@ extension View {
         .clipShape(.capsule)
     }
 }
+
+/// UX_SPEC §S5: hovering **Save how to undo this** fades "a small bookmark
+/// glyph in at the stage's trailing edge".
+///
+/// It is the one mark in the scene that is not on the machine, because the undo
+/// note is not on the machine either — and it carries no text, like everything
+/// else on the stage (§4.7). The review screen's own row is what says the
+/// words, and the port list is the complete path to all of it (§8.1), so this
+/// is hidden from VoiceOver rather than described twice.
+struct StageBookmarkGlyph: View {
+    let isShowing: Bool
+    let appearance: StageAppearance
+
+    var body: some View {
+        Image(systemName: "bookmark")
+            .font(.title3)
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(.secondary)
+            .opacity(isShowing ? 1 : 0)
+            .animation(
+                appearance.reduceMotion ? nil : .smooth(duration: 0.18), value: isShowing
+            )
+            // It sits over the render surface, and a transparent glyph that
+            // swallowed a click would take a receptacle away from the pointer.
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}

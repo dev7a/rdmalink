@@ -373,6 +373,28 @@ public enum BridgeSPI {
         return bridge
     }
 
+    /// The bridge an undo note is about, **and** the proof that it is still
+    /// that bridge.
+    ///
+    /// A `bridgeN` name freed by a delete and handed to a different virtual
+    /// interface would otherwise be edited as if it were the recorded one, so
+    /// the note's own member list is the proof: every member the bridge is
+    /// carrying now has to be one the note saw.
+    static func resolveRecorded(
+        _ recorded: BridgeMembership,
+        in preferences: SCPreferences
+    ) throws -> (bridge: SCBridgeInterfaceRef, membership: Membership) {
+        let resolved = try bridge(serviceIdentifier: recorded.serviceIdentifier,
+                                  bsdName: recorded.bridgeName, in: preferences)
+        let current = try describe(resolved)
+        guard Set(current.members).isSubset(of: Set(recorded.members)) else {
+            throw BridgeSPIError.notTheRecordedBridge(
+                bridge: current.bsdName, members: current.members,
+                recorded: recorded.members)
+        }
+        return (resolved, current)
+    }
+
     // MARK: - Plumbing
 
     private static func copyAll(in preferences: SCPreferences) throws -> [SCBridgeInterfaceRef] {

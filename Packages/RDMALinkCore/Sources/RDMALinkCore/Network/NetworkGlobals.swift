@@ -31,4 +31,37 @@ public enum NetworkGlobals {
         }
         return found
     }
+
+    /// What kind of interface a route is on, and what macOS calls it.
+    ///
+    /// §S3 row 3's satisfied finding names **Wi-Fi** by name, so the row needs
+    /// more than a BSD name to print it. `SCNetworkInterfaceGetInterfaceType`
+    /// is public API and answers exactly this.
+    public struct RouteKind: Sendable, Equatable {
+        public var bsdName: String
+        /// `kSCNetworkInterfaceTypeIEEE80211`.
+        public var isWiFi: Bool
+        /// What System Settings calls it — "Wi-Fi", "Ethernet", "Thunderbolt
+        /// Bridge". `nil` when macOS offers no name.
+        public var displayName: String?
+
+        public init(bsdName: String, isWiFi: Bool, displayName: String?) {
+            self.bsdName = bsdName
+            self.isWiFi = isWiFi
+            self.displayName = displayName
+        }
+    }
+
+    /// Describes one interface by BSD name. Read-only, public API only.
+    public static func routeKind(of bsdName: String) -> RouteKind? {
+        let all = SCNetworkInterfaceCopyAll() as? [SCNetworkInterface] ?? []
+        guard let interface = all.first(where: {
+            (SCNetworkInterfaceGetBSDName($0) as String?) == bsdName
+        }) else { return nil }
+        let type = SCNetworkInterfaceGetInterfaceType(interface) as String?
+        return RouteKind(
+            bsdName: bsdName,
+            isWiFi: type == (kSCNetworkInterfaceTypeIEEE80211 as String),
+            displayName: SCNetworkInterfaceGetLocalizedDisplayName(interface) as String?)
+    }
 }

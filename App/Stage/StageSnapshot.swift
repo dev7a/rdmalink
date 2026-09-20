@@ -45,12 +45,11 @@ enum StageSnapshot {
     /// - Parameter scale: the window's backing scale, so the composited image
     ///   lands at the same resolution as the rest of the bitmap.
     static func image(
-        ports: [StagePort],
+        moment: StageMoment,
         archetype: Archetype,
         palette: StagePalette,
         appearance: StageAppearance,
         pose: StageCameraPose,
-        focused: StagePort.ID?,
         size: CGSize,
         scale: CGFloat
     ) async -> CGImage? {
@@ -74,13 +73,14 @@ enum StageSnapshot {
         else { return nil }
 
         let graph = StageSceneBuilder.build(
-            ports: ports, archetype: archetype, palette: palette, appearance: appearance
+            ports: moment.ports, archetype: archetype, palette: palette,
+            appearance: appearance
         )
-        // The builder leaves every ring, stub, bloom and thread disabled at
-        // opacity 0; only `StageScene.apply` ever raises them, and it runs
-        // against the live graph. Without this the review render is bare
-        // aluminium with the whole of §4.2 and §4.3 missing from it.
-        StageScene.settle(graph, ports: ports, focused: focused)
+        // The builder leaves every ring, ribbon, stub, bloom and thread
+        // disabled at opacity 0; only `StageScene.apply` ever raises them, and
+        // it runs against the live graph. Without this the review render is
+        // bare aluminium with the whole of §4.2, §4.3 and §4.4 missing from it.
+        StageScene.settle(graph, moment: moment)
         renderer.entities.append(graph.root)
 
         if let environment = try? StageMesh.environment(
@@ -142,5 +142,102 @@ enum StageSnapshot {
         return CIContext(mtlDevice: device).createCGImage(
             flipped, from: flipped.extent, format: .RGBA8, colorSpace: space
         )
+    }
+}
+
+/// A moment the review hook can ask the stage to hold still in.
+///
+/// `RDMALINK_SNAPSHOT` captures the window as it is; the states below are the
+/// ones that only exist while something is happening — a ring half closed, the
+/// ribbon letting go, Identify listening, a change row being pointed at — and
+/// which a headless run would otherwise never see. `RDMALINK_SNAPSHOT_STAGE`
+/// names one, `StageView` applies it to the model before the capture, and
+/// nothing here runs unless that variable is set.
+///
+///     RDMALINK_SNAPSHOT=/tmp/apply.png RDMALINK_SNAPSHOT_STAGE=applyHalf ./…
+///
+/// Each state acts on the first Thunderbolt receptacle in physical order that
+/// suits it, because a review picture wants the same port every time.
+enum StageSnapshotState: String, Sendable, CaseIterable {
+    /// §4.4: every bridge ribbon up, the way review, apply and restore show it.
+    case ribbons
+    /// §S3: two receptacles named by a check, ringed together.
+    case attention
+    /// §S6: two of the four gaps closed, the ribbon half retracted.
+    case applyHalf
+    /// §S6: every gap closed — the solid accent ring.
+    case applyDone
+    /// §S10: the inverse, stopped half-open the way a failed verification
+    /// leaves it (R20).
+    case restoreHalfOpen
+    /// §S4b: every eligible receptacle listening.
+    case identifyWatching
+    /// §S4b: the answer, with the silence around it.
+    case identifyAnswer
+    /// §S4b: the replug bloom.
+    case identifyReplug
+    /// §S5: hovering **Leave the Thunderbolt Bridge**.
+    case previewLeaveBridge
+    /// §S5: hovering **Get its own network service**.
+    case previewService
+    /// §S5: hovering **Turn IPv4 off, IPv6 to link-local**.
+    case previewAddresses
+    /// §S5: hovering **Save how to undo this**.
+    case previewNote
+
+    /// `RDMALINK_SNAPSHOT_STAGE`, when it names one of these.
+    static var requested: StageSnapshotState? {
+        ProcessInfo.processInfo.environment["RDMALINK_SNAPSHOT_STAGE"]
+            .flatMap(StageSnapshotState.init(rawValue:))
+    }
+
+    /// Drives the model into this state. Intents only — the same ones the
+    /// screens call — so a review picture can never show something the app
+    /// cannot actually reach.
+    @MainActor
+    func apply(to model: StageModel) {
+        let ports = model.ports.filter(\.isThunderbolt)
+        guard let first = ports.first else { return }
+        switch self {
+        case .ribbons:
+            model.ribbons = .all
+        case .attention:
+            model.attention(ids: Set(ports.prefix(2).map(\.id)))
+        case .applyHalf:
+            model.ribbons = .all
+            model.select(first.id)
+            model.progress(step: 2, of: 5, for: first.id)
+        case .applyDone:
+            model.ribbons = .all
+            model.select(first.id)
+            model.progress(step: 5, of: 5, for: first.id)
+        case .restoreHalfOpen:
+            model.ribbons = .all
+            model.select(first.id)
+            model.restoreProgress(step: 2, of: 3, for: first.id)
+        case .identifyWatching:
+            model.startIdentify()
+        case .identifyAnswer:
+            model.startIdentify()
+            model.identify(answer: first.id)
+        case .identifyReplug:
+            model.startIdentify()
+            model.identify(answer: first.id)
+            model.identify(replug: first.id)
+        case .previewLeaveBridge, .previewService, .previewAddresses, .previewNote:
+            model.ribbons = .all
+            model.select(first.id)
+            model.preview(previewKind, for: first.id)
+        }
+    }
+
+    private var previewKind: StagePreview? {
+        switch self {
+        case .previewLeaveBridge: .leaveBridge
+        case .previewService: .service
+        case .previewAddresses: .addresses
+        case .previewNote: .note
+        default: nil
+        }
     }
 }

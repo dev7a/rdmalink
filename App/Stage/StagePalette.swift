@@ -65,6 +65,17 @@ struct StagePalette {
     /// rather than a colour that means something.
     var ink: NSColor { grey(appearance.isDark ? 0.96 : 0.11) }
 
+    /// §4.4: the bridge ribbon is the same `.secondary` ink — "tone and
+    /// geometry, never a color channel" — and a bridge that is **not in use**
+    /// takes "a marginally cooler value" of it, which is the one place the
+    /// stage bends a tone rather than a shape, and the spec asks for it by
+    /// name. The 8 % blend is a value, not a hue: at a sixteenth of the
+    /// ribbon's own opacity it never reads as blue, only as further away.
+    var ribbonInactiveInk: NSColor {
+        let cool = NSColor(srgbRed: 0.62, green: 0.70, blue: 0.86, alpha: 1)
+        return ink.blended(withFraction: 0.08, of: cool)?.usingColorSpace(.sRGB) ?? ink
+    }
+
     /// §3.4: in dark mode the accent ring brightens one step to hold contrast.
     var accent: NSColor {
         let resolved = resolve(.controlAccentColor)
@@ -129,6 +140,12 @@ struct StagePalette {
     var inkMaterial: UnlitMaterial { flat(ink) }
 
     var accentMaterial: UnlitMaterial { flat(accent) }
+
+    /// §4.4's ribbon. The opacity is the scene's — one number on the link, so
+    /// an inactive bridge's 40 % and the cross-fade are the same control.
+    func ribbonMaterial(active: Bool) -> UnlitMaterial {
+        flat(active ? ink : ribbonInactiveInk)
+    }
 
     // MARK: - Private
 

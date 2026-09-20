@@ -8,8 +8,13 @@ import Foundation
 public enum RefusalCode: String, Sendable, Equatable, CaseIterable {
     /// Two Macs are connected (loop risk).
     case twoMacsConnected = "R1"
+    /// Something is still mounted over a Thunderbolt link. Blocks preflight
+    /// and blocks Restore.
+    case volumeMounted = "R4"
     /// This is how you're connected right now — Thunderbolt is the only route.
     case onlyRouteIsThunderbolt = "R5"
+    /// The permission expired mid-burst, so the port was put back.
+    case credentialExpired = "R8"
     /// macOS wouldn't release the port from the bridge. A **precondition**:
     /// it is only ever raised before anything has been written.
     case portStillInBridge = "R9"
@@ -17,10 +22,23 @@ public enum RefusalCode: String, Sendable, Equatable, CaseIterable {
     case rolledBack = "R10"
     /// The rollback itself failed — the port is in neither place.
     case rollbackFailed = "R11"
+    /// System Settings, or another app, holds the network configuration.
+    case networkBusy = "R12"
     /// RDMALink can't save its undo note.
     case baselineUnwritable = "R14"
+    /// There's a bridge here RDMALink can't read. Blocks review for that port.
+    case bridgeUnreadable = "R15"
     /// This port already has a setup RDMALink didn't make.
     case foreignService = "R16"
+    /// The arrangement changed while the review was on screen.
+    case topologyChanged = "R17"
+    /// The undo note is missing or unreadable, at Restore.
+    case undoNoteMissing = "R19"
+    /// The service is gone but the bridge is not listing the port yet. The
+    /// undo note is **kept**.
+    case notBackInBridge = "R20"
+    /// The bridge the port came from doesn't exist any more, at Restore.
+    case originalBridgeGone = "R21"
     /// The service RDMALink created has been edited since, so Restore will not
     /// delete it.
     ///
@@ -29,6 +47,14 @@ public enum RefusalCode: String, Sendable, Equatable, CaseIterable {
     /// one it made". The strings below are written in the spec's voice and are
     /// owed a review by the spec owner before ML2 ships.
     case createdServiceEdited = "R28"
+    /// There is no Thunderbolt Bridge to return a standalone port to, and
+    /// RDMALink never creates one.
+    ///
+    /// **Proposed, not yet numbered in UX_SPEC §6.2.** The situation is
+    /// specified in §S10 — headline, body and buttons — but has no R number,
+    /// so the strings below are the spec's own and only the number is this
+    /// module's. It is owed a number by the spec owner before ML2 ships.
+    case noBridgeToReturnTo = "R29"
 }
 
 /// A refusal: a situation the app names, explains and will not step around.

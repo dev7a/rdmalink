@@ -244,6 +244,49 @@ enum StageMesh {
         return try MeshResource.generate(from: [descriptor])
     }
 
+    // MARK: - The bridge ribbon
+
+    /// One segment of UX_SPEC §4.4's ribbon: a flat quad from `from` to `to`,
+    /// lying **against the chassis surface** rather than standing on edge.
+    ///
+    /// The width runs across the curve and tangent to the surface, which for a
+    /// ribbon arcing along a face is the vertical, and for one wrapping a
+    /// corner turns with it. Both positions are in centimetres in the chassis's
+    /// own frame, the way `StageMath.ribbonPath` produces them.
+    @MainActor
+    static func ribbonSegment(
+        from: SIMD3<Double>, to: SIMD3<Double>, width: Double
+    ) throws -> MeshResource {
+        let direction = to - from
+        let length = simd_length(direction)
+        guard length > 1e-9 else { throw StageMeshError.degenerateRing }
+        let along = direction / length
+        // Straight out of the chassis's vertical axis at the segment's middle:
+        // the ribbon's own face normal.
+        let middle = (from + to) / 2
+        let radial = SIMD3(middle.x, 0, middle.z)
+        let outward = simd_length(radial) > 1e-9
+            ? simd_normalize(radial)
+            : SIMD3<Double>(0, 0, 1)
+        var across = simd_cross(along, outward)
+        if simd_length(across) < 1e-6 { across = SIMD3(0, 1, 0) }
+        across = simd_normalize(across) * (width / 2)
+
+        let corners = [from - across, from + across, to - across, to + across]
+        let positions = corners.map {
+            SIMD3(metres($0.x), metres($0.y), metres($0.z))
+        }
+        let normal = SIMD3(Float(outward.x), Float(outward.y), Float(outward.z))
+        var descriptor = MeshDescriptor(name: "ribbon")
+        descriptor.positions = MeshBuffers.Positions(positions)
+        descriptor.normals = MeshBuffers.Normals(Array(repeating: normal, count: 4))
+        descriptor.textureCoordinates = MeshBuffers.TextureCoordinates([
+            SIMD2(0, 0), SIMD2(0, 1), SIMD2(1, 0), SIMD2(1, 1),
+        ])
+        descriptor.primitives = .triangles([0, 1, 3, 0, 3, 2])
+        return try MeshResource.generate(from: [descriptor])
+    }
+
     /// The soft bloom behind a selected or ready receptacle (§4.3, §4.6).
     @MainActor
     static func bloom(width: Double, height: Double, cornerRadius: Double) -> MeshResource {

@@ -46,6 +46,10 @@ struct StagePort: Identifiable, Equatable, Sendable {
     /// The physical position name from §4.7, for the accessibility element.
     /// Never drawn on the model — no text ever is (§4.7).
     var positionName: String
+    /// Every kernel bridge this receptacle belongs to, switched on or not.
+    /// §4.4's ribbon is drawn between the members of the same bridge, and an
+    /// inactive one is drawn at 40 % — so both facts have to reach the stage.
+    var bridges: [StageBridge] = []
     var selected = false
     var hovered = false
     /// §S3: a check that names a port gives it an attention ring and one breath.
@@ -58,6 +62,16 @@ struct StagePort: Identifiable, Equatable, Sendable {
     var accessibilityValue: String?
 
     var isThunderbolt: Bool { kind == .thunderbolt }
+}
+
+/// One kernel bridge a receptacle belongs to, reduced to what §4.4's ribbon
+/// needs: which bridge it is, so members can be tied together, and whether it
+/// is in use, so an unused one draws at 40 %.
+struct StageBridge: Identifiable, Equatable, Sendable {
+    /// The kernel interface name, `bridge0`. Unique within one port's list.
+    let id: String
+    /// The kernel says this bridge is up and carrying something.
+    var isActive: Bool
 }
 
 extension StagePort {
@@ -73,9 +87,73 @@ extension StagePort {
             kind: port.isThunderbolt ? .thunderbolt : .usbOnly,
             link: port.link,
             cfg: configuration,
-            positionName: port.positionName
+            positionName: port.positionName,
+            bridges: port.bridges.map { StageBridge(id: $0.name, isActive: $0.isUp) }
         )
     }
+}
+
+/// UX_SPEC §4.4: which bridge ribbons are drawn, beyond the ones hover and
+/// selection raise on their own.
+///
+/// "The ribbon appears on hover, on selection, throughout review, apply, and
+/// restore, and whenever the port list's bridge row is hovered" — the first two
+/// the stage knows by itself, and the rest are the screen's business, which is
+/// what this value carries.
+enum StageRibbons: Equatable, Sendable {
+    /// S1 and S4: hover and selection only.
+    case automatic
+    /// The port list's bridge row is hovered: every member of that one bridge,
+    /// by its kernel name.
+    case bridge(String)
+    /// S5, S6 and S10: the ribbon stays up for the whole screen.
+    case all
+}
+
+/// UX_SPEC §S4b. The stage's whole part in Identify: which receptacles are
+/// listening, and which one answered.
+enum StageIdentify: Equatable, Sendable {
+    case off
+    /// Every eligible receptacle shimmers in phase — *listening*, not
+    /// *loading* — and the camera has pulled back to see both faces.
+    case watching
+    /// An unplug landed: every other shimmer stops dead and this one takes a
+    /// steady `.secondary` ring. "The silence around the answer is the
+    /// feedback."
+    case answered(StagePort.ID)
+    /// The cable went back in: the ring blooms to full accent with a single
+    /// 8 % scale pulse, and the camera arcs square on.
+    case confirmed(StagePort.ID)
+
+    /// The receptacle Identify is talking about, once there is one.
+    var id: StagePort.ID? {
+        switch self {
+        case .off, .watching: nil
+        case .answered(let id), .confirmed(let id): id
+        }
+    }
+}
+
+/// UX_SPEC §S5's hover-to-preview: "You can watch each sentence mean something
+/// before you agree to it." One case per change row, and each is silent,
+/// reversible and writes nothing anywhere.
+enum StagePreview: String, Equatable, Sendable, CaseIterable {
+    /// **Save how to undo this** — a bookmark glyph at the stage's trailing edge.
+    case note
+    /// **Leave the Thunderbolt Bridge** — this receptacle's ribbon links fade
+    /// away and the segmented ring's gaps widen a hair.
+    case leaveBridge
+    /// **Get its own network service** — a small accent node beside the
+    /// receptacle.
+    case service
+    /// **Turn IPv4 off, IPv6 to link-local** — the node gains a hairline ring.
+    case addresses
+}
+
+/// One hover-to-preview, and the receptacle whose change row it is.
+struct StagePreviewIntent: Equatable, Sendable {
+    var kind: StagePreview
+    var id: StagePort.ID
 }
 
 /// A camera move the view has not performed yet.
@@ -84,7 +162,13 @@ extension StagePort {
 /// must fit twice, and `Equatable` on the kind alone would swallow the second.
 struct StageCameraRequest: Equatable, Sendable {
     enum Kind: Equatable, Sendable {
+        /// §9.1's turn: the three-quarter pose on that face.
         case turn(PortFace)
+        /// §S4b and §S5: square on to the face, with no three-quarter offset.
+        case squareOn(PortFace)
+        /// §S4b: pull back far enough that a change anywhere will be seen, from
+        /// a pose that shows something of every face these receptacles are on.
+        case survey([PortFace])
         case fit
         case reset
     }
@@ -130,10 +214,44 @@ final class StageModel {
     /// Bumped once when the probe finishes, to run the waking-ports beat (§9.2).
     private(set) var wakeToken = 0
 
+    // MARK: - The ML2 beats
+    //
+    // Everything below is an *intent*: a screen says what moment it is in and
+    // the stage draws it. None of it is a fact about the Mac — the facts
+    // arrive through `ports` — and none of it writes anything anywhere.
+
+    /// §4.4: which bridge ribbons are up, beyond hover and selection.
+    var ribbons: StageRibbons = .automatic
+
+    /// §S6 and §S10: how much of a receptacle's segmented ring has closed,
+    /// 0…4 gaps. Absent means the ring is whatever ``StagePort/cfg`` says;
+    /// present means a real operation is running on that port and the ring is
+    /// reporting it.
+    private(set) var progress: [StagePort.ID: Int] = [:]
+
+    /// §S4b.
+    private(set) var identify: StageIdentify = .off
+
+    /// §S5: the change row the pointer is on, and the receptacle it is about.
+    private(set) var preview: StagePreviewIntent?
+
     private var requestToken = 0
     private var narrationClear: Task<Void, Never>?
 
     init() {}
+
+    /// Everything the stage draws, as one value.
+    ///
+    /// The live scene reads the model directly; this is for the second,
+    /// off-screen render the review hook takes (App/Stage/StageSnapshot.swift),
+    /// which needs the whole moment in one piece because it builds its own
+    /// entity graph from scratch.
+    func moment(focused: StagePort.ID? = nil) -> StageMoment {
+        StageMoment(
+            ports: ports, ribbons: ribbons, progress: progress, identify: identify,
+            preview: preview, focused: focused
+        )
+    }
 
     // MARK: - Selection
 
@@ -174,10 +292,132 @@ final class StageModel {
         for index in ports.indices { ports[index].hovered = ports[index].id == id }
     }
 
-    /// §S3: ring the receptacles a check names, and stop when it is answered.
-    func setAttention(_ ids: Set<StagePort.ID>) {
+    // MARK: - §S3's attention rings
+
+    /// Ring the receptacles a check names, and stop when it is answered.
+    ///
+    /// UX_SPEC §S3: "that receptacle takes a 1.5 pt attention ring in
+    /// `.secondary` and a single 1.6 s breath". The breath is one dip and back,
+    /// not a loop — it starts when a receptacle joins the set and it ends by
+    /// itself. Passing the empty set takes every ring away.
+    ///
+    /// With two Macs connected, both receptacles are named at once and both
+    /// ring simultaneously; a faint light thread leaves each of them for as
+    /// long as they are ringed, **making the loop visible rather than
+    /// described**.
+    func attention(ids: Set<StagePort.ID>) {
         for index in ports.indices { ports[index].attention = ids.contains(ports[index].id) }
     }
+
+    // MARK: - §S6 and §S10: the ring that closes as the work gets done
+
+    /// UX_SPEC §S6: "The selected receptacle's segmented ring **closes its gaps
+    /// one by one** as each real step completes, ending as a solid accent
+    /// ring."
+    ///
+    /// Call it as each write lands, never on a timer — §3.5 is explicit that a
+    /// stall has to look like a stall. `step` is how many of `total` steps are
+    /// done, so `progress(step: 0, of: 5, …)` is the ring the apply screen
+    /// opens on and `step == total` is the solid ring.
+    ///
+    /// In the same beat as the first gap closes, this receptacle's bridge
+    /// ribbon detaches and retracts into the other members (§4.4, §9.3).
+    func progress(step: Int, of total: Int, for id: StagePort.ID) {
+        self.progress[id] = StageMath.closedGaps(step: step, of: total)
+    }
+
+    /// §S6 and §9.5: "the same ring re-opens its gaps at the same pace and the
+    /// ribbon springs back while the checklist reverses." One call per step the
+    /// rollback undoes, which is what keeps the two in step.
+    func rollback(for id: StagePort.ID) {
+        guard let closed = progress[id] else { return }
+        self.progress[id] = max(closed - 1, 0)
+    }
+
+    /// §S10: restore is the inverse — "the solid ring **re-opens into the
+    /// four-arc segmented ring** and the bridge ribbon springs back out and
+    /// reattaches."
+    ///
+    /// The ring starts solid and opens a gap per completed step, reaching the
+    /// ordinary bridge-member shape on the last one. If verification fails,
+    /// stop calling: the ring stops half-open and stays that way, which is
+    /// exactly what R20's copy says.
+    func restoreProgress(step: Int, of total: Int, for id: StagePort.ID) {
+        self.progress[id] = 4 - StageMath.closedGaps(step: step, of: total)
+    }
+
+    /// Hands the receptacle's outer ring back to ``StagePort/cfg``.
+    ///
+    /// Called once the operation is over and the re-read has landed — §S7's
+    /// solid accent ring and §S10's "settles to the ordinary bridge-member
+    /// state" are both states of the port, not of an animation, and the stage
+    /// must not keep asserting a progress it is no longer being told about.
+    func clearProgress(for id: StagePort.ID) { self.progress[id] = nil }
+
+    func clearAllProgress() { self.progress.removeAll() }
+
+    // MARK: - §S4b: Identify
+
+    /// Every eligible receptacle starts shimmering, in phase, and the camera
+    /// pulls back to a pose that shows something of every face they are on.
+    ///
+    /// The camera move carries no line of its own: §S4b's own headline and
+    /// status line are on screen the whole time, and the stage never writes a
+    /// sentence (§1.3).
+    func startIdentify() {
+        identify = .watching
+        request(.survey(relevantFaces))
+    }
+
+    /// An unplug landed. Every other shimmer stops dead; this receptacle takes
+    /// a steady `.secondary` ring.
+    func identify(answer id: StagePort.ID) {
+        identify = .answered(id)
+    }
+
+    /// The cable went back in: the ring blooms to full accent with a single
+    /// 8 % scale pulse **on the ring only**, the camera arcs square on, and the
+    /// list row selects itself.
+    ///
+    /// A USB-only receptacle can answer Identify — §S4b has copy for exactly
+    /// that. The camera still turns to it, because that is the answer; the ring
+    /// and the bloom do not appear, because §4.5 gives a USB-only receptacle no
+    /// ring of any kind, and ``select(_:)`` refuses it for the same reason. The
+    /// words are the panel's, and it has them.
+    func identify(replug id: StagePort.ID) {
+        identify = .confirmed(id)
+        if let port = ports.first(where: { $0.id == id }) {
+            turnSquareOn(to: port.face)
+        }
+        select(id)
+    }
+
+    /// Identify is over — cancelled, timed out, or finished with.
+    func stopIdentify() { identify = .off }
+
+    // MARK: - §S5: hover-to-preview
+
+    /// Preview one change row on the model, silently and reversibly. Passing
+    /// `nil` takes the preview away; the pointer leaving a row is the whole of
+    /// the undo.
+    func preview(_ kind: StagePreview?, for id: StagePort.ID) {
+        guard let kind else {
+            if self.preview?.id == id { self.preview = nil }
+            return
+        }
+        self.preview = StagePreviewIntent(kind: kind, id: id)
+    }
+
+    /// Takes any preview off the model, whichever receptacle it was about.
+    ///
+    /// The pointer leaving a row is the ordinary undo, but the pointer does
+    /// not move when the screen is replaced by the keyboard — Return on S5's
+    /// footer, with the pointer still on a change row — so the screen going
+    /// away has to clear it too. Routing a sentinel id through
+    /// ``preview(_:for:)`` cannot: port ids are BSD names and match nothing,
+    /// which leaves the bookmark glyph or the widened ring asserting a change
+    /// that was already made or abandoned.
+    func clearPreview() { preview = nil }
 
     // MARK: - Camera intents
 
@@ -187,6 +427,21 @@ final class StageModel {
         currentFace = face
         say("Let me turn it around", showing: face)
         request(.turn(face))
+    }
+
+    /// §S4b's replug and §S5's review pose: square on to the face, with none of
+    /// ``turnTo(_:)``'s three-quarter offset.
+    ///
+    /// The line is spoken only when the machine really turns round. Squaring up
+    /// on the face already in front is a few degrees, and §3.5's rule exists so
+    /// that a 180° turn is never a surprise, not so that every nudge is
+    /// narrated.
+    func turnSquareOn(to face: PortFace) {
+        if face != currentFace {
+            currentFace = face
+            say("Let me turn it around", showing: face)
+        }
+        request(.squareOn(face))
     }
 
     func fit() { request(.fit) }
@@ -264,4 +519,20 @@ final class StageModel {
         }
         return String(localized: showing)
     }
+}
+
+/// Everything the stage draws at one instant, as a value.
+///
+/// The live scene reads ``StageModel`` directly and never builds one of these.
+/// It exists for the review hook's off-screen render, which builds its own
+/// entity graph and so needs the whole moment — the ports, the ribbons, the
+/// rings mid-close, Identify and the hover-to-preview — handed to it in one
+/// piece (App/Stage/StageSnapshot.swift).
+struct StageMoment: Equatable, Sendable {
+    var ports: [StagePort] = []
+    var ribbons: StageRibbons = .automatic
+    var progress: [StagePort.ID: Int] = [:]
+    var identify: StageIdentify = .off
+    var preview: StagePreviewIntent?
+    var focused: StagePort.ID?
 }

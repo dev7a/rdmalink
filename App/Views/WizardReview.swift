@@ -1,0 +1,196 @@
+//
+//  WizardReview.swift
+//
+//  S5 — Here's what will change (UX_SPEC §S5). The promise screen: everything
+//  the app is about to do, in plain words, with the technical truth one
+//  disclosure away, and the last chance to back out before any password.
+//
+//  Every string is Core's `SetUpPortsPlan`, which holds §S5's table verbatim.
+//  A refusal **replaces** the sections and the footer's primary button is
+//  removed entirely rather than disabled (§6.1 rule 6) — which
+//  `SetUpFlow.primary` does by returning `nil`.
+//
+
+import SwiftUI
+import RDMALinkCore
+
+struct WizardReview: View {
+    let flow: SetUpFlow
+    let model: InventoryModel
+    let preview: (ReviewPreview?, String) -> Void
+    /// Takes any preview off the model, whichever port it was about.
+    var clearPreview: () -> Void = {}
+    let perform: (WizardAction) -> Void
+
+    @AppStorage(AppSettings.showTechnicalNames) private var showsTechnicalNames = false
+    @State private var showsWhatIWontTouch = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if let refusal = flow.reviewRefusal {
+                WizardRefusalCard(refusal: refusal, model: model, perform: perform)
+            } else if let plan = flow.reviewPlan {
+                sections(plan)
+            } else {
+                // The plan is a read, and the app never states a change it has
+                // not worked out yet (§1.3 rule 10).
+                ProgressView().controlSize(.small)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.smooth(duration: 0.18), value: showsWhatIWontTouch)
+        .animation(.smooth(duration: 0.18), value: showsTechnicalNames)
+        // The pointer does not have to move for this screen to go away, so the
+        // preview is cleared outright rather than by a row's hover ending.
+        .onDisappear { clearPreview() }
+    }
+
+    private func sections(_ plan: SetUpPortsPlan) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            WizardHeadline(
+                headline: LocalizedStringResource(core: SetUpPortsPlan.headline),
+                message: LocalizedStringResource(core: SetUpPortsPlan.body))
+            ForEach(plan.ports, id: \.port.bsdName) { port in
+                WizardReviewSection(plan: port) { change, isHovering in
+                    preview(isHovering ? ReviewPreview(change) : nil, port.port.bsdName)
+                }
+            }
+            Text(SetUpPortsPlan.footnote)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            DisclosureGroup(isExpanded: $showsWhatIWontTouch) {
+                Text(SetUpPortsPlan.whatIWontTouch)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+            } label: {
+                Text(SetUpPortsPlan.whatIWontTouchLabel).font(.callout)
+            }
+            // Bound to the same preference as Settings and the View menu, so
+            // turning it on here turns it on everywhere (§1.3 rule 6).
+            DisclosureGroup(isExpanded: $showsTechnicalNames) {
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(technicalLines(plan), id: \.id) { line in
+                        Text(line.text)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 4)
+            } label: {
+                Text("Show technical names").font(.callout)
+            }
+        }
+    }
+
+    private func technicalLines(_ plan: SetUpPortsPlan) -> [TechnicalLine] {
+        plan.ports.flatMap { port in
+            port.technicalNames.enumerated().map {
+                TechnicalLine(id: "\(port.port.bsdName)-\($0.offset)", text: $0.element)
+            }
+        }
+    }
+
+    struct TechnicalLine: Identifiable {
+        var id: String
+        var text: String
+    }
+}
+
+/// One selected port, headed by its position name.
+struct WizardReviewSection: View {
+    let plan: SetUpPortPlan
+    let hover: (ReviewChange, Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // The header is the position name, which Core has already
+            // localized, so it is drawn rather than looked up again.
+            VStack(alignment: .leading, spacing: 5) {
+                Text(plan.header)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                GroupedSection {
+                    ForEach(Array(plan.rows.enumerated()), id: \.offset) { index, row in
+                        if index > 0 { RowDivider(leadingInset: 42) }
+                        WizardReviewRow(row: row, change: ReviewChange(rowIndex: index)) {
+                            guard let change = ReviewChange(rowIndex: index) else { return }
+                            hover(change, $0)
+                        }
+                    }
+                }
+            }
+            ForEach(Array(plan.warnings.enumerated()), id: \.offset) { _, warning in
+                // Never blocking and never scary: a line, not an alarm.
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: "exclamationmark.circle")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.orange)
+                        .accessibilityHidden(true)
+                    Text(warning)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+}
+
+/// A symbol, a title, a `.callout` secondary sentence, and a before → after
+/// pair of chips. Hovering it previews the change on the model, silently and
+/// reversibly — you can watch each sentence mean something before you agree.
+struct WizardReviewRow: View {
+    let row: ReviewRow
+    let change: ReviewChange?
+    let hover: (Bool) -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            PortRowSymbol(name: change?.symbol ?? "circle.dotted", style: .secondary)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(row.title)
+                Text(row.body)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 6) {
+                    WizardChip(text: row.before)
+                    Image(systemName: "arrow.right")
+                        .imageScale(.small)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                    WizardChip(text: row.after, isAfter: true)
+                }
+                .accessibilityElement(children: .combine)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .contentShape(.rect)
+        .onHover(perform: hover)
+    }
+}
+
+/// A before or after chip. §3.1: no colour carries meaning — the difference
+/// between the two is weight, and the arrow between them is the sentence.
+struct WizardChip: View {
+    let text: String
+    var isAfter = false
+
+    var body: some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(isAfter ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(.background.secondary, in: .capsule)
+    }
+}

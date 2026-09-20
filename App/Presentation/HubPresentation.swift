@@ -1,9 +1,9 @@
 //
 //  HubPresentation.swift
 //
-//  S1's headline and body, and the situation rows that sit between the
-//  `This Mac` section and the port list. Verbatim from docs/UX_SPEC.md §S1 and
-//  §6.2 R23.
+//  S1's headline and body, the situation rows that sit between the
+//  `This Mac` section and the port list, and what the footer offers. Verbatim
+//  from docs/UX_SPEC.md §S1, §2.8 and §6.2 R23.
 //
 
 import Foundation
@@ -17,30 +17,70 @@ struct HubCopy: Sendable, Equatable {
 
 /// A situation the hub states as a situation and not as an alarm (§S1, §7.4).
 ///
-/// ML1 carries the four that are observable without a write history. The two
-/// that are not — a port needing putting back by hand, and a port that has
-/// drifted — arrive with the baseline writes in ML2 and keep their place at the
-/// head of this order.
-enum Situation: String, Sendable, Equatable, Identifiable, CaseIterable {
-    case restartOwed
-    case usbCableTip
-    case twoMacsTip
-    case unrecognizedModel
+/// No symbol and no colour: every one of these is a sentence about the world,
+/// and §6.1's symbol treatment belongs to refusals. Two of them carry the
+/// actions §S1 gives them, and one carries a second line of detail.
+struct Situation: Sendable, Equatable, Identifiable {
+    var id: String
+    var text: LocalizedStringResource
+    /// §S1's drift row is the only one with a detail line.
+    var detail: LocalizedStringResource?
+    var actions: [HubAction] = []
+}
 
-    var id: String { rawValue }
-
-    var text: LocalizedStringResource {
-        switch self {
-        case .restartOwed:
-            "RDMA is switched on and waiting for a restart. Restart whenever it suits you."
-        case .usbCableTip:
-            "There's a cable in a front port. Those carry USB, not Thunderbolt. Move it to one of the four ports on the back and I'll follow along."
-        case .twoMacsTip:
-            "Two Macs are connected. Leave just one cable in place while we work — two can send Ethernet traffic around in a loop."
-        case .unrecognizedModel:
-            "I don't recognize this Mac, so the picture is a stand-in and the ports are numbered the way macOS reports them. Everything else works normally."
-        }
+extension Situation {
+    /// §7.4 and R20's aftermath: the service is gone, the bridge has not taken
+    /// the port back, and the note was deliberately kept.
+    static func needsAHand(_ port: PortSnapshot) -> Situation {
+        Situation(
+            id: "needsAHand",
+            text: "\(port.port.positionName) needs putting back by hand.",
+            actions: [.showMe(portID: port.id)]
+        )
     }
+
+    /// §7.4: "Drift is news, not failure."
+    static func drift(_ port: PortSnapshot) -> Situation {
+        Situation(
+            id: "drift",
+            text: "\(port.port.positionName) isn't set up any more.",
+            detail: "The network service RDMALink made is gone — it may have been removed in System Settings.",
+            actions: [.setItUpAgain(portID: port.id), .forgetThisPort(portID: port.id)]
+        )
+    }
+
+    static let restartOwed = Situation(
+        id: "restartOwed",
+        text: "RDMA is switched on and waiting for a restart. Restart whenever it suits you."
+    )
+
+    static let usbCableTip = Situation(
+        id: "usbCableTip",
+        text: "There's a cable in a front port. Those carry USB, not Thunderbolt. Move it to one of the four ports on the back and I'll follow along."
+    )
+
+    static let twoMacsTip = Situation(
+        id: "twoMacsTip",
+        text: "Two Macs are connected. Leave just one cable in place while we work — two can send Ethernet traffic around in a loop."
+    )
+
+    static let unrecognizedModel = Situation(
+        id: "unrecognizedModel",
+        text: "I don't recognize this Mac, so the picture is a stand-in and the ports are numbered the way macOS reports them. Everything else works normally."
+    )
+}
+
+/// What the hub's footer offers (§S1's primary action, §2.8's persistent
+/// `Restore…`).
+struct HubFooterModel: Sendable, Equatable {
+    /// Absent, not disabled, in R23's read-only mode (§S1: "The footer's
+    /// primary button is **absent**, not disabled").
+    var primary: HubAction?
+    var primaryTitle: LocalizedStringResource
+    var isPrimaryEnabled: Bool
+    /// §S1: with two Macs connected the primary is disabled "with the reason
+    /// printed above the footer separator".
+    var disabledReason: LocalizedStringResource?
 }
 
 /// R3 — "A cable is in a USB-only port", as the card §4.5 raises when a
@@ -119,11 +159,62 @@ enum HubPresentation {
         ports: [PortSnapshot]
     ) -> [Situation] {
         var result: [Situation] = []
+        if let port = ports.first(where: needsAHand) {
+            result.append(.needsAHand(port))
+        }
+        if let port = ports.first(where: hasDrifted) {
+            result.append(.drift(port))
+        }
         if switchState == .onAfterRestart { result.append(.restartOwed) }
         if hasCableInAFrontUSBPort(ports) { result.append(.usbCableTip) }
         if ports.withAMac.count >= 2 { result.append(.twoMacsTip) }
         if let hardware, !hardware.isRecognized { result.append(.unrecognizedModel) }
         return result
+    }
+
+    /// §7.4's "a port needing putting back by hand", which is R20's state seen
+    /// on a later launch: RDMALink's service is gone, the bridge has not taken
+    /// the port back, and the note was kept on purpose.
+    ///
+    /// Observed, never remembered: a note that records the bridges the port
+    /// came from, a port that is now in none of them, and no service of its
+    /// own. An adopted note has no bridge history and can never be this.
+    static func needsAHand(_ port: PortSnapshot) -> Bool {
+        guard let baseline = port.baseline, !baseline.isAdopted, !baseline.bridges.isEmpty else {
+            return false
+        }
+        guard case .unconfigured(let bridges)? = port.configuration else { return false }
+        return bridges.isEmpty
+    }
+
+    /// Drift proper: there is a note, and what it describes is not there any
+    /// more. The half-restored port above is a drift the app can name more
+    /// precisely, so it is taken out of this one.
+    static func hasDrifted(_ port: PortSnapshot) -> Bool {
+        port.readiness == .drifted && !needsAHand(port)
+    }
+
+    /// §S1's footer: the primary action, and `Restore…` beside it whenever a
+    /// note exists (§2.8).
+    /// §2.8's `Restore…` is not here: whether a note exists is a live answer
+    /// the hub keeps (`HubActionsModel.hasAnyNote`), and asking it in two
+    /// places is how the two come to disagree.
+    static func footer(
+        hardware: HardwareModel?,
+        ports: [PortSnapshot]
+    ) -> HubFooterModel {
+        let twoMacs = ports.withAMac.count >= 2
+        return HubFooterModel(
+            // R23: read-only mode has no primary button at all, and
+            // `Identify a Port…` stays in the Port menu.
+            primary: hardware?.isThunderbolt4 == true ? nil : .setUpAPort(portID: nil),
+            primaryTitle: ports.ready.isEmpty ? "Set Up a Port…" : "Set Up Another Port…",
+            isPrimaryEnabled: !twoMacs,
+            // §S1 asks for "the reason printed above the footer separator" and
+            // does not write one there. This is S3's own reason for the same
+            // condition, which is the nearest sentence the spec has.
+            disabledReason: twoMacs ? "Unplug one of the two cables to continue." : nil
+        )
     }
 
     /// The cable is now observable: ``ChassisProbe`` keeps the position nodes
@@ -144,5 +235,32 @@ enum HubPresentation {
         return ports.contains {
             !$0.port.isThunderbolt && $0.port.face == .front && $0.port.link != .empty
         }
+    }
+}
+
+/// The moments the copy quotes, in the two shapes the spec writes them in:
+/// `3 September at 14:21` inside a sentence (§7.1, §S10, §S11) and
+/// `3 September, 14:21` at the head of a change-log entry (§S11).
+///
+/// The day and the time are formatted the way this Mac formats them; only the
+/// join between them is the app's, and it is one localizable string so a
+/// translator can move both halves.
+enum Moments {
+    static func dayAtTime(_ date: Date) -> String {
+        let value: String.LocalizationValue = "\(day(date)) at \(time(date))"
+        return String(localized: value)
+    }
+
+    static func dayAndTime(_ date: Date) -> String {
+        let value: String.LocalizationValue = "\(day(date)), \(time(date))"
+        return String(localized: value)
+    }
+
+    private static func day(_ date: Date) -> String {
+        date.formatted(.dateTime.day().month(.wide))
+    }
+
+    private static func time(_ date: Date) -> String {
+        date.formatted(date: .omitted, time: .shortened)
     }
 }

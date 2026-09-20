@@ -19,6 +19,9 @@ struct StageView: View {
     /// §4.5: clicking a USB-only receptacle produces the USB copy inline (R3),
     /// which is the working area's to draw. The stage only reports the click.
     var onUSBOnlyClick: ((StagePort) -> Void)?
+    /// §S4's ⌘-click and ⇧-click, on the one screen that has a selection to
+    /// extend. Absent elsewhere, so a modified click is an ordinary one.
+    var onExtendClick: ((StagePort) -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -29,6 +32,8 @@ struct StageView: View {
     @State private var focusedID: StagePort.ID?
     @State private var lastTranslation: CGSize?
     @State private var dragDistance: CGFloat = 0
+    /// Review hook only: `RDMALINK_SNAPSHOT_STAGE` is posed once per launch.
+    @State private var hasPosedForSnapshot = false
     @FocusState private var isStageFocused: Bool
 
     private var appearance: StageAppearance {
@@ -69,6 +74,13 @@ struct StageView: View {
                 StageViewControls(fit: model.fit, reset: model.reset, appearance: appearance)
                     .padding(12)
             }
+            // §S5's hover-to-preview for **Save how to undo this**.
+            .overlay(alignment: .trailing) {
+                StageBookmarkGlyph(
+                    isShowing: model.preview?.kind == .note, appearance: appearance
+                )
+                .padding(.trailing, 18)
+            }
             .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
                 let previous = scene.viewport
                 guard size != previous else { return }
@@ -96,6 +108,16 @@ struct StageView: View {
                 scene.startScrollMonitor()
                 armSnapshotCapture()
             }
+            // Review hook only; see App/Stage/StageSnapshot.swift. The state is
+            // posed the moment the first inventory lands, which is also what
+            // the hook waits for before it starts its own settle.
+            .onChange(of: model.ports.count, initial: true) { _, count in
+                guard SnapshotHook.destination != nil, count > 0, !hasPosedForSnapshot,
+                      let state = StageSnapshotState.requested
+                else { return }
+                hasPosedForSnapshot = true
+                state.apply(to: model)
+            }
             .onDisappear {
                 // `EventSubscription` keeps the scene alive on its own, and
                 // `RealityViewCameraContent` keeps the whole entity graph
@@ -121,12 +143,11 @@ struct StageView: View {
             guard frame.width > 1, frame.height > 1 else { return nil }
             guard
                 let image = await StageSnapshot.image(
-                    ports: model.ports,
+                    moment: model.moment(focused: scene.focusedID),
                     archetype: model.archetype,
                     palette: StagePalette(appearance: scene.appearance),
                     appearance: scene.appearance,
                     pose: scene.pose,
-                    focused: scene.focusedID,
                     size: frame.size,
                     scale: scale
                 )
@@ -295,6 +316,11 @@ struct StageView: View {
             }
             focusedID = id
             scene.setFocus(id)
+            let flags = NSEvent.modifierFlags
+            if let onExtendClick, flags.contains(.command) || flags.contains(.shift) {
+                onExtendClick(port)
+                return
+            }
             model.select(id)
         }
     }

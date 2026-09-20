@@ -2,7 +2,9 @@
 //  PortRow.swift
 //
 //  One receptacle. A real button on every screen, so the list is a complete
-//  path to everything the 3D stage offers (UX_SPEC §8.1, §8.3).
+//  path to everything the 3D stage offers (UX_SPEC §8.1, §8.3), with §S1's
+//  trailing buttons beside it — real buttons of their own, not decorations
+//  inside the row's.
 //
 //  The row never reorders and never resizes. Only the symbol, the detail line
 //  and the trailing control change, and they cross-fade in 180 ms (§2.3, §7.4).
@@ -13,38 +15,64 @@ import SwiftUI
 struct PortRow: View {
     let presentation: PortRowPresentation
     let showsTechnicalNames: Bool
+    /// §2.3 band 3. **Full** carries the detail line and the trailing buttons;
+    /// **compact** is "symbol, title, and a short trailing badge only" — which
+    /// is also why an action button has no business in it: §2.6 raises Adopt,
+    /// Restore and Return to Bridge from the hub, never over a running
+    /// assistant.
+    var density: PortListDensity = .full
+    /// The compact badge for this row, when it has one.
+    var badge: LocalizedStringResource?
     /// §4.5: a USB-only row never takes a selection, and is drawn at 45 %.
     var isThunderbolt = true
     var isSelected = false
     var isHovered = false
     var select: () -> Void = {}
     var hover: (Bool) -> Void = { _ in }
+    /// The hub's actions, when this row is in the hub. The list is also drawn
+    /// by screens that offer none, so it is read as an optional rather than
+    /// demanded from the environment.
+    @Environment(HubActionsModel.self) private var actions: HubActionsModel?
 
     var body: some View {
-        Button(action: select) {
-            HStack(alignment: .top, spacing: 10) {
-                PortRowSymbol(name: presentation.symbol, style: presentation.symbolStyle)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(presentation.positionName)
-                    PortRowDetailLine(
-                        detail: presentation.detail,
-                        technicalSuffix: showsTechnicalNames ? presentation.technicalSuffix : nil
-                    )
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Button(action: select) {
+                HStack(alignment: .top, spacing: 10) {
+                    PortRowSymbol(name: presentation.symbol, style: presentation.symbolStyle)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(presentation.positionName)
+                        if density == .full {
+                            PortRowDetailLine(
+                                detail: presentation.detail,
+                                technicalSuffix: showsTechnicalNames
+                                    ? presentation.technicalSuffix : nil
+                            )
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    if density == .compact, let badge {
+                        Text(badge)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                Spacer(minLength: 0)
+                .opacity(isThunderbolt ? 1 : 0.45)
+                .contentShape(.rect)
             }
-            .opacity(isThunderbolt ? 1 : 0.45)
-            .padding(.vertical, 5)
-            .padding(.horizontal, 12)
-            .contentShape(.rect)
-            .background(highlight, in: .rect(cornerRadius: 6))
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(presentation.accessibilityLabel))
+            .accessibilityValue(Text(verbatim: presentation.accessibilityValue ?? ""))
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+            if density == .full, let actions {
+                PortRowActions(actions: presentation.actions, hub: actions)
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 5)
+        .padding(.horizontal, 12)
+        .background(highlight, in: .rect(cornerRadius: 6))
         .onHover(perform: hover)
-        .accessibilityLabel(Text(presentation.accessibilityLabel))
-        .accessibilityValue(Text(verbatim: presentation.accessibilityValue ?? ""))
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .animation(.smooth(duration: 0.18), value: presentation)
+        .animation(.smooth(duration: 0.18), value: density)
         .animation(.smooth(duration: 0.15), value: isSelected)
         .animation(.smooth(duration: 0.15), value: isHovered)
     }
@@ -55,6 +83,26 @@ struct PortRow: View {
         if isSelected { return AnyShapeStyle(.tint.opacity(0.18)) }
         if isHovered { return AnyShapeStyle(.quaternary) }
         return AnyShapeStyle(.clear)
+    }
+}
+
+/// §S1's trailing buttons: `Adopt…` · `Restore…` · `Return to Bridge…` ·
+/// `Stop Managing…` · `Set It Up Again`, borderless so the row stays a row.
+struct PortRowActions: View {
+    let actions: [HubAction]
+    let hub: HubActionsModel
+
+    var body: some View {
+        if !actions.isEmpty {
+            HStack(spacing: 8) {
+                ForEach(actions) { action in
+                    Button(action.title) { hub.perform(action) }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                }
+            }
+            .transition(.opacity)
+        }
     }
 }
 

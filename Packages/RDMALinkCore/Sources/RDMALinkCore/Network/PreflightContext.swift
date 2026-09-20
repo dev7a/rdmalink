@@ -17,15 +17,27 @@ public struct PreflightContext: Sendable, Equatable {
     /// What macOS says the default route is on, from ``NetworkGlobals``.
     /// Empty means "macOS did not say", not "there is no route".
     public var primaryInterfaces: [String]
+    /// What kind of interface each of those is, so §S3 row 3 can print its
+    /// **finding** — "Wi-Fi is connected…" — rather than a bare checkmark.
+    public var primaryKinds: [NetworkGlobals.RouteKind]
 
     public init(
         observedPorts: [ObservedPort],
         thunderboltBSDNames: [String],
-        primaryInterfaces: [String] = []
+        primaryInterfaces: [String] = [],
+        primaryKinds: [NetworkGlobals.RouteKind] = []
     ) {
         self.observedPorts = observedPorts
         self.thunderboltBSDNames = thunderboltBSDNames
         self.primaryInterfaces = primaryInterfaces
+        self.primaryKinds = primaryKinds
+    }
+
+    /// The route that is not a Thunderbolt port and not one of their bridges —
+    /// the one R5 is satisfied by, and the one §S3 row 3 names.
+    public var routeOtherThanThunderbolt: NetworkGlobals.RouteKind? {
+        let thunderbolt = Set(thunderboltBSDNames)
+        return primaryKinds.first { !thunderbolt.contains($0.bsdName) }
     }
 
     /// Re-reads this Mac. Read-only: IOKit, `ifconfig` and `SCDynamicStore`.
@@ -37,10 +49,12 @@ public struct PreflightContext: Sendable, Equatable {
         runner: CommandRunner = CommandRunner()
     ) throws -> PreflightContext {
         let ports = try Inventory.readPorts(archetype: archetype, runner: runner)
+        let primary = NetworkGlobals.primaryInterfaces()
         return PreflightContext(
             observedPorts: ports.map(\.observed),
             thunderboltBSDNames: ports.filter(\.isThunderbolt).map(\.bsdName),
-            primaryInterfaces: NetworkGlobals.primaryInterfaces()
+            primaryInterfaces: primary,
+            primaryKinds: primary.compactMap(NetworkGlobals.routeKind(of:))
         )
     }
 }
@@ -55,7 +69,8 @@ extension Inventory {
         PreflightContext(
             observedPorts: observedPorts,
             thunderboltBSDNames: thunderboltBSDNames,
-            primaryInterfaces: primaryInterfaces
+            primaryInterfaces: primaryInterfaces,
+            primaryKinds: primaryInterfaces.compactMap(NetworkGlobals.routeKind(of:))
         )
     }
 }

@@ -50,6 +50,14 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
     let accessibilityLabel: String
     /// VoiceOver reads the address as the element's value, not its label (§8.2).
     let accessibilityValue: String?
+    /// §S1's trailing buttons, in the order the row draws them.
+    let actions: [HubAction]
+    /// §2.3's compact density is "symbol, title, and a short trailing badge
+    /// only". §S7 names the badge for a port that is ready — **Ready** — and
+    /// §S5 names the one the review screen adds; no other state has a badge in
+    /// the spec, so no other state is given one here.
+    /// **Owed from the spec owner:** the compact badge for the remaining rows.
+    let compactBadge: LocalizedStringResource?
 
     init(snapshot: PortSnapshot) {
         let port = snapshot.port
@@ -62,6 +70,39 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
         self.technicalSuffix = Self.technicalSuffix(for: snapshot)
         self.accessibilityLabel = Self.accessibilityLabel(for: snapshot, detail: detail)
         self.accessibilityValue = detail.address
+        self.actions = Self.actions(for: snapshot)
+        self.compactBadge = snapshot.readiness.isReady ? "Ready" : nil
+    }
+
+    /// §S1's "Trailing buttons, by state", with §7.5's addition: any port that
+    /// is out of the bridge carries `Return to Bridge…`, "so putting a port
+    /// back never depends on how it was removed".
+    ///
+    /// A port RDMALink set up is the one exception, and deliberately: its
+    /// `Restore…` is the same journey with the destination the note remembers,
+    /// and offering both would be two buttons for one thing (§1.3 rule 5).
+    /// A drifted port has nothing to put back — its note describes a world
+    /// that moved — so it is offered the way forward instead.
+    private static func actions(for snapshot: PortSnapshot) -> [HubAction] {
+        let id = snapshot.id
+        switch snapshot.readiness {
+        case .managed: return [.restore(portID: id)]
+        case .adopted: return [.returnToBridge(portID: id), .stopManaging(portID: id)]
+        case .setUpElsewhere: return [.adopt(portID: id), .returnToBridge(portID: id)]
+        case .drifted: return [.setItUpAgain(portID: id)]
+        case .plain:
+            // §S9's near match is reached from the row's `Adopt…` — the sheet
+            // is where it says it cannot adopt this one *yet*, and what to
+            // change so it can. A port that is out of every bridge and has a
+            // service of its own can always be put back (§7.5), whoever set it
+            // up and whatever state it is in.
+            var actions: [HubAction] = []
+            if case .nearMatch? = snapshot.configuration { actions.append(.adopt(portID: id)) }
+            if snapshot.bridges.isEmpty, snapshot.hasServiceOfItsOwn {
+                actions.append(.returnToBridge(portID: id))
+            }
+            return actions
+        }
     }
 
     private static func symbol(for snapshot: PortSnapshot) -> String {

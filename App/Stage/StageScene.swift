@@ -25,8 +25,6 @@ final class StageScene {
     private static let reducedArcDuration = 0.1
     /// §3.5: rings, ribbons and glows cross-fade in 150 ms.
     private static let crossFade = 0.15
-    /// §3.5 and §4.2: the link-coming-up breath, 8 → 18 % on a 1.6 s cycle.
-    private static let breathPeriod = 1.6
 
     private(set) var graph: StageSceneGraph?
     let camera = PerspectiveCamera()
@@ -61,6 +59,13 @@ final class StageScene {
     private var handledWakeToken = -1
     /// §8.3's keyboard focus halo, and what the review hook renders with.
     private(set) var focusedID: StagePort.ID?
+    /// §4.4: the ports the installed ribbons were built from, so bridge
+    /// membership can change without the machine being rebuilt around it —
+    /// and so a re-read that moved nothing is one comparison a frame.
+    private var ribbonPorts: [StagePort] = []
+    /// §S4b: the last Identify state the scene saw, so the replug bloom starts
+    /// once rather than on every frame that reports it.
+    private var identifyState: StageIdentify = .off
 
     private struct Arc {
         var yaw: Double, deltaYaw: Double
@@ -249,21 +254,52 @@ final class StageScene {
     func perform(_ request: StageCameraRequest) {
         switch request.kind {
         case .turn(let face): turn(to: face)
+        case .squareOn(let face): turn(to: face, squareOn: true)
+        case .survey(let faces): survey(faces)
         case .fit: animate(yaw: yaw, pitch: pitch, radius: fitDistance, bumps: false)
         case .reset: reset()
         }
     }
 
     /// §3.5: a spherical arc with a simultaneous 4 % dolly-out and back.
-    private func turn(to face: PortFace) {
+    ///
+    /// - Parameter squareOn: §S4b's replug and §S5's review frame the face
+    ///   head-on. The elevation comes down with the yaw, because a pose that is
+    ///   square in one axis and tilted in the other reads as neither.
+    private func turn(to face: PortFace, squareOn: Bool = false) {
         // The three-quarter offset keeps the top edge readable rather than
         // flattening the machine into an elevation drawing.
-        let destination = StageSceneBuilder.yaw(for: face) - 0.55
+        let destination = StageSceneBuilder.yaw(for: face) - (squareOn ? 0 : 0.55)
         animate(
             yaw: yaw + StageMath.shortestAngleDelta(from: yaw, to: destination),
-            pitch: pitch, radius: StageMath.clamp(radius, dollyRange), bumps: true
+            pitch: squareOn ? min(pitch, Self.squareOnPitch) : pitch,
+            radius: StageMath.clamp(radius, dollyRange), bumps: true
         )
     }
+
+    /// §S4b: "The camera pulls back to fit the whole chassis and, on machines
+    /// with ports on two faces, moves to a three-quarter pose from which both
+    /// faces are partly visible, so a change anywhere will be seen."
+    ///
+    /// Two opposite faces cannot both be looked at, so the pose that shows
+    /// something of both is the one between them — and which of the two
+    /// betweens is chosen is the one the camera is already nearer to, so
+    /// Identify never swings the machine round for no reason.
+    private func survey(_ faces: [PortFace]) {
+        let destination = StageMath.surveyYaw(
+            facing: faces.map(StageSceneBuilder.yaw(for:)), from: yaw
+        )
+        animate(
+            yaw: yaw + StageMath.shortestAngleDelta(from: yaw, to: destination),
+            pitch: StageMath.clampPitch(Self.surveyPitch),
+            radius: StageMath.clamp(fitDistance * 1.12, dollyRange), bumps: true
+        )
+    }
+
+    /// The elevation a square-on pose settles to, and the slightly higher one
+    /// Identify watches from.
+    private static let squareOnPitch = 0.14
+    private static let surveyPitch = 0.26
 
     private func reset() {
         guard let graph else { return }
@@ -414,12 +450,20 @@ final class StageScene {
             wakeStart = elapsed
         }
 
-        let breath = appearance.reduceMotion
-            ? Self.restingBreath
-            : 0.08 + 0.10 * (0.5 + 0.5 * sin(elapsed / Self.breathPeriod * 2 * .pi))
+        let moment = model.moment(focused: focusedID)
+        syncRibbons(moment: moment)
+        noteTransitions(moment: moment)
+
+        // One clock for the whole scene, which is what makes §S4b's shimmer
+        // "in-phase" on every receptacle rather than six things loading.
+        let breath = Float(
+            appearance.reduceMotion
+                ? StageMath.restingBreath
+                : StageMath.breath(seconds: elapsed)
+        )
 
         for node in graph.receptacles {
-            guard let port = model.ports.first(where: { $0.id == node.id }) else { continue }
+            guard let port = moment.ports.first(where: { $0.id == node.id }) else { continue }
             Self.setStub(node, to: port.link != .empty)
             guard node.isThunderbolt else {
                 // §4.5: a USB-only receptacle never takes a ring and never
@@ -433,22 +477,113 @@ final class StageScene {
                 continue
             }
 
+            Self.reshape(node, port: port, moment: moment)
+            pulse(node)
+
             let awake = isAwake(index: port.physicalIndex)
+            // §S3: the attention ring's single breath, measured from the beat
+            // the check named this receptacle.
+            let attention = Float(
+                StageMath.singleBreath(
+                    secondsSinceStart: node.attentionStarted.map { elapsed - $0 } ?? .infinity,
+                    reduceMotion: appearance.reduceMotion
+                )
+            )
             for role in StageRingRole.allCases {
                 let target = awake
                     ? Self.targetOpacity(
-                        role, port: port, breath: Float(breath),
-                        focused: port.id == focusedID
+                        role, port: port, moment: moment, breath: breath,
+                        attentionBreath: attention, focused: port.id == focusedID
                     )
                     : 0
                 fade(node: node, role: role, to: target, deltaTime: deltaTime)
             }
         }
+
+        updateRibbons(moment: moment, deltaTime: deltaTime)
     }
 
-    /// §4.2's breath at the middle of its cycle. Also what Reduce Motion
-    /// freezes it at, and what a still frame should show.
-    private static let restingBreath = 0.13
+    /// The two beats that need to know *when* they started rather than only
+    /// what the model currently says.
+    private func noteTransitions(moment: StageMoment) {
+        guard let graph else { return }
+        for node in graph.receptacles {
+            let port = moment.ports.first { $0.id == node.id }
+            // Identify owns the thin ring while it is running (§S4b), so a
+            // preflight breath is never half way through underneath it.
+            let ringing = port?.attention == true && moment.identify == .off
+            if ringing {
+                if node.attentionStarted == nil { node.attentionStarted = elapsed }
+            } else {
+                node.attentionStarted = nil
+            }
+        }
+        guard moment.identify != identifyState else { return }
+        identifyState = moment.identify
+        // §S4b: on replug the ring "blooms to full accent over 250 ms with a
+        // single 8 % scale pulse **on the ring only**".
+        guard case .confirmed(let id) = moment.identify else { return }
+        graph.receptacles.first { $0.id == id }?.bloomStarted = elapsed
+    }
+
+    /// §S4b's scale pulse. It is the one thing in the scene that touches a
+    /// transform rather than an opacity, and it touches exactly one ring.
+    private func pulse(_ node: StageReceptacleNode) {
+        guard let ring = node.layers[.selection], node.bloomStarted != nil else { return }
+        let t = (elapsed - (node.bloomStarted ?? elapsed)) / Self.bloomPulse
+        guard !appearance.reduceMotion, t < 1 else {
+            node.bloomStarted = nil
+            if ring.scale != .one { ring.scale = .one }
+            return
+        }
+        ring.scale = SIMD3(repeating: Float(1 + 0.08 * sin(t * .pi)))
+    }
+
+    // MARK: - Rings whose shape is the message
+
+    /// §S6, §S10 and §S5. These two rings change *geometry*, not opacity: the
+    /// gaps closing are the progress (§3.5), and the gaps widening are what
+    /// leaving the bridge looks like before anyone agrees to it (§S5).
+    private static func reshape(
+        _ node: StageReceptacleNode, port: StagePort, moment: StageMoment
+    ) {
+        if let ring = node.progressRing, let closed = moment.progress[port.id] {
+            let shape = StageMath.RingPattern.closing(gaps: closed)
+            if node.progressShape != shape,
+               swapMesh(of: ring, on: node, role: .progress, to: shape) {
+                node.progressShape = shape
+            }
+        }
+        if let ring = node.bridgeRing {
+            let widened = moment.preview?.kind == .leaveBridge && moment.preview?.id == port.id
+            let shape: StageMath.RingPattern = widened ? .segmentedWide : .segmented
+            if node.bridgeShape != shape,
+               swapMesh(of: ring, on: node, role: .bridge, to: shape) {
+                node.bridgeShape = shape
+            }
+        }
+    }
+
+    /// Re-generates one ring at the size and thickness it was built with.
+    /// `StageMesh` caches rings by shape, so the five states of a closing ring
+    /// are generated once for the session and then simply handed over.
+    @discardableResult
+    private static func swapMesh(
+        of entity: ModelEntity, on node: StageReceptacleNode, role: StageRingRole,
+        to pattern: StageMath.RingPattern
+    ) -> Bool {
+        guard let spec = node.ringSpec[role] else { return false }
+        let size = node.opening
+        guard
+            let mesh = try? StageMesh.ring(
+                width: size.width + spec.grow, height: size.height + spec.grow,
+                cornerRadius: size.cornerRadius + spec.grow / 2,
+                thickness: spec.thickness * node.ringScale, pattern: pattern
+            )
+        else { return false }
+        entity.model?.mesh = mesh
+        return true
+    }
 
     private static func setStub(_ node: StageReceptacleNode, to enabled: Bool) {
         guard node.stub.isEnabled != enabled else { return }
@@ -462,10 +597,10 @@ final class StageScene {
     /// Entities belong to exactly one scene, so the review hook renders its own
     /// graph (see App/Stage/StageSnapshot.swift) — and a graph no `StageScene`
     /// has ever ticked has every ring disabled at opacity 0, which is a picture
-    /// of bare aluminium with §4.2 and §4.3 missing from it entirely.
-    static func settle(_ graph: StageSceneGraph, ports: [StagePort], focused: StagePort.ID?) {
+    /// of bare aluminium with §4.2, §4.3 and §4.4 missing from it entirely.
+    static func settle(_ graph: StageSceneGraph, moment: StageMoment) {
         for node in graph.receptacles {
-            guard let port = ports.first(where: { $0.id == node.id }) else { continue }
+            guard let port = moment.ports.first(where: { $0.id == node.id }) else { continue }
             setStub(node, to: port.link != .empty)
             guard node.isThunderbolt else {
                 let dim: Float = port.hovered ? 0.85 : 1
@@ -473,16 +608,23 @@ final class StageScene {
                 node.root.components.set(OpacityComponent(opacity: dim))
                 continue
             }
+            reshape(node, port: port, moment: moment)
             for role in StageRingRole.allCases {
                 guard let entity = node.layers[role] else { continue }
                 let target = targetOpacity(
-                    role, port: port, breath: Float(restingBreath),
-                    focused: port.id == focused
+                    role, port: port, moment: moment, breath: Float(StageMath.restingBreath),
+                    attentionBreath: 1, focused: port.id == moment.focused
                 )
                 node.fades[role] = (target, target)
                 entity.isEnabled = target > 0.001
                 entity.components.set(OpacityComponent(opacity: target))
             }
+        }
+        for link in graph.ribbons {
+            link.opacity = ribbonStrength(of: link, moment: moment)
+            link.retractionFromA = retractionTarget(for: link.a, moment: moment)
+            link.retractionFromB = retractionTarget(for: link.b, moment: moment)
+            show(link)
         }
     }
 
@@ -498,36 +640,67 @@ final class StageScene {
     }
 
     private static func targetOpacity(
-        _ role: StageRingRole, port: StagePort, breath: Float, focused: Bool
+        _ role: StageRingRole, port: StagePort, moment: StageMoment, breath: Float,
+        attentionBreath: Float, focused: Bool
     ) -> Float {
+        // §S6: while a real operation is running on this receptacle, the
+        // progress ring *is* the outer track. The state rings stand down for
+        // the duration rather than being drawn over: the port is between two
+        // states, and showing both would be saying something untrue.
+        let working = moment.progress[port.id] != nil
+        let preview = moment.preview?.id == port.id ? moment.preview?.kind : nil
         switch role {
         case .inner:
             switch port.link {
-            case .macLinked: 1
-            case .macLinkComingUp: breath
-            case .empty, .device: 0
+            case .macLinked: return 1
+            case .macLinkComingUp: return breath
+            case .empty, .device: return 0
             }
         case .thread:
-            port.link == .macLinked ? 1 : 0
+            if port.link == .macLinked { return 1 }
+            // §S3: with two Macs connected "both receptacles ring
+            // simultaneously and a faint light thread leaves each one", which
+            // is what makes the loop visible rather than described — including
+            // the end whose link has not finished coming up.
+            return port.attention && port.link == .macLinkComingUp ? 0.6 : 0
         case .bridge:
-            port.cfg == .bridge ? 1 : 0
+            return port.cfg == .bridge && !working ? 1 : 0
         case .ready:
-            port.cfg == .ready ? 1 : 0
+            return port.cfg == .ready && !working ? 1 : 0
         case .outside:
-            port.cfg == .outside ? 1 : 0
+            return port.cfg == .outside && !working ? 1 : 0
         case .drift:
-            port.cfg == .drift ? 1 : 0
+            return port.cfg == .drift && !working ? 1 : 0
+        case .progress:
+            return working ? 1 : 0
         case .attention:
-            port.attention ? 1 : 0
+            switch moment.identify {
+            case .off:
+                return port.attention ? attentionBreath : 0
+            case .watching:
+                // §S4b: every eligible receptacle, in phase — *listening*.
+                return breath
+            case .answered(let id), .confirmed(let id):
+                // "Every other shimmer stops dead": the silence around the
+                // answer is the feedback.
+                return port.id == id ? 1 : 0
+            }
         case .hover:
             // §4.6: hover is 45 % accent, and selection replaces it.
-            port.hovered && !port.selected ? 0.45 : 0
+            return port.hovered && !port.selected ? 0.45 : 0
         case .selection:
-            port.selected ? 1 : 0
+            return port.selected ? 1 : 0
         case .bloom:
-            port.selected ? 0.16 : (port.cfg == .ready ? 0.10 : 0)
+            if case .confirmed(let id) = moment.identify, id == port.id { return 0.22 }
+            return port.selected ? 0.16 : (port.cfg == .ready ? 0.10 : 0)
         case .focus:
-            focused ? 1 : 0
+            return focused ? 1 : 0
+        case .serviceNode:
+            // §S5: "a small accent node fades in beside the receptacle", and
+            // the addresses row keeps it while adding its hairline.
+            return preview == .service || preview == .addresses ? 1 : 0
+        case .serviceRing:
+            return preview == .addresses ? 1 : 0
         }
     }
 
@@ -553,5 +726,158 @@ final class StageScene {
         if entity.isEnabled != visible { entity.isEnabled = visible }
         guard visible, !settled else { return }
         entity.components.set(OpacityComponent(opacity: fade.current))
+    }
+
+    // MARK: - §4.4's bridge ribbon
+
+    /// The ribbon's own opacity, and §4.4's "the same ribbon at 40 % of that
+    /// opacity" for a bridge that is not in use. The marginally cooler value
+    /// that goes with it is the palette's business, not this one's.
+    private static let ribbon: Float = 0.16
+    private static let inactiveRibbonShare: Float = 0.4
+    /// How long the ribbon takes to let go and gather into the other members:
+    /// one beat, not a flourish. Under Reduce Motion it is an opacity change
+    /// (§3.6) and this never runs.
+    private static let retractionDuration = 0.35
+    /// §S4b's replug bloom.
+    private static let bloomPulse = 0.25
+
+    /// Whether the ribbons on screen are still the ribbons these ports call
+    /// for. Only the two things a ribbon is drawn from are compared, so a link
+    /// coming up or an address arriving never rebuilds them.
+    private func ribbonsAreCurrent(_ ports: [StagePort]) -> Bool {
+        guard ribbonPorts.count == ports.count else { return false }
+        for (was, now) in zip(ribbonPorts, ports)
+        where was.id != now.id || was.bridges != now.bridges {
+            return false
+        }
+        return true
+    }
+
+    /// Bridge membership changes while the machine does not, so the ribbons are
+    /// rebuilt on their own rather than through `StageBuildKey`: rebuilding the
+    /// whole scene would take the camera, every cross-fade and a ring half way
+    /// through closing with it.
+    private func syncRibbons(moment: StageMoment) {
+        guard let graph else { return }
+        guard !ribbonsAreCurrent(moment.ports) else { return }
+        // Never in the middle of an operation. The port being set up loses its
+        // membership as the write lands, and §S6's beat is the ribbon
+        // *retracting* — not the ribbon vanishing because the world was
+        // re-read underneath it. The rebuild waits for `clearProgress`.
+        guard moment.progress.isEmpty else { return }
+        ribbonPorts = moment.ports
+
+        let links = StageRibbonBuilder.links(
+            nodes: graph.receptacles, ports: moment.ports, chassis: graph.chassis,
+            palette: StagePalette(appearance: appearance)
+        )
+        for old in graph.ribbons { old.root.removeFromParent() }
+        for link in links {
+            // A tie that survived the change keeps what it was showing, so a
+            // one-second state diff never blinks the ribbons that did not move.
+            if let old = graph.ribbons.first(where: {
+                $0.bridge == link.bridge && $0.a == link.a && $0.b == link.b
+            }) {
+                link.opacity = old.opacity
+                link.retractionFromA = old.retractionFromA
+                link.retractionFromB = old.retractionFromB
+            }
+            Self.show(link)
+            graph.body.addChild(link.root)
+        }
+        self.graph?.ribbons = links
+    }
+
+    private func updateRibbons(moment: StageMoment, deltaTime: TimeInterval) {
+        guard let graph else { return }
+        for link in graph.ribbons {
+            let opacity = step(
+                link.opacity, to: Self.ribbonStrength(of: link, moment: moment),
+                over: Self.crossFade, deltaTime: deltaTime
+            )
+            let fromA = step(
+                link.retractionFromA, to: Self.retractionTarget(for: link.a, moment: moment),
+                over: Self.retractionDuration, deltaTime: deltaTime
+            )
+            let fromB = step(
+                link.retractionFromB, to: Self.retractionTarget(for: link.b, moment: moment),
+                over: Self.retractionDuration, deltaTime: deltaTime
+            )
+            guard opacity != link.opacity || fromA != link.retractionFromA
+                || fromB != link.retractionFromB
+            else { continue }
+            link.opacity = opacity
+            link.retractionFromA = fromA
+            link.retractionFromB = fromB
+            Self.show(link)
+        }
+    }
+
+    /// One step of a linear fade over `duration` — or the whole of it under
+    /// Reduce Motion, where every one of these becomes a cross-fade (§3.6).
+    private func step(
+        _ current: Float, to target: Float, over duration: Double, deltaTime: TimeInterval
+    ) -> Float {
+        guard !appearance.reduceMotion, duration > 0 else { return target }
+        let step = Float(deltaTime / duration)
+        let delta = target - current
+        return abs(delta) <= step ? target : current + step * (delta < 0 ? -1 : 1)
+    }
+
+    /// UX_SPEC §4.4: "The ribbon appears on hover, on selection, throughout
+    /// review, apply, and restore, and whenever the port list's bridge row is
+    /// hovered."
+    private static func ribbonStrength(of link: StageRibbonLink, moment: StageMoment) -> Float {
+        // §S5's hover-to-preview: pointing at "Leave the Thunderbolt Bridge"
+        // fades this receptacle's links away in front of you, before anything
+        // has been agreed to.
+        if let preview = moment.preview, preview.kind == .leaveBridge, link.touches(preview.id) {
+            return 0
+        }
+        let raised: Bool
+        switch moment.ribbons {
+        case .all: raised = true
+        case .bridge(let name): raised = name == link.bridge
+        case .automatic: raised = false
+        }
+        let pointed = moment.ports.contains {
+            link.touches($0.id) && ($0.hovered || $0.selected)
+        }
+        guard raised || pointed else { return 0 }
+        return link.isActive ? ribbon : ribbon * inactiveRibbonShare
+    }
+
+    /// §S6 and §9.3: "in the same beat that the first gap in the segmented ring
+    /// closes", the ribbon detaches from this receptacle. Rollback re-opens the
+    /// gaps and the ribbon springs back by the same rule, in reverse.
+    private static func retractionTarget(for id: StagePort.ID, moment: StageMoment) -> Float {
+        (moment.progress[id] ?? 0) >= 1 ? 1 : 0
+    }
+
+    private static func show(_ link: StageRibbonLink) {
+        link.root.components.set(OpacityComponent(opacity: link.opacity))
+        let visible = link.opacity > 0.001
+        if link.root.isEnabled != visible { link.root.isEnabled = visible }
+        guard visible else { return }
+        for (index, segment) in link.segments.enumerated() {
+            let position = link.positions[index]
+            let value = Float(
+                min(
+                    StageMath.ribbonSegmentOpacity(
+                        position: position, retraction: Double(link.retractionFromA)
+                    ),
+                    StageMath.ribbonSegmentOpacity(
+                        position: 1 - position, retraction: Double(link.retractionFromB)
+                    )
+                )
+            )
+            guard abs(value - link.applied[index]) > 0.004 else { continue }
+            link.applied[index] = value
+            let lit = value > 0.001
+            if segment.isEnabled != lit { segment.isEnabled = lit }
+            guard lit else { continue }
+            segment.components.set(OpacityComponent(opacity: value))
+        }
     }
 }

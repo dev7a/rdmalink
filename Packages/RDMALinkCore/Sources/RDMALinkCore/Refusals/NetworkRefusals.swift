@@ -234,6 +234,48 @@ public enum Refusals {
         )
     }
 
+    // MARK: - R8
+
+    /// **R8 — The permission expired mid-burst.**
+    ///
+    /// The credential `AuthorizationCopyRights` hands back is non-shared and
+    /// lasts about thirty seconds, so a burst that runs past it cannot commit.
+    /// The port is put back first and the rollback is stated first (§6.1 rule
+    /// 7), exactly as R10's is.
+    public static func credentialExpired(port: ObservedPort? = nil) -> Refusal {
+        Refusal(
+            code: .credentialExpired,
+            headline: "That took a moment too long",
+            body: """
+            The permission macOS gives RDMALink lasts about thirty seconds, and \
+            it ran out before every change went through — so RDMALink put the \
+            port back exactly as it was. Let's go again; it usually flies through.
+            """,
+            subjects: port.map { [$0.bsdName] } ?? []
+        )
+    }
+
+    // MARK: - R12
+
+    /// **R12 — Another app is editing the network.**
+    ///
+    /// Two writers is how configurations get mangled, so RDMALink refuses
+    /// rather than waits. It polls quietly and the refusal clears when the
+    /// lock does.
+    public static func networkIsBusy(port: ObservedPort? = nil) -> Refusal {
+        Refusal(
+            code: .networkBusy,
+            headline: "Something else has the network open",
+            body: """
+            System Settings, or another app, is editing the network \
+            configuration right now. RDMALink won't write over it — two things \
+            writing network settings at once is how configurations get mangled. \
+            Close that and we'll try again.
+            """,
+            subjects: port.map { [$0.bsdName] } ?? []
+        )
+    }
+
     // MARK: - R10 and R11
 
     /// **R10 — The service couldn't be created; rolled back.**
@@ -298,6 +340,168 @@ public enum Refusals {
                 + "Members before: \(membersBefore.joined(separator: ", ")) · "
                 + "Members now: \(membersNow.joined(separator: ", ")) · "
                 + "The port to add back: \(port.bsdName) — \(port.positionName)",
+            subjects: [port.bsdName]
+        )
+    }
+
+    // MARK: - R15 and R17
+
+    /// **R15 — There's a bridge here I can't read.** Blocks review for that port.
+    ///
+    /// Raised when the kernel lists the port in a bridge the stored
+    /// configuration does not have, so there is no object to edit and no
+    /// member list to put back. RDMALink won't guess at it.
+    ///
+    /// - Parameters:
+    ///   - kernelBridges: every bridge `ifconfig` says the port is in.
+    ///   - configuredBridges: every bridge the SPI can see and edit.
+    public static func everyBridgeIsReadable(
+        _ port: ObservedPort,
+        kernelBridges: [String],
+        configuredBridges: [String]
+    ) -> Refusal? {
+        let unreadable = kernelBridges.filter { !configuredBridges.contains($0) }
+        guard !unreadable.isEmpty else { return nil }
+        return Refusal(
+            code: .bridgeUnreadable,
+            headline: "There's a bridge here I can't make sense of",
+            body: """
+            \(port.positionName) belongs to a bridge whose settings RDMALink \
+            can't read properly, and a port has to be out of every bridge — \
+            even one that isn't switched on — before it can carry RDMA. It \
+            won't guess at this. Have a look in Network settings, under Manage \
+            Virtual Interfaces, and it'll check again when you're back.
+            """,
+            detail: "\(port.bsdName) is a member of \(englishList(unreadable)), "
+                + "which the network configuration doesn't list.",
+            subjects: [port.bsdName]
+        )
+    }
+
+    /// **R17 — The arrangement changed while you were reading.**
+    ///
+    /// The review screen is a promise about a particular Mac at a particular
+    /// moment. When the world re-read inside the burst no longer matches the
+    /// one the promise was made about, nothing is written.
+    public static func topologyChanged(subjects: [String] = [], detail: String? = nil) -> Refusal {
+        Refusal(
+            code: .topologyChanged,
+            headline: "Something moved",
+            body: """
+            A cable changed while this was on screen, so what you just read \
+            isn't true any more. RDMALink stopped before doing anything rather \
+            than act on old information.
+            """,
+            detail: detail,
+            subjects: subjects
+        )
+    }
+
+    // MARK: - R4
+
+    /// **R4 — Something is still mounted over Thunderbolt.** Blocks preflight
+    /// and blocks Restore: a file server reached down the link is the one
+    /// thing that would notice the interruption.
+    ///
+    /// Self-clearing — the check clears on unmount, and the only button is
+    /// `Show in Finder`.
+    ///
+    /// - Parameter volumes: from ``MountedVolumes/over(_:runner:)-(([OperationPort]),_)``.
+    ///   Empty means the rule is satisfied.
+    public static func nothingMountedOverThunderbolt(_ volumes: [MountedVolume]) -> Refusal? {
+        guard let first = volumes.first else { return nil }
+        let names = volumes.map(\.name)
+        return Refusal(
+            code: .volumeMounted,
+            headline: "Something is still using this link",
+            body: """
+            The volume \(first.name) is mounted over Thunderbolt. Eject it in \
+            Finder so nothing gets interrupted, then we'll carry on.
+            """,
+            // The spec gives the plural its own line rather than bending the
+            // body, so a second volume is named in the detail and nowhere else.
+            detail: names.count > 1
+                ? "\(englishList(names)) are mounted over Thunderbolt."
+                : nil,
+            subjects: Array(Set(volumes.map(\.portBSDName))).sorted()
+        )
+    }
+
+    // MARK: - R19, R20 and R21
+
+    /// **R19 — The undo note is missing or unreadable.** At Restore.
+    ///
+    /// RDMALink will not guess at network settings it did not write down.
+    /// `Stop Managing This Port` clears only RDMALink's own record.
+    public static func undoNoteMissing(port: ObservedPort) -> Refusal {
+        Refusal(
+            code: .undoNoteMissing,
+            headline: "I can't remember how this looked",
+            body: """
+            The note RDMALink wrote down for \(port.positionName) is missing, \
+            and it won't guess at your network settings. You can remove the \
+            service in System Settings, under Network, and add the port back to \
+            Thunderbolt Bridge yourself.
+            """,
+            subjects: [port.bsdName]
+        )
+    }
+
+    /// **R20 — The bridge doesn't have it back yet.** At Restore, after the
+    /// service has gone.
+    ///
+    /// The undo note is **never** deleted until verification passes, so this
+    /// refusal always leaves something to try again with.
+    public static func notBackInBridge(port: ObservedPort, bridgeName: String) -> Refusal {
+        Refusal(
+            code: .notBackInBridge,
+            headline: "Not quite back yet",
+            body: """
+            The service is gone, but \(bridgeName) isn't listing \
+            \(port.positionName) yet. RDMALink has kept your undo note, so \
+            nothing is lost and it can try again whenever you like.
+            """,
+            detail: "In System Settings, open Network, choose Manage Virtual "
+                + "Interfaces, open \(bridgeName) and add \(port.positionName) back.",
+            subjects: [port.bsdName]
+        )
+    }
+
+    /// **R21 — The bridge it came from doesn't exist any more.** At Restore.
+    ///
+    /// The offer is `Remove My Service Only`: deleting its own service is
+    /// squarely RDMALink's own business, and recreating a bridge is not.
+    public static func originalBridgeGone(port: ObservedPort, bridgeName: String) -> Refusal {
+        Refusal(
+            code: .originalBridgeGone,
+            headline: "The bridge it came from doesn't exist any more",
+            body: """
+            \(bridgeName) has been removed since RDMALink set this port up. It \
+            can still delete the service it made — that part is squarely its \
+            own — but it won't recreate a bridge, because that's a bigger \
+            decision than undoing its own work.
+            """,
+            subjects: [port.bsdName]
+        )
+    }
+
+    // MARK: - R29
+
+    /// **There's no Thunderbolt Bridge to return it to.** At Return to Bridge
+    /// (UX_SPEC §S10, §7.5 step 3). Nothing is written.
+    ///
+    /// **Proposed numbering** — see ``RefusalCode/noBridgeToReturnTo``. The
+    /// strings are the spec's own; only the R number is this module's.
+    public static func noBridgeToReturnTo(port: ObservedPort) -> Refusal {
+        Refusal(
+            code: .noBridgeToReturnTo,
+            headline: "There's no Thunderbolt Bridge to return it to",
+            body: """
+            This Mac has no Thunderbolt Bridge at the moment. RDMALink never \
+            creates one — recreate it in System Settings, under Network › \
+            Manage Virtual Interfaces, and I'll offer the return the moment it \
+            exists.
+            """,
             subjects: [port.bsdName]
         )
     }

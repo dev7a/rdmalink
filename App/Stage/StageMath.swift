@@ -59,6 +59,25 @@ enum StageMath {
         return 3
     }
 
+    /// UX_SPEC §S4b's watching pose: the yaw that shows something of every one
+    /// of `faces`, taking whichever of the two answers the camera is already
+    /// nearer to.
+    ///
+    /// `faces` are camera yaws — the angle that looks square on at a face. Two
+    /// opposite faces average to nothing at all, which is the case the
+    /// perpendicular covers: the pose between a front and a back is a side, and
+    /// from a side both of them are edge-on and visible.
+    static func surveyYaw(facing faces: [Double], from current: Double) -> Double {
+        guard let first = faces.first else { return current }
+        guard faces.count > 1 else { return first }
+        var sum = SIMD2<Double>(0, 0)
+        for yaw in faces { sum += SIMD2(sin(yaw), cos(yaw)) }
+        if simd_length(sum) > 0.2 { return atan2(sum.x, sum.y) }
+        let left = first + .pi / 2, right = first - .pi / 2
+        return abs(shortestAngleDelta(from: current, to: left))
+            <= abs(shortestAngleDelta(from: current, to: right)) ? left : right
+    }
+
     // MARK: - Orbit
 
     /// The camera position for a spherical rig around `target`.
@@ -223,6 +242,145 @@ enum StageMath {
         return .milliseconds(60 * max(index, 0))
     }
 
+    // MARK: - Breathing
+
+    /// UX_SPEC §3.5: "Nothing loops except the 'link coming up' breath (1.6 s,
+    /// 8 → 18 % opacity) and the Identify shimmer", and §S4b makes the shimmer
+    /// the same 1.6 s, 8 → 18 % cycle **in phase** on every eligible
+    /// receptacle — which is what reads as *listening* rather than *loading*.
+    static let breathPeriod = 1.6
+    static let breathLow = 0.08
+    static let breathHigh = 0.18
+
+    /// The looping breath at `seconds` on the scene's own clock. In phase
+    /// everywhere, because every receptacle reads the same clock.
+    static func breath(seconds: Double) -> Double {
+        let phase = seconds / breathPeriod * 2 * .pi
+        return breathLow + (breathHigh - breathLow) * (0.5 + 0.5 * sin(phase))
+    }
+
+    /// The middle of the cycle: what Reduce Motion freezes the breath at, and
+    /// what a still frame shows (§3.6).
+    static let restingBreath = (breathLow + breathHigh) / 2
+
+    /// UX_SPEC §S3: a receptacle a check names takes an attention ring "and a
+    /// single 1.6 s breath" — one soft dip and back, after which the ring
+    /// simply stays. It is a breath, not a loop, so it has an end.
+    ///
+    /// - Returns: a multiplier on the ring's steady opacity, 1 once the breath
+    ///   is over.
+    static func singleBreath(secondsSinceStart seconds: Double, reduceMotion: Bool) -> Double {
+        guard !reduceMotion, seconds >= 0, seconds < breathPeriod else { return 1 }
+        return 1 - 0.55 * sin(seconds / breathPeriod * .pi)
+    }
+
+    // MARK: - The bridge ribbon
+
+    /// The distance from the chassis's vertical axis to its footprint at
+    /// `angle`, measured the way the stage measures yaw: 0 looks out of the
+    /// front face along `+z`, `π/2` out of the right face along `+x`.
+    ///
+    /// The footprint is taken as a sharp rectangle. The real one is rounded,
+    /// which only ever pulls the surface further in, so a ribbon drawn against
+    /// this never sinks into the body at a corner.
+    static func footprintRadius(angle: Double, halfWidth: Double, halfDepth: Double) -> Double {
+        let x = abs(sin(angle)), z = abs(cos(angle))
+        let byWidth = x > 1e-9 ? halfWidth / x : Double.infinity
+        let byDepth = z > 1e-9 ? halfDepth / z : Double.infinity
+        return min(byWidth, byDepth)
+    }
+
+    /// UX_SPEC §4.4: "a soft translucent ribbon arcing **across the chassis
+    /// surface** between the members of the same bridge".
+    ///
+    /// The path walks the footprint's outline from one receptacle to the other
+    /// rather than cutting between them, so two ports on the same face get an
+    /// arc along that face and two ports on different faces get one that wraps
+    /// the corner instead of passing through the machine. It touches down
+    /// exactly on both receptacles, so the ribbon reads as attached to them.
+    ///
+    /// - Parameters:
+    ///   - lift: how far it stands off the surface at the middle — a hair, so
+    ///     it stays a ribbon on the chassis rather than a cable in front of it.
+    ///   - rise: how far it arcs **up the face** at the middle. Without this
+    ///     the ribbon runs straight through the ring tracks of every receptacle
+    ///     between its two ends, and §4.4 is explicit that the ribbon "never
+    ///     replaces the segmented ring, which remains the primary state
+    ///     signal". Arcing over them is what keeps that true.
+    ///
+    /// Centimetres, in the chassis's own frame, `y` up from the ground plane.
+    static func ribbonPath(
+        from start: SIMD3<Double>, to end: SIMD3<Double>,
+        halfWidth: Double, halfDepth: Double, lift: Double, rise: Double, samples: Int
+    ) -> [SIMD3<Double>] {
+        let samples = max(samples, 2)
+        let startAngle = atan2(start.x, start.z)
+        let sweep = shortestAngleDelta(from: startAngle, to: atan2(end.x, end.z))
+        // Where the two ends sit relative to the outline, so a receptacle that
+        // is not exactly on the sharp rectangle still gets a ribbon that lands
+        // on it rather than beside it.
+        let startRadius = (start.x * start.x + start.z * start.z).squareRoot()
+        let endRadius = (end.x * end.x + end.z * end.z).squareRoot()
+        let startSlack = startRadius - footprintRadius(
+            angle: startAngle, halfWidth: halfWidth, halfDepth: halfDepth
+        )
+        let endSlack = endRadius - footprintRadius(
+            angle: startAngle + sweep, halfWidth: halfWidth, halfDepth: halfDepth
+        )
+        return (0...samples).map { step in
+            let t = Double(step) / Double(samples)
+            let angle = startAngle + sweep * t
+            let outline = footprintRadius(
+                angle: angle, halfWidth: halfWidth, halfDepth: halfDepth
+            )
+            let slack = startSlack + (endSlack - startSlack) * t
+            let radius = outline + slack + lift * sin(t * .pi)
+            let arc = sin(t * .pi)
+            return SIMD3(
+                radius * sin(angle),
+                start.y + (end.y - start.y) * t + rise * arc,
+                radius * cos(angle)
+            )
+        }
+    }
+
+    /// How far a ribbon stands off the chassis at its highest point: a hair on
+    /// a short hop between neighbours, more on one that has to get round a
+    /// corner, and never so much that it reads as a wire rather than a ribbon.
+    static func ribbonLift(from start: SIMD3<Double>, to end: SIMD3<Double>) -> Double {
+        let span = simd_length(end - start)
+        // The floor clears the ring tracks, which stand about 1 mm off the
+        // face; the ceiling keeps a ribbon that has to get from the back of a
+        // Mac Studio to the front from becoming a handle on it.
+        return min(max(span * 0.09, 0.32), 1.2)
+    }
+
+    /// How far a ribbon arcs up the face, given how far apart its ends are and
+    /// how much face there is above them.
+    ///
+    /// Enough to clear the ring tracks of everything it passes over, and never
+    /// more than the face can hold — a notebook's side is 1.55 cm tall, and a
+    /// ribbon that left it would be drawing in mid-air.
+    static func ribbonRise(span: Double, room: Double) -> Double {
+        min(min(max(span * 0.12, 0.55), 1.1), max(room, 0))
+    }
+
+    /// UX_SPEC §S6 and §9.3: the ribbon "detaches from the chosen receptacle
+    /// and retracts into the others". `retraction` runs 0 → 1 from the end
+    /// that let go, so the segment nearest it is the first to leave.
+    ///
+    /// - Parameter position: where a segment sits along the ribbon, 0 at the
+    ///   end that detaches and 1 at the end it retracts into.
+    static func ribbonSegmentOpacity(position: Double, retraction: Double) -> Double {
+        // A soft edge, so the ribbon does not come apart one hard segment at a
+        // time; §3.5 allows no bounce and no overshoot, and this has neither.
+        // The edge is carried past both ends, so a ribbon at rest is whole and
+        // a fully retracted one is gone, with nothing popping in between.
+        let edge = 0.18
+        let front = retraction * (1 + edge) - edge
+        return min(max((position - front) / edge, 0), 1)
+    }
+
     // MARK: - Rounded-rectangle outlines
 
     /// One point on a rounded-rectangle centreline, with the outward normal and
@@ -312,8 +470,57 @@ enum StageMath {
         case solid
         /// Four arcs with four gaps: a bridge member.
         case segmented
+        /// §S5's hover-to-preview: the same four arcs with the gaps widened a
+        /// hair, which is what "Leave the Thunderbolt Bridge" looks like a
+        /// moment before anyone agrees to it.
+        case segmentedWide
+        /// §S6: the segmented ring part way through closing. `gaps` is how many
+        /// of the four have closed, so 0 is ``segmented`` and 4 is a solid
+        /// ring. These five shapes are also exactly what Reduce Motion steps
+        /// between (§3.6).
+        case closing(gaps: Int)
         /// The drift ring.
         case dashed
+    }
+
+    /// The gap in ``RingPattern/segmented``, as a fraction of the perimeter.
+    static let segmentedGap = 0.09
+    /// §S5: "the segmented ring's gaps widen a hair."
+    static let widenedGap = 0.13
+
+    /// Four quarter arcs with `gap`-wide gaps between them, the first `closed`
+    /// of which have closed up.
+    ///
+    /// Gaps close in the ring's own winding order, starting at the middle of
+    /// the bottom edge — which is clockwise as drawn on a face the camera is
+    /// square on to (§3.5's "closes clockwise"), because the outline is walked
+    /// counter-clockwise in the receptacle's own frame and that frame faces the
+    /// viewer.
+    static func arcs(gap: Double, closed: Int) -> [(start: Double, end: Double)] {
+        let closed = min(max(closed, 0), 4)
+        guard closed < 4 else { return [(0, 1)] }
+        var spans: [(start: Double, end: Double)] = []
+        // The first span swallows one more quarter for every gap that closed.
+        let first = (start: gap / 2, end: Double(closed + 1) / 4 - gap / 2)
+        spans.append(first)
+        for index in (closed + 1)..<4 {
+            let start = Double(index) / 4 + gap / 2
+            spans.append((start, start + 0.25 - gap))
+        }
+        return spans
+    }
+
+    /// How many of the four gaps have closed after `step` of `total` real
+    /// steps (UX_SPEC §S6: one gap per **real completed step**, never a timer).
+    ///
+    /// The last step always lands on the solid ring and nothing before it does,
+    /// so a checklist of five — §S6's — steps through all five shapes in order
+    /// and one of four closes a gap a step.
+    static func closedGaps(step: Int, of total: Int) -> Int {
+        guard total > 0 else { return 0 }
+        let step = min(max(step, 0), total)
+        guard step < total else { return 4 }
+        return min(Int(Double(step) / Double(total) * 4), 3)
     }
 
     static func spans(for pattern: RingPattern) -> [(start: Double, end: Double)] {
@@ -321,12 +528,11 @@ enum StageMath {
         case .solid:
             return [(0, 1)]
         case .segmented:
-            // Four gaps, one at each quarter, each 9 % of the perimeter.
-            let gap = 0.09
-            return (0..<4).map { index in
-                let start = Double(index) / 4 + gap / 2
-                return (start, start + 0.25 - gap)
-            }
+            return arcs(gap: segmentedGap, closed: 0)
+        case .segmentedWide:
+            return arcs(gap: widenedGap, closed: 0)
+        case .closing(let gaps):
+            return arcs(gap: segmentedGap, closed: gaps)
         case .dashed:
             let dash = 0.038, gap = 0.026
             let period = dash + gap

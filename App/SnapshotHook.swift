@@ -10,6 +10,7 @@
 //      RDMALINK_SNAPSHOT=/tmp/hub.png ./RDMALink.app/Contents/MacOS/RDMALink
 //      RDMALINK_SNAPSHOT=/tmp/front.png RDMALINK_SNAPSHOT_FACE=front ./…/RDMALink
 //      RDMALINK_SNAPSHOT=/tmp/s13.png RDMALINK_SNAPSHOT_SHEET=whatThisAllMeans ./…
+//      RDMALINK_SNAPSHOT=/tmp/s5.png RDMALINK_SNAPSHOT_ROUTE=review ./…/RDMALink
 //      RDMALINK_SNAPSHOT=/tmp/light.png RDMALINK_SNAPSHOT_APPEARANCE=light ./…
 //
 //  With `RDMALINK_SNAPSHOT` set, the app waits for the first inventory to land,
@@ -19,6 +20,14 @@
 //  `RDMALINK_SNAPSHOT_SHEET` is `whatThisAllMeans`, `otherMac` or `settings`
 //  and puts that surface in front first. `RDMALINK_SNAPSHOT_APPEARANCE` is
 //  `light` or `dark` and forces this process's appearance.
+//
+//  `RDMALINK_SNAPSHOT_ROUTE` opens one of the app's own routes on the live
+//  inventory first: `hub`, `preflight`, `choose`, `review`, `restore-sheet`,
+//  `adopt-sheet` or `changelog`. The three assistant routes arrive with the
+//  first Thunderbolt port already chosen. **Every one of them is a read.**
+//  `review` runs `SetUpPorts.preview` and stops; no route reaches
+//  `perform`, opens an `AuthorizedSession` or raises the administrator
+//  prompt — S6's burst is behind its own button, which nothing here presses.
 //
 //  Nothing here runs unless the environment variable is present, and nothing
 //  here writes anywhere but the path it was handed.
@@ -55,6 +64,27 @@ enum SnapshotHook {
             .flatMap(Surface.init(rawValue:))
     }
 
+    /// One of the app's own routes, opened on the live inventory before the
+    /// capture. `RDMALINK_SNAPSHOT_ROUTE`.
+    enum Route: String, Sendable {
+        case hub
+        case preflight
+        case choose
+        case review
+        case restoreSheet = "restore-sheet"
+        case adoptSheet = "adopt-sheet"
+        case changelog
+    }
+
+    static var route: Route? {
+        ProcessInfo.processInfo.environment["RDMALINK_SNAPSHOT_ROUTE"]
+            .flatMap(Route.init(rawValue:))
+    }
+
+    /// How long a route is given to land: a sheet reads this Mac when it
+    /// opens, and the review screen runs its plan off the main actor.
+    private static let routeDelay = Duration.milliseconds(1400)
+
     /// `light` or `dark`, so both appearances are reviewable from one machine
     /// without touching the reviewer's own System Settings. It sets this
     /// process's appearance and nothing outside it.
@@ -79,7 +109,8 @@ enum SnapshotHook {
     static func run(
         isReady: @MainActor () -> Bool,
         turnTo: @MainActor (PortFace) -> Void,
-        present: @MainActor (Surface) -> Void
+        present: @MainActor (Surface) -> Void,
+        open: @MainActor (Route) -> Void = { _ in }
     ) async {
         guard let destination else { return }
         if let appearance { NSApplication.shared.appearance = appearance }
@@ -94,6 +125,10 @@ enum SnapshotHook {
         // at its resting pose. Posing before that lands turns the machine and
         // then silently turns it back.
         if appearance != nil { try? await Task.sleep(for: .milliseconds(500)) }
+        if let route {
+            open(route)
+            try? await Task.sleep(for: routeDelay)
+        }
         if let face {
             turnTo(face)
             // The camera arc is 0.7 s (§3.5) and is stepped by the render
@@ -109,6 +144,13 @@ enum SnapshotHook {
             try await capture(to: destination)
         } catch {
             FileHandle.standardError.write(Data("RDMALINK_SNAPSHOT failed: \(error)\n".utf8))
+        }
+        // A sheet is modal, and `terminate` asks the run loop politely. The
+        // picture is already on disk by here, so a hook that cannot get its
+        // answer must not leave a headless run hanging (its own header says so).
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1200))
+            exit(0)
         }
         NSApplication.shared.terminate(nil)
     }

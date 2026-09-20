@@ -60,6 +60,51 @@ public enum ConfigurationDifference: Sendable, Equatable {
     case severalServices(count: Int)
 }
 
+extension ConfigurationDifference {
+    /// True for the one difference that is not about the service at all.
+    ///
+    /// ``NetworkServices/classify(services:bridges:)`` puts bridge membership
+    /// first, so a port that has a perfectly good service and is still a
+    /// bridge member classifies as a near match whose *first* difference is
+    /// this one. §S9's near-match body opens "is out of every bridge and has
+    /// its own service", so naming this difference in it would contradict the
+    /// same sentence — §7.3 is explicit that Adopt is for a port that is out
+    /// of every bridge.
+    public var isBridgeMembership: Bool {
+        if case .stillInBridge = self { return true }
+        return false
+    }
+
+    /// The clause §S9's near-match body names this difference in.
+    ///
+    /// §S9 writes one of these — "IPv6 is set to Automatic rather than
+    /// Link-local only" — and the rest follow its grammar, because the body
+    /// must name what was actually found (§1.3 rule 10).
+    /// **Owed from the spec owner:** the near-match body for each of them.
+    public var clause: String {
+        switch self {
+        case let .ipv6NotLinkLocal(method):
+            return "IPv6 is set to \(method ?? "something else") rather than Link-local only"
+        case .ipv6Disabled:
+            return "IPv6 is turned off rather than Link-local only"
+        case let .ipv4NotOff(method):
+            return "IPv4 is set to \(method ?? "something else") rather than Off"
+        case let .stillInBridge(bridge):
+            return "it's still in \(bridge)"
+        case .serviceDisabled:
+            return "the service is switched off"
+        case .severalServices:
+            return "there's more than one service on it"
+        }
+    }
+
+    /// The clause for the first difference that is about the **service**,
+    /// which is the only kind §S9's near-match body can name.
+    public static func serviceClause(in differences: [ConfigurationDifference]) -> String? {
+        differences.first { !$0.isBridgeMembership }?.clause
+    }
+}
+
 /// Why a service is one RDMALink will not touch.
 public enum ForeignReason: Sendable, Equatable {
     /// A fixed IPv4 address someone set on purpose — R16.
@@ -105,6 +150,16 @@ public enum NetworkServices {
     public static func read(from preferences: SCPreferences) -> [NetworkServiceInfo] {
         let services = SCNetworkServiceCopyAll(preferences) as? [SCNetworkService] ?? []
         return services.compactMap(describe)
+    }
+
+    /// The identifiers of every service in the current location, in the
+    /// order macOS keeps them.
+    ///
+    /// An undo note records where a service sat, so what it says about the
+    /// world it was taken from is complete. Read-only.
+    public static func serviceOrder(in preferences: SCPreferences) -> [String] {
+        guard let location = SCNetworkSetCopyCurrent(preferences) else { return [] }
+        return SCNetworkSetGetServiceOrder(location) as? [String] ?? []
     }
 
     /// Every service on one interface, in configuration order.

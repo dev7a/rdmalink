@@ -29,14 +29,21 @@ struct RDMALinkApp: App {
         Window("RDMALink", id: Self.mainWindowID) {
             RootView(router: router)
         }
-        .defaultSize(width: 1000, height: 660)
+        .defaultSize(width: 1000, height: 720)
         .windowToolbarStyle(.unified)
         .commands {
+            // §2.7's Port menu. AppKit places a `CommandMenu` after the
+            // built-in menus it knows about, so it lands beside View rather
+            // than before it; the items and their shortcuts are the spec's.
+            CommandMenu("Port") {
+                PortCommands()
+            }
             CommandGroup(after: .toolbar) {
                 StageViewCommands()
                 Divider()
                 Toggle("Show Technical Names", isOn: $showsTechnicalNames)
                     .keyboardShortcut("t", modifiers: .command)
+                ChangeLogCommand()
             }
             CommandGroup(replacing: .help) {
                 // §2.7 lists four items. "RDMALink Help" and "What RDMA over
