@@ -65,20 +65,28 @@ struct OperationsNoteSafetyTests {
         #expect((try? store.load(port: "en6")) != nil)
     }
 
-    @Test("An adopted note is never restored: §7.3 has no put-it-back for one")
+    @Test("An adopted note is never restored: §7.3 has no put-it-back for one, and R30 says so")
     func refusesAnAdoptedNote() throws {
         let store = Fixtures.store()
         defer { try? FileManager.default.removeItem(at: store.directory) }
         try store.save(Self.adoptedNote())
+        let world = Fixtures.world(ifconfig: Fixtures.standalone,
+                                   services: [Self.service],
+                                   bridges: [Self.thunderboltBridge])
+        // The preview names it in §6.2 R30's adopted form — never R19, whose
+        // body says the note is missing when it is sitting right there.
+        let preview = RestorePort(port: Fixtures.port).preview(note: Self.adoptedNote(), world: world)
+        #expect(preview.refusal == Refusals.noteIsAnAdoptionRecord(port: Fixtures.port.observed))
+        #expect(preview.refusal?.code == .noteIsAReturnRecord)
+        #expect(preview.returnedToBridge == nil)
+        #expect(!preview.canProceed)
+
         let writer = FakeWriter()
         #expect {
             try RestorePort(port: Fixtures.port).perform(
-                writer: writer,
-                world: Fixtures.world(ifconfig: Fixtures.standalone,
-                                      services: [Self.service],
-                                      bridges: [Self.thunderboltBridge]),
+                writer: writer, world: world,
                 environment: Fixtures.environment(store: store), progress: { _, _ in })
-        } throws: { ($0 as? Refusal)?.code == .undoNoteMissing }
+        } throws: { ($0 as? Refusal) == Refusals.noteIsAnAdoptionRecord(port: Fixtures.port.observed) }
         #expect(writer.calls == [.lock])
         #expect((try? store.load(port: "en6")) != nil, "the note is the user's, not ours")
     }

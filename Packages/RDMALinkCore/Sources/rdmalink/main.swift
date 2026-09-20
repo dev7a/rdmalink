@@ -441,7 +441,7 @@ func runRestore(_ bsdName: String?) throws {
             + "(`rdmalink stop-managing \(bsdName)`) apply.")
         return
     }
-    print(plan.body)
+    if !plan.body.isEmpty { print(plan.body) }
     for row in plan.rows { print("  · \(row)") }
     for note in plan.notes { print("  \(note)") }
     if let refusal = plan.refusal {
@@ -449,6 +449,16 @@ func runRestore(_ bsdName: String?) throws {
         print("In the way:")
         show(refusal)
         if plan.mayRemoveServiceOnly { print("  offer: Remove My Service Only") }
+    }
+    // §7.3: an adopted note is the same answer in R30's other form, and the
+    // tool says in its own words which action is left.
+    if let note, note.isAdopted {
+        print("")
+        print("Refusing: \(bsdName)'s note is an adoption record, not an undo note — RDMALink "
+            + "adopted the port as it found it on \(note.recordedAt.formatted(.iso8601)) and "
+            + "never saw which bridge it came from. There is nothing to restore; the port keeps "
+            + "its setup. Stop Managing (`rdmalink stop-managing \(bsdName)`) applies.")
+        return
     }
 
     guard plan.canProceed else { return }

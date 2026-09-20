@@ -4,7 +4,9 @@
 # App/Presentation/PortPresentation, App/Presentation/ThisMacPresentation) —
 # §S3's first row, where R2 has to win over R1 (App/Flows/PreflightReport,
 # with the two files its button row and refusal card reach into), and §S8's
-# subject (App/Presentation/OtherMacPresentation).
+# subject (App/Presentation/OtherMacPresentation) — and the Restore sheet's
+# button rows (App/Presentation/RestorePresentation), the only place §6.2's
+# rows for R19, R20, R21, R28 and R30 are written down.
 #
 # The app target has no test bundle, and these files import nothing but
 # Foundation, AppKit and RDMALinkCore, so — like script/test_stage_math.sh —
@@ -266,6 +268,26 @@ check(!OtherMacReport(ports: [snapshot(port("en6", "Back, left middle", link: .m
                                        configuration: .readyForRDMA(serviceID: "MINE"), baseline: ownNote)]).answered,
       "a link still coming up has not answered yet")
 
+// MARK: §6.2's button rows in the Restore sheet, reversed: the spec writes the
+// default first, and the sheet makes the last element the default.
+
+func titles(_ code: RefusalCode) -> [String] {
+    RestoreRefusals.actions(for: code).map { text($0.title) }
+}
+check(titles(.undoNoteMissing) == ["Stop Managing This Port", "Copy These Steps", "Open Network Settings"],
+      "R19: Open Network Settings (default) · Copy These Steps · Stop Managing This Port")
+check(titles(.notBackInBridge) == ["Copy These Steps", "Open Network Settings", "Try Again"],
+      "R20: Try Again (default) · Open Network Settings · Copy These Steps")
+check(titles(.originalBridgeGone) == ["Leave Everything Alone", "Remove My Service Only"],
+      "R21: Remove My Service Only (default) · Leave Everything Alone")
+check(titles(.createdServiceEdited) == ["Leave Everything Alone", "Open Network Settings", "Stop Managing…"],
+      "R28: Stop Managing… · Open Network Settings · Leave Everything Alone, and no Copy Details")
+check(titles(.noteIsAReturnRecord) == ["Cancel", "Stop Managing…", "Set It Up Again"],
+      "R30: Set It Up Again (default) · Stop Managing… · Cancel")
+check(!RestoreRefusals.actions(for: .createdServiceEdited).contains(.copyDetails)
+      && !RestoreRefusals.actions(for: .noteIsAReturnRecord).contains(.copyDetails),
+      "a refusal raised before anything is written carries no Copy Details")
+
 if failures > 0 {
     FileHandle.standardError.write(Data("test_presentation: \(failures) failed\n".utf8))
     exit(1)
@@ -287,6 +309,7 @@ xcrun swiftc -swift-version 6 -warnings-as-errors \
   "$ROOT_DIR/App/Flows/PreflightReport.swift" \
   "$ROOT_DIR/App/Flows/WizardRefusal.swift" \
   "$ROOT_DIR/App/Flows/WizardActions.swift" \
+  "$ROOT_DIR/App/Presentation/RestorePresentation.swift" \
   "$WORK_DIR/main.swift"
 
 "$WORK_DIR/test_presentation"

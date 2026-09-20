@@ -432,6 +432,32 @@ struct NoteIsAReturnRecordTests {
         let refusal = Refusals.noteIsAReturnRecord(port: farLeft, bridgeName: "bridge0")
         #expect(refusal.body.contains("put the port back in bridge0."))
     }
+
+    @Test("The adopted form is §6.2 R30's second bullet: same number, same headline, its own body")
+    func writesTheAdoptedForm() {
+        let refusal = Refusals.noteIsAnAdoptionRecord(
+            port: ObservedPort(bsdName: "en6", positionName: "Back, far left"))
+        #expect(refusal.code == .noteIsAReturnRecord)
+        #expect(refusal.code.rawValue == "R30")
+        #expect(refusal.headline == "Nothing to put back")
+        #expect(refusal.body == """
+            RDMALink's note for Back, far left only records that it adopted the port \
+            as it found it. There's nothing to undo — Stop Managing forgets the note, \
+            and the port keeps its setup.
+            """)
+        #expect(refusal.detail == nil)
+        #expect(refusal.subjects == ["en6"])
+    }
+
+    @Test("The adopted form never claims the note is missing, and never offers Set It Up Again")
+    func adoptedFormIsNotR19() {
+        let adopted = Refusals.noteIsAnAdoptionRecord(port: farLeft)
+        #expect(!adopted.body.contains("missing"))
+        #expect(!adopted.body.contains("Set It Up Again"), "the port keeps its setup")
+        #expect(adopted.headline != Refusals.undoNoteMissing(port: farLeft).headline)
+        #expect(adopted.headline == Refusals.noteIsAReturnRecord(
+            port: farLeft, bridgeName: "Thunderbolt Bridge").headline)
+    }
 }
 
 @Suite("R2 — both ends of one cable are in this Mac")

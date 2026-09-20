@@ -7,116 +7,14 @@
 //  `perform` will do — so the sheet can never offer a button the burst is
 //  going to refuse, and can never refuse something the burst would have done.
 //
-//  What is left here is the sheet's own shape: which form it is in, which
-//  button row §6.2 gives each refusal, and which volumes `Show in Finder`
-//  would reveal.
+//  What is left here is the sheet's own shape: which form it is in and which
+//  volumes `Show in Finder` would reveal. Which button row §6.2 gives each
+//  refusal is RestorePresentation's, where script/test_presentation.sh can
+//  reach it.
 //
 
 import Foundation
 import RDMALinkCore
-
-/// A button in the Restore sheet. Every title is §S10's or §6.2's.
-///
-/// `WizardAction` carries the set-up side's buttons; these are the undo
-/// side's, and the two sets barely overlap. **Owed:** one table, once the two
-/// slices meet.
-enum RestoreAction: String, Sendable, Equatable, Identifiable, CaseIterable {
-    case restore
-    case returnToBridge
-    case stopManaging
-    case cancel
-    case done
-    case tryAgain
-    case showInFinder
-    case openNetworkSettings
-    case copyTheseSteps
-    case stopManagingThisPort
-    /// §6.2 R28's and R30's `Stop Managing…`: the Port menu's title for
-    /// forgetting a note, with its ellipsis, where R19 spells the port out.
-    case stopManagingEllipsis
-    case setItUpAgain
-    case removeMyServiceOnly
-    case leaveEverythingAlone
-    case copyDetails
-    /// §6.2 R12's default: look again, rather than ask for another password.
-    case checkAgain
-
-    var id: String { rawValue }
-
-    var title: LocalizedStringResource {
-        switch self {
-        case .restore: "Restore"
-        case .returnToBridge: "Return to Bridge"
-        case .stopManaging: "Stop Managing"
-        case .cancel: "Cancel"
-        case .done: "Done"
-        case .tryAgain: "Try Again"
-        case .showInFinder: "Show in Finder"
-        case .openNetworkSettings: "Open Network Settings"
-        case .copyTheseSteps: "Copy These Steps"
-        case .stopManagingThisPort: "Stop Managing This Port"
-        case .stopManagingEllipsis: "Stop Managing…"
-        case .setItUpAgain: "Set It Up Again"
-        case .removeMyServiceOnly: "Remove My Service Only"
-        case .leaveEverythingAlone: "Leave Everything Alone"
-        case .copyDetails: "Copy Details"
-        case .checkAgain: "Check Again"
-        }
-    }
-}
-
-/// The symbol, the tint and the button row §6.2 gives each refusal that can be
-/// raised inside this sheet. The copy itself is Core's and is never re-decided
-/// here.
-enum RestoreRefusals {
-    static func symbol(for code: RefusalCode) -> String {
-        switch code {
-        case .volumeMounted: "externaldrive"
-        default: "exclamationmark.circle"
-        }
-    }
-
-    /// `.orange` is the panel's warning tint (§3.1) and R20 is the one state
-    /// here that is genuinely half-done.
-    static func isAttention(_ code: RefusalCode) -> Bool {
-        code == .notBackInBridge
-    }
-
-    /// §6.2's own rows. The last action is the default.
-    ///
-    /// Each row keeps a way out, because §6.1 rule 10 leaves `Back` on every
-    /// refusal and `Cancel` is this sheet's `Back`.
-    static func actions(for code: RefusalCode) -> [RestoreAction] {
-        switch code {
-        case .volumeMounted:
-            [.cancel, .showInFinder]
-        case .undoNoteMissing:
-            [.stopManagingThisPort, .copyTheseSteps, .openNetworkSettings]
-        case .notBackInBridge:
-            [.copyTheseSteps, .openNetworkSettings, .tryAgain]
-        case .originalBridgeGone:
-            [.leaveEverythingAlone, .removeMyServiceOnly]
-        case .noBridgeToReturnTo:
-            [.cancel, .openNetworkSettings]
-        // §6.2 R28 and R30 both write `Stop Managing…`; only R19 spells the
-        // port out. The three do the same thing.
-        case .createdServiceEdited:
-            [.copyDetails, .stopManagingEllipsis, .openNetworkSettings]
-        // R30's row, in §6.2's order with the default last: `Cancel` ·
-        // `Stop Managing…` · `Set It Up Again`.
-        case .noteIsAReturnRecord:
-            [.cancel, .stopManagingEllipsis, .setItUpAgain]
-        // R12 polls quietly and clears itself when the lock does, so its
-        // default looks again rather than asking for another password.
-        case .networkBusy:
-            [.cancel, .checkAgain]
-        case .credentialExpired:
-            [.copyDetails, .cancel, .tryAgain]
-        default:
-            [.copyDetails, .cancel]
-        }
-    }
-}
 
 /// Everything the sheet draws for one subject.
 struct RestorePlan: Sendable {

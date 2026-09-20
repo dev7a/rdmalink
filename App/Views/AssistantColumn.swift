@@ -63,6 +63,8 @@ struct AssistantColumn: View {
     /// taller — on the hub the column lays out as if there were no scroll
     /// view at all.
     @State private var workingAreaHeight: CGFloat?
+    /// Which edges of band 2 have content past them, once it scrolls.
+    @State private var workingAreaFold = ScrollFold()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -94,6 +96,18 @@ struct AssistantColumn: View {
                         }
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                // The same fold as the port list's: the edge with more past
+                // it fades over its last points instead of slicing a row
+                // against the list's first header, and a working area that
+                // fits is untouched. Two regions that scroll should read the
+                // same way.
+                .onScrollGeometryChange(for: ScrollFold.self) { geometry in
+                    ScrollFold(geometry)
+                } action: { _, current in
+                    workingAreaFold = current
+                }
+                .mask { ScrollFoldMask(fold: workingAreaFold) }
+                .animation(.smooth(duration: 0.18), value: workingAreaFold)
                 .frame(maxHeight: workingAreaHeight ?? .infinity)
                 // Laid out before the list, which is offered what is left
                 // above its floor.

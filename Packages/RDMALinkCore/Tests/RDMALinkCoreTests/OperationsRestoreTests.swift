@@ -213,6 +213,49 @@ struct OperationsRestoreTests {
         #expect(try store.load(port: "en6") == note, "the record stays for Set It Up Again")
     }
 
+    @Test("R30's adopted form: an adopted note is named for what it is, and nothing is written")
+    func refusesAnAdoptedNote() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let note = PortBaseline.adopted(
+            bsdName: "en6", receptacle: 1, positionName: "Back, far left",
+            existingService: ServiceRecord(identifier: "THEIRS", name: "Thunderbolt 6",
+                                           orderIndex: 0),
+            ipv4: Fixtures.ipv4Off, ipv6: Fixtures.ipv6LinkLocal, recordedAt: Self.recordedAt)
+        try store.save(note)
+        #expect(RestorePort.describesNothingToUndo(note))
+
+        let world = Fixtures.world(ifconfig: Fixtures.standalone,
+                                   services: [Self.service(id: "THEIRS", name: "Thunderbolt 6")])
+        let plan = RestorePort(port: Fixtures.port).preview(note: note, world: world)
+        // Not a return record — the tool tells the two forms apart by the
+        // note — and not R19, whose body would say the note is missing.
+        #expect(plan.returnedToBridge == nil)
+        #expect(plan.refusal?.code == .noteIsAReturnRecord)
+        #expect(plan.refusal?.headline == "Nothing to put back")
+        #expect(plan.refusal?.body == """
+            RDMALink's note for Back, far left only records that it adopted the port \
+            as it found it. There's nothing to undo — Stop Managing forgets the note, \
+            and the port keeps its setup.
+            """)
+        #expect(!plan.canProceed)
+        #expect(plan.buttonTitle == nil)
+        #expect(plan.rows.isEmpty)
+        #expect(plan.serviceName == nil, "the service is theirs, and no row names it")
+
+        let writer = FakeWriter()
+        writer.presentServiceIDs = ["THEIRS"]
+        #expect {
+            try RestorePort(port: Fixtures.port).perform(
+                writer: writer, world: world,
+                environment: Fixtures.environment(store: store), progress: { _, _ in })
+        } throws: { ($0 as? Refusal)?.code == .noteIsAReturnRecord
+            && ($0 as? Refusal)?.body.contains("adopted the port as it found it") == true }
+        #expect(writer.calls == [.lock], "nothing is written, and their service is untouched")
+        #expect(writer.presentServiceIDs.contains("THEIRS"))
+        #expect(try store.load(port: "en6") == note, "the note stays for Stop Managing")
+    }
+
     @Test("Restore All passes a return record over, without a write and without counting it")
     func restoreAllSkipsAReturnRecord() throws {
         let store = Fixtures.store()

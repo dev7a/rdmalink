@@ -51,6 +51,11 @@ public enum RefusalCode: String, Sendable, Equatable, CaseIterable {
     /// the port back in a bridge, so there is nothing for Restore to undo.
     /// Reached only from the command line or a stale sheet — the hub never
     /// offers `Restore…` for one. The note is kept and nothing is written.
+    /// The same number covers an **adopted note** (§7.3, §6.2 R30's second
+    /// form): no bridge history, nothing to put back, the port keeps its
+    /// setup. The two forms have different bodies and button rows. Only the
+    /// command line ever shows the adopted form: the app's Restore sheet
+    /// sends an adopted note to Return to Bridge before it asks for a preview.
     case noteIsAReturnRecord = "R30"
 }
 

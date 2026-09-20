@@ -42,11 +42,17 @@ struct PortList: View {
     @State private var rowInitiated: String?
     /// Which edges of the list have rows past them right now.
     @State private var fold = ScrollFold()
+    /// Where each face's header and first row sit in the visible list, by
+    /// group, so the fold can tell when a header is standing over nothing.
+    @State private var groupEdges: [String: GroupEdges] = [:]
+
+    /// The gap between one face's rows and the next face's header.
+    private static let groupSpacing: CGFloat = 10
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: Self.groupSpacing) {
                     if isProbing {
                         PortListSkeleton()
                     } else {
@@ -60,7 +66,9 @@ struct PortList: View {
                                 aboutToChange: aboutToChange,
                                 onUSBClick: onUSBClick,
                                 onExtend: onExtend,
-                                onRowSelect: { rowInitiated = $0 }
+                                onRowSelect: { rowInitiated = $0 },
+                                onHeaderTop: { groupEdges[group.id, default: GroupEdges()].headerTop = $0 },
+                                onFirstRowTop: { groupEdges[group.id, default: GroupEdges()].firstRowTop = $0 }
                             )
                         }
                     }
@@ -80,8 +88,9 @@ struct PortList: View {
             } action: { _, current in
                 fold = current
             }
-            .mask { ScrollFoldMask(fold: fold) }
+            .mask { ScrollFoldMask(fold: fold, hiddenBelow: hiddenBelow) }
             .animation(.smooth(duration: 0.18), value: fold)
+            .animation(.smooth(duration: 0.18), value: hiddenBelow)
             .onChange(of: stage.selectedID) { _, id in
                 let cameFromARow = rowInitiated == id
                 rowInitiated = nil
@@ -92,6 +101,51 @@ struct PortList: View {
             }
         }
     }
+
+    /// How much of the list's bottom edge is hidden outright, under the fade.
+    ///
+    /// Usually nothing: the fade runs to the edge. But a face header whose
+    /// rows are all past the fold can be left half-showing through the fade
+    /// over a first row that is too deep in it to read — a ghost of `Front`,
+    /// and then the edge — which reads as a face with no ports rather than
+    /// as more list. When the edge cuts between a header and its first row
+    /// like that, the fade runs as usual over the row above, and the header
+    /// and everything past it is hidden outright. The cost is a blank strip
+    /// under the fade where the header was, and macOS's overlay scrollers
+    /// show nothing at rest to say the list goes on — so the strip is
+    /// bounded: never deeper than the fade itself, and a header that starts
+    /// above the fade is left alone whatever its first row does, because
+    /// §2.3 band 3 says the list "is never truncated away" and a legible
+    /// header over a faded row is a stronger "there is more" than a blank
+    /// strip. Nothing about the rows themselves changes: same order, same
+    /// density, same place.
+    private var hiddenBelow: CGFloat {
+        guard fold.below else { return 0 }
+        let depth = ScrollFoldMask.depth
+        // A header whose top is inside the fade — past its start, but not so
+        // deep that nothing of it would show — over a first row that begins
+        // too deep in the fade to read.
+        let fadeStarts = fold.containerHeight - depth
+        let headerShows = fold.containerHeight - depth / 4
+        let rowReads = fold.containerHeight - depth * 3 / 4
+        let faces = Set(PortGrouping.groups(for: ports).map(\.id))
+        let stranded = groupEdges.compactMap { id, edges -> CGFloat? in
+            guard faces.contains(id),
+                  let headerTop = edges.headerTop, let firstRowTop = edges.firstRowTop,
+                  headerTop > fadeStarts, headerTop < headerShows, firstRowTop > rowReads
+            else { return nil }
+            return headerTop
+        }
+        guard let headerTop = stranded.min() else { return 0 }
+        return fold.containerHeight - headerTop
+    }
+}
+
+/// Where one face's header and first row sit in the list's visible frame.
+/// Either is `nil` until its view has reported.
+struct GroupEdges: Equatable {
+    var headerTop: CGFloat?
+    var firstRowTop: CGFloat?
 }
 
 struct PortGroupSection: View {
@@ -106,42 +160,62 @@ struct PortGroupSection: View {
     /// Told before the selection moves, so the list does not scroll a row the
     /// pointer is already on.
     var onRowSelect: (String) -> Void = { _ in }
+    /// Where the header's top edge and the first row's top edge are in the
+    /// enclosing scroll view's frame, as they move — the list's fold reads
+    /// them to keep a header from being stranded at its edge.
+    var onHeaderTop: (CGFloat) -> Void = { _ in }
+    var onFirstRowTop: (CGFloat) -> Void = { _ in }
 
     var body: some View {
         GroupedSection(header: header) {
             ForEach(Array(ports.enumerated()), id: \.element.id) { index, port in
                 if index > 0 { RowDivider(leadingInset: 42) }
-                let presentation = PortRowPresentation(snapshot: port)
-                PortRow(
-                    presentation: presentation,
-                    showsTechnicalNames: showsTechnicalNames,
-                    density: density,
-                    badge: aboutToChange.contains(port.id)
-                        ? "About to change"
-                        : presentation.compactBadge,
-                    isThunderbolt: port.port.isThunderbolt,
-                    isSelected: stage.selectedID == port.id,
-                    isHovered: stage.hoveredID == port.id,
-                    // §4.5: a USB-only row is not selectable, and the click
-                    // is not swallowed either — it produces the same R3 copy
-                    // the stage's own click does.
-                    select: {
-                        guard port.port.isThunderbolt else { return onUSBClick(port.id) }
-                        // §S4's multi-select: ⌘-click and ⇧-click add to the
-                        // selection rather than replacing it, on the screen
-                        // that has one to add to.
-                        if let onExtend, Self.isExtendingClick() {
-                            onExtend(port.id)
-                            return
-                        }
-                        onRowSelect(port.id)
-                        stage.select(port.id)
-                    },
-                    hover: { stage.hover($0 ? port.id : nil) }
-                )
-                .id(port.id)
+                if index == 0 {
+                    row(port)
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.frame(in: .scrollView).minY
+                        } action: { onFirstRowTop($0) }
+                } else {
+                    row(port)
+                }
             }
         }
+        // The section's top edge is the header's.
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.frame(in: .scrollView).minY
+        } action: { onHeaderTop($0) }
+    }
+
+    private func row(_ port: PortSnapshot) -> some View {
+        let presentation = PortRowPresentation(snapshot: port)
+        return PortRow(
+            presentation: presentation,
+            showsTechnicalNames: showsTechnicalNames,
+            density: density,
+            badge: aboutToChange.contains(port.id)
+                ? "About to change"
+                : presentation.compactBadge,
+            isThunderbolt: port.port.isThunderbolt,
+            isSelected: stage.selectedID == port.id,
+            isHovered: stage.hoveredID == port.id,
+            // §4.5: a USB-only row is not selectable, and the click is not
+            // swallowed either — it produces the same R3 copy the stage's
+            // own click does.
+            select: {
+                guard port.port.isThunderbolt else { return onUSBClick(port.id) }
+                // §S4's multi-select: ⌘-click and ⇧-click add to the
+                // selection rather than replacing it, on the screen that has
+                // one to add to.
+                if let onExtend, Self.isExtendingClick() {
+                    onExtend(port.id)
+                    return
+                }
+                onRowSelect(port.id)
+                stage.select(port.id)
+            },
+            hover: { stage.hover($0 ? port.id : nil) }
+        )
+        .id(port.id)
     }
 }
 
@@ -155,10 +229,15 @@ extension PortGroupSection {
     }
 }
 
-/// Whether the list has rows past its top or bottom edge.
+/// Whether a scroll view has content past its top or bottom edge, and how
+/// tall the part it shows is. Shared by the port list and the assistant's
+/// working area (§2.3 bands 2 and 3), so the two scrolling regions fold the
+/// same way.
 struct ScrollFold: Equatable {
     var above = false
     var below = false
+    /// The height of the visible part, in the scroll view's own frame.
+    var containerHeight: CGFloat = 0
 
     init() {}
 
@@ -167,16 +246,22 @@ struct ScrollFold: Equatable {
         let bottom = top + geometry.containerSize.height
         above = top > 1
         below = bottom < geometry.contentSize.height - 1
+        containerHeight = geometry.containerSize.height
     }
 }
 
-/// Opaque over the rows, fading to nothing over the last points before an
-/// edge that has more past it. Applied as a mask, so the group's own
-/// background fades with its rows and nothing is drawn over them.
+/// Opaque over the content, fading to nothing over the last points before an
+/// edge that has more past it. Applied as a mask, so a group's own background
+/// fades with its rows and nothing is drawn over them. An edge with nothing
+/// past it is left alone, so content that fits is untouched.
 struct ScrollFoldMask: View {
     let fold: ScrollFold
+    /// How much of the bottom edge is hidden outright, with the fade ending
+    /// above it. Nothing unless the list has a header to cover, and never
+    /// more than `depth`.
+    var hiddenBelow: CGFloat = 0
 
-    private static let depth: CGFloat = 28
+    static let depth: CGFloat = 28
 
     var body: some View {
         VStack(spacing: 0) {
@@ -185,6 +270,8 @@ struct ScrollFoldMask: View {
             Color.black
             LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
                 .frame(height: fold.below ? Self.depth : 0)
+            Color.clear
+                .frame(height: fold.below ? hiddenBelow : 0)
         }
     }
 }

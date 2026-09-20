@@ -616,6 +616,26 @@ public enum Refusals {
         )
     }
 
+    /// **R30's adopted form** — the note only records an adoption. Same
+    /// number, same headline, §6.2's other body: an adopted port has no
+    /// bridge history and nothing to put back (§7.3), and the port keeps its
+    /// setup. Its row is `Stop Managing…` and `Cancel`; there is no `Set It
+    /// Up Again`, because the port is set up.
+    ///
+    /// The note is kept and nothing is written. R19 is not this either.
+    public static func noteIsAnAdoptionRecord(port: ObservedPort) -> Refusal {
+        Refusal(
+            code: .noteIsAReturnRecord,
+            headline: "Nothing to put back",
+            body: """
+            RDMALink's note for \(port.positionName) only records that it \
+            adopted the port as it found it. There's nothing to undo — Stop \
+            Managing forgets the note, and the port keeps its setup.
+            """,
+            subjects: [port.bsdName]
+        )
+    }
+
     // MARK: - R28
 
     /// **R28 — the service RDMALink made is not the one it made any more.**

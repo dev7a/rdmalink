@@ -157,18 +157,20 @@ public struct RestorePort: Sendable {
                 port: port.observed, bridgeName: returnedToBridge.name)
             return plan
         }
-        // A note that records no bridge history and no service RDMALink made
-        // describes nothing to put back: an adopted note (§7.3 — "there's no
-        // 'put it back' for an adopted port"). Restoring it would take a
+        // An adopted note is the other record with nothing to put back (§7.3
+        // — "there's no 'put it back' for an adopted port"): no bridge history
+        // RDMALink witnessed, no service it made. Restoring it would take a
         // password, change nothing, and then print "Everything is back" and
-        // delete the only record there was. (A return record is the other
-        // shape, and it was answered above with R30.)
-        //
-        // R19's headline — "I can't remember how this looked" — is the nearest
-        // the spec writes, and its button row is §7.3's own offer, `Stop
-        // Managing This Port`. Its body says the note is *missing*, which here
-        // it is not. **Owed from the spec owner:** a refusal for an adopted
-        // note that records nothing to undo.
+        // delete the only record there was. §6.2 R30's adopted form says so —
+        // R19 would claim the note is missing, and it is sitting right there.
+        if note.isAdopted {
+            plan.refusal = Refusals.noteIsAnAdoptionRecord(port: port.observed)
+            return plan
+        }
+        // What is left with nothing in it is a note that records no bridge
+        // history and no service RDMALink made, which no operation writes:
+        // R19's "won't guess at your network settings" is the nearest the
+        // spec has for it, and its row clears only RDMALink's own record.
         guard !Self.describesNothingToUndo(note) else {
             plan.refusal = Refusals.undoNoteMissing(port: port.observed)
             return plan
