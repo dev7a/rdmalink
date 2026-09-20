@@ -129,8 +129,6 @@ public final class AuthorizedSession {
     private var isLocked = false
     /// True once ``end()`` has destroyed the credential. Nothing works after.
     public private(set) var isEnded = false
-    /// True once ``commit()`` has actually written in ``Mode/live``.
-    public private(set) var didCommit = false
 
     private init(mode: Mode, preferences: SCPreferences, authorization: AuthorizationRef?) {
         self.mode = mode
@@ -204,7 +202,6 @@ public final class AuthorizedSession {
         let preferences = try preferences
         guard mode == .live else { return }
         try check(SCPreferencesCommitChanges(preferences), "Commit network preferences")
-        didCommit = true
     }
 
     /// Tells configd to adopt what was committed. A no-op in ``Mode/dryRun``.

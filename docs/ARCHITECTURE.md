@@ -30,7 +30,7 @@ from `StageMath.project`.
 | RDMA switch | Not the app's to flip. Detected from NVRAM `rdma-enable` and `ibv_devices`; the app deep-links to System Settings › Privacy & Security › Developer Tools (`x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_DevTools`) and re-checks after the restart. |
 | Scope per run | Local Mac only. The user runs the app on each Mac and picks the ports. |
 | 3D | Go. Real proportions and port positions, generic surfaces, no logo. Renderer decision (RealityKit vs three.js in a WebView) is open until ML1. |
-| Milestones | `ML0` foundations and spikes · `ML1` read-only inspector with the stage · `ML2` configure and undo · `ML3` polish, change log, settings. Never write `M0`. |
+| Milestones | `ML0` foundations and spikes · `ML1` read-only inspector with the stage · `ML2` configure and undo · `ML3` polish, change log, settings — and the command-line tool loses its mutating half: since ML3 the app is the only thing that writes, and `rdmalink` reads only. The hardware proofs recorded below for 2026-09-20 were run with its former write commands. Never write `M0`. |
 
 ## Verified constraints (macOS 27.2, Mac Studio M3 Ultra, 2026-09-19)
 
@@ -167,7 +167,7 @@ Packages/RDMALinkCore/    everything shared with the CLI and tests
                           format the copy quotes (`Moment`: the locale's
                           short time, never a 12-hour hour without AM/PM)
     Refusals/             the hard rules as pure functions
-  Sources/rdmalink/       command-line companion: diagnostics and spikes
+  Sources/rdmalink/       command-line companion: read-only diagnostics
   Tests/RDMALinkCoreTests Swift Testing
 docs/                     spec, this file, prototype
 script/                   test.sh, build and packaging

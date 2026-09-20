@@ -169,18 +169,15 @@ public struct SetUpPortsResult: Sendable, Equatable {
     public var unfinished: SetUpPortFailure?
     /// How long the burst took, for "Done. That took 1.8 seconds."
     public var elapsed: TimeInterval
-    public var wasDryRun: Bool
 
     public init(
         ports: [SetUpPortResult],
         unfinished: SetUpPortFailure? = nil,
-        elapsed: TimeInterval,
-        wasDryRun: Bool
+        elapsed: TimeInterval
     ) {
         self.ports = ports
         self.unfinished = unfinished
         self.elapsed = elapsed
-        self.wasDryRun = wasDryRun
     }
 
     /// UX_SPEC §S6: the line under the last checkmark.
@@ -486,8 +483,7 @@ public struct SetUpPorts: Sendable {
             ports: results,
             unfinished: unfinished,
             elapsed: Double(elapsed.components.seconds)
-                + Double(elapsed.components.attoseconds) / 1e18,
-            wasDryRun: writer.isDryRun)
+                + Double(elapsed.components.attoseconds) / 1e18)
     }
 
     /// What the review screen's promise actually rests on, so R17 fires on a
