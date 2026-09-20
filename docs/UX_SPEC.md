@@ -367,7 +367,8 @@ With **Show technical names** on, a `.caption` tertiary suffix is appended to th
 - Ready, nothing attached: **Ready for RDMA · the address appears when a Mac arrives**
 - Set up elsewhere: **Set up outside RDMALink** *[Adopt…]*
 - Drifted: **Not set up any more** *[Set It Up Again]*
-- Trailing buttons, by state: *[Adopt…]* · *[Restore…]* · *[Stop Managing…]* · *[Set It Up Again]*
+- Trailing buttons, by state: *[Adopt…]* · *[Restore…]* · *[Return to Bridge…]* · *[Stop Managing…]* · *[Set It Up Again]*
+- Ready, adopted or set up elsewhere (any port that is out of the bridge, whoever took it out): the row carries **Return to Bridge…** so putting a port back never depends on how it was removed.
 
 **Copy — buttons**
 - **Set Up a Port…** · **Set Up Another Port…** · **Restore…** · **Check Again** · **Change Log** · **What This All Means** · **Turn It On…** · **Show Me** · **Forget This Port**
@@ -686,15 +687,21 @@ You can watch each sentence mean something before you agree to it.
 - Success body: **Back, far left is a member of Thunderbolt Bridge again, and RDMALink has forgotten it. Nothing else on this Mac was touched.**
 - Service-already-gone line: **The service RDMALink made isn't there any more — someone removed it already. It'll just get the bridge membership back.**
 - Half-done headline: **Not quite back yet** (see R20)
-- Adopted-port headline: **Stop looking after Back, far right?**
-- Adopted-port body: **RDMALink didn't create this port's service, and it never saw which bridge the port came from — so there's nothing for it to put back. Stopping just means RDMALink forgets it. The port and its settings stay exactly as they are.**
-- Adopted-port button: **Stop Managing**
-- Adopted-port confirmation: **Done. Back, far right is exactly as it was a moment ago — RDMALink is simply no longer keeping an eye on it.**
+- Foreign-port headline (a port RDMALink did not set up, adopted or not): **Return Back, far right to Thunderbolt Bridge?**
+- Foreign-port body: **RDMALink didn't set this port up, so it can't put things back exactly as they were — but it can do the ordinary thing: add the port to Thunderbolt Bridge and remove the standalone service it has now. It writes down what it found first, so you can set the port up again afterwards.**
+- Foreign-port rows: **Add the port to Thunderbolt Bridge** · **Delete the service Thunderbolt 6 — RDMALink didn't make this one, and a bridge member can't keep its own service** · **Check that it really is in the bridge** · **Leave every other setting alone**
+- Foreign-port button: **Return to Bridge**
+- Foreign-port success: **Back, far right is in Thunderbolt Bridge** · **The port is a member of Thunderbolt Bridge again and its standalone service is gone. Set It Up Again is one click away if you change your mind.**
+- No bridge exists: headline **There's no Thunderbolt Bridge to return it to** · body **This Mac has no Thunderbolt Bridge at the moment. RDMALink never creates one — recreate it in System Settings, under Network › Manage Virtual Interfaces, and I'll offer the return the moment it exists.** · buttons **Open Network Settings** · **Cancel**
+- Stop-managing headline (adopted port, keep the setup, forget the note): **Stop looking after Back, far right?**
+- Stop-managing body: **Stopping just means RDMALink forgets its note. The port and its settings stay exactly as they are.**
+- Stop-managing button: **Stop Managing**
+- Stop-managing confirmation: **Done. Back, far right is exactly as it was a moment ago — RDMALink is simply no longer keeping an eye on it.**
 - Restore All headline: **Put every port back?**
 - Restore All body: **Two ports will return to Thunderbolt Bridge and their services will be deleted. One password covers both. RDMALink does them one at a time and stops at the first thing that looks wrong.**
 - Restore All partial summary: **One port is back. Back, far right didn't finish — its undo note has been kept, so you can try that one again.**
 
-**States.** Ready to restore · Adopted port (Stop Managing) · A volume mounted over this link (R4 — `Restore` is not offered) · Restoring · Verifying bridge membership (an explicit step, never an assumption) · Verified (baseline deleted) · Service deleted but membership not restored → R20, **baseline deliberately kept** · Baseline missing or unreadable → R19 · Original bridge no longer exists → R21 · Restore All (one sheet, one password, sequential, per-port results, a partial-success summary that never rounds up).
+**States.** Ready to restore · Foreign port (Return to Bridge) · Adopted port (Return to Bridge, or Stop Managing) · A volume mounted over this link (R4 — `Restore` is not offered) · Restoring · Verifying bridge membership (an explicit step, never an assumption) · Verified (baseline deleted) · Service deleted but membership not restored → R20, **baseline deliberately kept** · Baseline missing or unreadable → R19 · Original bridge no longer exists → R21 · Restore All (one sheet, one password, sequential, per-port results, a partial-success summary that never rounds up).
 
 **3D behavior.** The camera turns to the port and rings it in accent. As the restore runs, the solid ring **re-opens into the four-arc segmented ring** and the bridge ribbon springs back out and reattaches — the visual inverse of set-up, which makes *back where it was* literal. On verified success, the segmented ring settles to the ordinary bridge-member state over 400 ms and the camera eases back to the resting pose. If verification fails, **the ring stops half-open and stays that way**, matching the copy exactly.
 
@@ -1031,8 +1038,27 @@ Restore uses the same one-password burst as set-up and the same visible checklis
 A port configured by hand that matches what RDMALink would have made — out of every bridge, its own service, IPv4 off, IPv6 link-local only — is offered `Adopt…`, never reconfiguration.
 
 - Adopting **changes nothing** and **needs no password**. It writes a note so the port appears in the status, the change log and the address list alongside ports RDMALink set up.
-- **An adopted port has no Restore at all.** RDMALink never saw which bridge it came from, and it will not invent a history it did not witness. The only action is **Stop Managing**, which removes RDMALink's own record and changes nothing on the system, with a confirmation that says exactly that.
+- **An adopted port has no exact Restore**, because RDMALink never saw which bridge it came from and will not invent a history it did not witness. It offers **Return to Bridge…** instead (§7.5), which does the ordinary thing rather than the remembered thing, and **Stop Managing**, which removes RDMALink's own record and changes nothing on the system.
 - **A near match is never adjusted.** RDMALink did not create that service and will not rewrite it; it shows exactly what differs, hands over the steps, offers `Open Network Settings` and `Copy These Steps`, and keeps watching — adopting the moment the port matches.
+
+### 7.5 Return to Thunderbolt Bridge
+
+Any port that is out of the bridge can be put back, whoever took it out —
+System Settings, the old script, or RDMALink. The row's **Return to Bridge…**
+opens the S10 sheet in its foreign-port form.
+
+1. An undo note is written first, recording the port, the standalone service
+   RDMALink found (identifier, name, IPv4/IPv6 configuration) and the bridge
+   it will join. Without the note, nothing is changed (R14).
+2. The standalone service is deleted. When RDMALink did not create it, the
+   sheet names it and says so in its own row; a bridge member cannot keep its
+   own service, so there is no half-way option.
+3. The port is added as a member of the existing Thunderbolt Bridge. With more
+   than one bridge, the one named Thunderbolt Bridge wins; with none, the sheet
+   stops and hands off to System Settings (RDMALink never creates a bridge).
+4. Membership is read back from the kernel and verified before the sheet says
+   the port is in the bridge; on a miss the note is kept and R20 applies.
+5. The change log records the return, and the row offers **Set It Up Again**.
 
 ### 7.4 Steady state
 
