@@ -104,7 +104,9 @@ geometry reference for the real model.
   member 14 ms after the second apply. At 11:38:01 a restore with the
   service present went through first time: deletion applied, IPv6 detached
   47 ms later, the port quiet within 470 ms, membership applied, member
-  added 35 ms after that.
+  added 35 ms after that. Return to Bridge on a port removed by hand in
+  System Settings passed at 11:40:23 the same way (note written, no service
+  to delete, member added 9 ms after the apply).
 
 ## Layout
 
