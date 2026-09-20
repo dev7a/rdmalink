@@ -1013,6 +1013,27 @@ Documented once so they all read the same.
 
 ---
 
+**R28 — The service RDMALink made isn't the one it made any more.** *At Restore, before anything is deleted.*
+- Headline: **This port's service isn't the one RDMALink made any more**
+- Body: **The service RDMALink created on Back, far left has been changed since — it's carrying settings RDMALink didn't put there, and it won't quietly delete something you've made your own. Remove it yourself in Network settings if you're done with it, or tell RDMALink to stop looking after this port and it'll leave everything exactly where it is.**
+- Detail: the differences, as a list: **IPv4 is Manual, IPv6 is Automatic.**
+- Buttons: **Stop Managing…** · **Open Network Settings** · **Leave Everything Alone**
+- **Recovery:** RDMALink matches its service by identifier, never by name, so a renamed service is still its own; only a changed configuration is refused. The note is kept.
+
+---
+
+**R29 — There's no Thunderbolt Bridge to return it to.** *At Return to Bridge.* The copy is S10's no-bridge form (headline, body and buttons there). RDMALink never creates a bridge.
+
+---
+
+**R30 — That note only records a return.** *At Restore, reached only from the command line or a stale sheet: the hub never offers Restore for a return record (§7.5).*
+- Headline: **Nothing to put back**
+- Body: **RDMALink's note for Back, far left only records that it put the port back in Thunderbolt Bridge. There's nothing to undo — Set It Up Again takes the port out of the bridge, and Stop Managing forgets the note.**
+- Buttons: **Set It Up Again** (default) · **Stop Managing…** · **Cancel**
+- **Recovery:** the note is kept; nothing is written.
+
+---
+
 ## 7. Adopt, Undo, steady-state status
 
 ### 7.1 The baseline (undo note)
