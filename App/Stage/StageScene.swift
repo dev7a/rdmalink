@@ -13,11 +13,33 @@ import RDMALinkCore
 import SwiftUI
 import simd
 
+/// Where the machine and its receptacles are on screen, for the two overlays
+/// UX_SPEC §4.8 puts over the render surface: the legend, which "yields to the
+/// model by moving to the top-trailing corner when the chassis reaches under
+/// it", and the callout, which sits beside the receptacle it is about.
+///
+/// Observable, and written by the scene once per frame with an equality
+/// check, so the overlays re-lay out when the camera moves and never
+/// otherwise. The scene itself is not observable: its per-frame state would
+/// invalidate the whole stage sixty times a second.
+@MainActor
+@Observable
+final class StageProjection {
+    /// The chassis's projected bounds in the view's own coordinates, or nil
+    /// while nothing is on stage.
+    var chassisBounds: CGRect?
+    /// Each receptacle's projected centre, in the view's own coordinates.
+    var receptacles: [StagePort.ID: CGPoint] = [:]
+}
+
 @MainActor
 final class StageScene {
     /// UX_SPEC §3.4: a 35 mm-equivalent perspective camera. On a 36 × 24 mm
     /// frame that is a 37.85° vertical field of view.
     static let verticalFieldOfView = 2 * atan(12.0 / 35.0)
+
+    /// §4.8: where the machine and its receptacles are on screen right now.
+    let projection = StageProjection()
 
     /// §3.5: camera moves are 0.7 s; §8.6 replaces them with a 100 ms
     /// cross-fade between the same poses under Reduce Motion.
@@ -484,6 +506,50 @@ final class StageScene {
         apply(model: model, deltaTime: deltaTime)
         place()
         reportFaceIfChanged()
+        project()
+    }
+
+    /// §4.8: the chassis box's eight corners and every receptacle's centre,
+    /// projected into the view. The box is the catalogue's — width, depth
+    /// and the visible height, lid included — in the chassis's own frame,
+    /// which stands on the ground plane at the body's origin.
+    private func project() {
+        guard let graph, content != nil else {
+            if projection.chassisBounds != nil { projection.chassisBounds = nil }
+            if !projection.receptacles.isEmpty { projection.receptacles = [:] }
+            return
+        }
+        let eye = StageMath.orbitPosition(target: target, yaw: yaw, pitch: pitch, radius: radius)
+        func project(_ point: SIMD3<Float>) -> CGPoint? {
+            StageMath.project(
+                point, camera: eye, target: target,
+                verticalFieldOfView: Self.verticalFieldOfView, viewport: viewport
+            )
+        }
+        let chassis = graph.chassis
+        let halfWidth = StageMesh.metres(chassis.width / 2)
+        let halfDepth = StageMesh.metres(chassis.depth / 2)
+        let height = StageMesh.metres(chassis.visibleHeight)
+        var bounds: CGRect?
+        for x in [-halfWidth, halfWidth] {
+            for y in [Float(0), height] {
+                for z in [-halfDepth, halfDepth] {
+                    let world = graph.body.convert(position: SIMD3(x, y, z), to: nil)
+                    guard let point = project(world) else { continue }
+                    let corner = CGRect(origin: point, size: .zero)
+                    bounds = bounds.map { $0.union(corner) } ?? corner
+                }
+            }
+        }
+        if projection.chassisBounds != bounds { projection.chassisBounds = bounds }
+
+        var centres: [StagePort.ID: CGPoint] = [:]
+        for node in graph.receptacles {
+            if let point = project(node.root.position(relativeTo: nil)) {
+                centres[node.id] = point
+            }
+        }
+        if projection.receptacles != centres { projection.receptacles = centres }
     }
 
     private func step(arc deltaTime: TimeInterval) {

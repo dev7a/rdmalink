@@ -243,9 +243,11 @@ enum HubPresentation {
 /// `3 September at 14:21` inside a sentence (§7.1, §S10, §S11) and
 /// `3 September, 14:21` at the head of a change-log entry (§S11).
 ///
-/// The day and the time are formatted the way this Mac formats them; only the
-/// join between them is the app's, and it is one localizable string so a
-/// translator can move both halves.
+/// The day and the time are Core's `Moment` halves — the locale's own long
+/// day-and-month and its short time, `14:21` or `2:21 PM` (§7.1) — so the app
+/// and the operations never format one moment two ways; only the join between
+/// them is the app's, and it is one localizable string so a translator can
+/// move both halves.
 enum Moments {
     static func dayAtTime(_ date: Date) -> String {
         let value: String.LocalizationValue = "\(day(date)) at \(time(date))"
@@ -258,10 +260,10 @@ enum Moments {
     }
 
     private static func day(_ date: Date) -> String {
-        date.formatted(.dateTime.day().month(.wide))
+        Moment.day(date, locale: .autoupdatingCurrent)
     }
 
     private static func time(_ date: Date) -> String {
-        date.formatted(date: .omitted, time: .shortened)
+        Moment.time(date, locale: .autoupdatingCurrent)
     }
 }

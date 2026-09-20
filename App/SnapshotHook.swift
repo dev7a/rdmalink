@@ -13,6 +13,7 @@
 //      RDMALINK_SNAPSHOT=/tmp/s5.png RDMALINK_SNAPSHOT_ROUTE=review ./…/RDMALink
 //      RDMALINK_SNAPSHOT=/tmp/s8.png RDMALINK_SNAPSHOT_ROUTE=other-mac ./…/RDMALink
 //      RDMALINK_SNAPSHOT=/tmp/light.png RDMALINK_SNAPSHOT_APPEARANCE=light ./…
+//      RDMALINK_SNAPSHOT=/tmp/callout.png RDMALINK_SNAPSHOT_CALLOUT=en5 ./…
 //
 //  With `RDMALINK_SNAPSHOT` set, the app waits for the first inventory to land,
 //  draws the key window into a bitmap with `cacheDisplay(in:to:)`, writes it as
@@ -21,6 +22,15 @@
 //  `RDMALINK_SNAPSHOT_SHEET` is `whatThisAllMeans` or `settings` and puts
 //  that surface in front first. `RDMALINK_SNAPSHOT_APPEARANCE` is `light` or
 //  `dark` and forces this process's appearance.
+//
+//  `RDMALINK_SNAPSHOT_CALLOUT` names a receptacle by BSD name and raises
+//  §4.8's callout on it — hovered, as the pointer resting there would leave
+//  it — so the callout can be reviewed without a pointer. The callout is
+//  only ever shown on the face in front, so pair it with
+//  `RDMALINK_SNAPSHOT_FACE` for a port on the other face. The legend is in
+//  every stage capture unless View › Hide Legend was chosen on this Mac.
+//  `RDMALINK_SNAPSHOT_STAGE` (App/Stage/StageSnapshot.swift) poses the stage
+//  in a state that only exists while something is happening.
 //
 //  `RDMALINK_SNAPSHOT_ROUTE` opens one of the app's own routes on the live
 //  inventory first: `hub`, `preflight`, `choose`, `review`, `restore-sheet`,
@@ -52,6 +62,14 @@ enum SnapshotHook {
     static var face: PortFace? {
         ProcessInfo.processInfo.environment["RDMALINK_SNAPSHOT_FACE"]
             .flatMap(PortFace.init(rawValue:))
+    }
+
+    /// §4.8's callout, on the receptacle with this BSD name.
+    /// `RDMALINK_SNAPSHOT_CALLOUT`.
+    static var callout: String? {
+        guard let name = ProcessInfo.processInfo.environment["RDMALINK_SNAPSHOT_CALLOUT"],
+              !name.isEmpty, destination != nil else { return nil }
+        return name
     }
 
     /// A surface to put in front of the window before capturing, so the sheet

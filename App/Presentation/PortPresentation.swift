@@ -37,6 +37,48 @@ struct PortRowDetail: Sendable, Equatable {
     var membership: LocalizedStringResource?
     /// `fe80::1c3d:5aff:fe22:9b04%en6`, scope suffix included.
     var address: String?
+
+    /// The whole detail line as one string, joined with the same middle dots
+    /// the row draws — "Nothing plugged in · In the Thunderbolt Bridge" — for
+    /// the places that quote the row without the row's typography: §4.8's
+    /// receptacle callout. The address goes on the end exactly as the row
+    /// puts it.
+    var line: String {
+        var parts = [String(localized: state)]
+        parts.append(contentsOf: [link, membership].compactMap { $0 }.map { String(localized: $0) })
+        if let address { parts.append(address) }
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// UX_SPEC §4.8's receptacle callout: "the row's title and detail line,
+/// verbatim — and, when technical names are on, the row's technical line
+/// too." Built from the row's own presentation, so the words cannot differ
+/// from the list's; a USB-only receptacle's detail is the row's own subtitle,
+/// **USB only — this one isn't Thunderbolt**, because that is what the row
+/// says.
+struct StageCalloutText: Sendable, Equatable {
+    /// The position name (§4.7).
+    var title: String
+    /// `PortRowDetail.line`.
+    var detail: String
+    /// `en6 · bridge0 · Thunderbolt Bridge`, only while Show Technical Names
+    /// is on, and only when the row has one.
+    var technical: String?
+
+    init(presentation: PortRowPresentation, showsTechnicalNames: Bool) {
+        self.init(
+            title: presentation.positionName,
+            detail: presentation.detail.line,
+            technical: showsTechnicalNames ? presentation.technicalSuffix : nil
+        )
+    }
+
+    init(title: String, detail: String, technical: String?) {
+        self.title = title
+        self.detail = detail
+        self.technical = technical
+    }
 }
 
 struct PortRowPresentation: Sendable, Equatable, Identifiable {

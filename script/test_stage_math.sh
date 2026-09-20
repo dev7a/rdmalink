@@ -456,6 +456,33 @@ check(StageMath.loopLift(from: loopA, to: loopA + SIMD3(0.5, 0, 0)) >= 0.6, "and
 check(StageMath.loopLift(from: SIMD3(-9.85, 3.4, -9.85), to: SIMD3(9.85, 3.4, 9.85)) <= 2.2,
       "and never over 2.2 cm, even back to front")
 
+// UX_SPEC §4.8's overlays are laid out from the rig's own projection.
+let eye = StageMath.orbitPosition(target: .zero, yaw: .pi, pitch: 0, radius: 0.5)
+let stage = CGSize(width: 580, height: 668)
+let centre = StageMath.project(
+    .zero, camera: eye, target: .zero, verticalFieldOfView: fov, viewport: stage
+)
+check(centre.map { near($0.x, 290, 1e-6) && near($0.y, 334, 1e-6) } == true,
+      "the camera's target projects to the viewport's centre")
+// 5 cm up at 0.5 m: the same number pointSize gives, above the centre.
+let lifted = StageMath.project(
+    SIMD3(0, 0.05, 0), camera: eye, target: .zero, verticalFieldOfView: fov, viewport: stage
+)
+let expectedLift = StageMath.pointSize(
+    metres: 0.05, distance: 0.5, viewportPoints: stage.height, fieldOfView: fov
+)
+check(lifted.map { near($0.x, 290, 1e-3) && near(334 - $0.y, expectedLift, 1e-3) } == true,
+      "a point above the target projects straight up by its point size")
+// Seen from behind (yaw pi, camera at -z), world +x is screen-left.
+let aside = StageMath.project(
+    SIMD3(0.05, 0, 0), camera: eye, target: .zero, verticalFieldOfView: fov, viewport: stage
+)
+check(aside.map { $0.x < 290 && near($0.y, 334, 1e-6) } == true,
+      "from behind the machine, +x is to the left of centre")
+check(StageMath.project(
+        SIMD3(0, 0, -2), camera: eye, target: .zero, verticalFieldOfView: fov, viewport: stage
+      ) == nil, "a point behind the camera does not project")
+
 if failures > 0 {
     FileHandle.standardError.write(Data("test_stage_math: \(failures) failed\n".utf8))
     exit(1)

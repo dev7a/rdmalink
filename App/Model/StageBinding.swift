@@ -5,35 +5,14 @@
 //
 //  `InventoryModel` is the one source of truth about this Mac; `StageModel` is
 //  the one source of truth about what is selected. This file is the only place
-//  the first is turned into the second, so there is exactly one answer to
-//  "what ring is this receptacle wearing" and exactly one place to read it.
+//  the first is turned into the second; the one answer to "what ring is this
+//  receptacle wearing" is `StagePort.Configuration.init(_:)` in
+//  App/Stage/StageLegend.swift, where the legend reads it too.
 //
 
 import Foundation
 import RDMALinkCore
 import SwiftUI
-
-extension StagePort.Configuration {
-    /// UX_SPEC §4.3's outer track, read off what the hub has already observed
-    /// and never off anything else.
-    ///
-    /// The three readiness states §S1 counts as ready do not all mean the same
-    /// ring: RDMALink's own ports and the ports it has adopted are the solid
-    /// accent ring, and a port that is exactly what RDMALink would have made
-    /// but was not made by RDMALink is the double hairline, because it is not
-    /// RDMALink's to claim.
-    init(_ snapshot: PortSnapshot) {
-        switch snapshot.readiness {
-        case .managed, .adopted: self = .ready
-        case .setUpElsewhere: self = .outside
-        case .drifted: self = .drift
-        // §4.3: "Provenance is a panel matter: the ring says only that the
-        // port is in the bridge."
-        case .returned: self = .bridge
-        case .plain: self = snapshot.bridges.isEmpty ? .none : .bridge
-        }
-    }
-}
 
 /// Everything the stage is drawn from, in one comparable value.
 ///
@@ -80,10 +59,13 @@ extension StageModel {
             // is in the middle of, not a fact about the port, so a one-second
             // state diff must not wipe it half way through.
             port.attention = attention.contains(port.id)
-            // §8.2: the stage speaks with the port list's voice, not its own.
+            // §8.2: the stage speaks with the port list's voice, not its own —
+            // and §4.8's callout quotes the same row, verbatim.
             let presentation = PortRowPresentation(snapshot: snapshot)
             port.accessibilityLabel = presentation.accessibilityLabel
             port.accessibilityValue = presentation.accessibilityValue
+            port.calloutDetail = presentation.detail.line
+            port.technicalSuffix = presentation.technicalSuffix
             return port
         }
 

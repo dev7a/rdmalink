@@ -34,11 +34,12 @@ struct StageAppearance: Equatable, Sendable {
 struct StagePalette {
     let appearance: StageAppearance
 
-    /// §3.4: a neutral aluminium that shifts with appearance — light 0.78
-    /// luminance, dark 0.22.
-    var chassis: NSColor {
-        grey(appearance.isDark ? 0.22 : 0.78)
-    }
+    /// §3.4: the aluminium's own silver, 0.78 luminance, in **both**
+    /// appearances. "There is no dark Mac Studio or Mac mini, and macOS does
+    /// not report a MacBook Pro's finish, so silver is the honest default
+    /// everywhere: dark mode changes the light, never the metal." The light
+    /// is the dimmer IBL and the rim in `StageSceneBuilder.makeLights`.
+    var chassis: NSColor { grey(0.78) }
 
     /// §3.4: receptacles read as holes, so the interior is the darkest thing
     /// in the scene in both appearances.
@@ -53,7 +54,11 @@ struct StagePalette {
     var stub: NSColor { grey(appearance.isDark ? 0.42 : 0.49) }
 
     /// §3.4's "soft inset" at the base: a shadow line under the body, not a
-    /// second, darker object. It sits between the chassis and a recess.
+    /// second, darker object. It sits between the chassis and a recess, and
+    /// it is a shadow rather than metal, so it is the one tone on the shell
+    /// that still follows the appearance: under the dark IBL the silver
+    /// body renders at 35–55 of 255 against a 30 background, and a band
+    /// lighter than 0.12 would vanish between the two.
     var baseInset: NSColor { grey(appearance.isDark ? 0.12 : 0.42) }
 
     var keyboard: NSColor { grey(0.10) }
@@ -63,6 +68,15 @@ struct StagePalette {
 
     /// The `.secondary` tone on the model: ink that contrasts with the chassis
     /// rather than a colour that means something.
+    ///
+    /// §3.4: the metal is the same silver in both appearances, so the ink
+    /// follows the **light**, not the base colour. Under the dark IBL a
+    /// 0.78 chassis renders dark where the rings sit — measured 2026-09-20
+    /// through the corrected capture (App/Stage/StageSnapshot.swift): 35–41
+    /// of 255 along the Mac Studio's back port row, 87 along the front row,
+    /// against 169–175 in light mode — which is why the ink is near-white in
+    /// dark mode and near-black in light, and why swapping either would lose
+    /// the rings.
     var ink: NSColor { grey(appearance.isDark ? 0.96 : 0.11) }
 
     /// §4.4: the bridge ribbon is the same `.secondary` ink — "tone and

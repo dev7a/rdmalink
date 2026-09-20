@@ -13,7 +13,11 @@ geometry reference for the real model, down to the Mac Studio's back grille,
 which `Chassis.grille` carries as a rectangle in face fractions and the stage
 draws as one strip on the shell's own outline wearing one alpha-masked tile.
 That tile is the only texture in the app, and it is generated at run time,
-never loaded: nothing the stage shows comes from an asset.
+never loaded: nothing the stage shows comes from an asset. The chassis is the
+same silver in both appearances — dark mode changes the light, never the
+metal (UX_SPEC §3.4) — and no text is ever drawn on the model: §4.8's legend
+and receptacle callout are SwiftUI overlays over the render surface, placed
+from `StageMath.project`.
 
 ## Decisions (2026-09-19)
 
@@ -89,6 +93,24 @@ never loaded: nothing the stage shows comes from an asset.
   bridge: it fires when two ports with a Mac on the end share a bridge. Two
   cables on two standalone ports are two point-to-point links — the finished
   state — and pass.
+- **`RealityViewCameraContent.project(point:to:)` does not give the stage's
+  screen positions** (measured 2026-09-20, macOS 27.2): with the stage's own
+  `PerspectiveCamera` active and a 580 × 668 pt view, the camera's target
+  projected 13 pt off the viewport's centre and 5 cm at 0.5 m came back as
+  14.5 pt where the rig's 37.85° field of view puts it at 97 pt. So the two
+  §4.8 overlays — the legend that yields to the chassis and the callout
+  beside a receptacle — are laid out from `StageMath.project`, the rig's own
+  look-at and perspective over the pose the scene is holding, which is also
+  the pose the review capture renders with. Hit testing keeps
+  `entities(at:in:)`, which was not affected. Two consequences of laying
+  out from the projection: the callout is shown only while its receptacle's
+  face is the one in front (every other face's centres project too, onto
+  the far side of the chassis), and it stands off the top of the whole row
+  on that face, because a row seen three-quarters on rises across the
+  screen and the neighbours' rings sit above the hovered centre. The legend
+  moves to the top-trailing corner only when that corner is clear; the
+  chassis's projected bounds span nearly the stage's width, so a box that
+  reaches one top corner can reach both, and then the legend stays.
 - **Bridge membership is two facts, not one** (measured 2026-09-20). The
   network preferences keep their own member list —
   `VirtualNetworkInterfaces` → `Bridge` → `bridgeN` → `Interfaces`, with
@@ -141,7 +163,9 @@ Packages/RDMALinkCore/    everything shared with the CLI and tests
     Inventory/            hardware model, ports, positions, live watcher
     Network/              ifconfig/SC reads, authorization, setup, bridge SPI
     Status/               RDMA switch and devices
-    Store/                baseline (undo note) and change log
+    Store/                baseline (undo note), change log, and the moment
+                          format the copy quotes (`Moment`: the locale's
+                          short time, never a 12-hour hour without AM/PM)
     Refusals/             the hard rules as pure functions
   Sources/rdmalink/       command-line companion: diagnostics and spikes
   Tests/RDMALinkCoreTests Swift Testing

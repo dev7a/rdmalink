@@ -92,6 +92,42 @@ enum StageMath {
         )
     }
 
+    // MARK: - Projection
+
+    /// Where a world point lands in a viewport, for the same rig
+    /// ``orbitPosition(target:yaw:pitch:radius:)`` places the camera on: a
+    /// look-at from `camera` to `target` with `+y` up, and a perspective of
+    /// `verticalFieldOfView` over `viewport` points, top-left origin.
+    ///
+    /// UX_SPEC §4.8's two overlays are laid out from this — the legend yields
+    /// to the projected chassis and the callout sits beside the projected
+    /// receptacle — so it is computed here, from the pose the stage is
+    /// holding, rather than asked of the renderer. Nil for a point behind the
+    /// camera or on its plane, which nothing on stage should ever be.
+    static func project(
+        _ point: SIMD3<Float>, camera: SIMD3<Float>, target: SIMD3<Float>,
+        verticalFieldOfView: Double, viewport: CGSize
+    ) -> CGPoint? {
+        let forward = simd_normalize(target - camera)
+        guard simd_length(forward) > 0.5 else { return nil }
+        var right = simd_cross(forward, SIMD3<Float>(0, 1, 0))
+        // Straight up or down, where the rig never goes (§3.4's ±35°).
+        guard simd_length(right) > 1e-6 else { return nil }
+        right = simd_normalize(right)
+        let up = simd_cross(right, forward)
+        let offset = point - camera
+        let depth = simd_dot(offset, forward)
+        guard depth > 1e-6, viewport.width > 0, viewport.height > 0 else { return nil }
+        let focal = 1 / tan(verticalFieldOfView / 2)
+        let aspect = viewport.width / viewport.height
+        let x = Double(simd_dot(offset, right) / depth) * focal / aspect
+        let y = Double(simd_dot(offset, up) / depth) * focal
+        return CGPoint(
+            x: viewport.width / 2 + x * viewport.width / 2,
+            y: viewport.height / 2 - y * viewport.height / 2
+        )
+    }
+
     // MARK: - §S8's handoff
 
     /// The world direction that is screen-right for a camera at `yaw`: the

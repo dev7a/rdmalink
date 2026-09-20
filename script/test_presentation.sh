@@ -6,10 +6,13 @@
 # with the two files its button row and refusal card reach into), and §S8's
 # subject (App/Presentation/OtherMacPresentation) — and the Restore sheet's
 # button rows (App/Presentation/RestorePresentation), the only place §6.2's
-# rows for R19, R20, R21, R28 and R30 are written down.
+# rows for R19, R20, R21, R28 and R30 are written down — and §4.8's two aids:
+# the legend's rows from the stage's own ring decision (App/Stage/StageLegend,
+# with App/Stage/StageModel and StageMath under it) and the callout's words
+# from the row's presentation.
 #
 # The app target has no test bundle, and these files import nothing but
-# Foundation, AppKit and RDMALinkCore, so — like script/test_stage_math.sh —
+# Foundation, Observation, AppKit and RDMALinkCore, so — like script/test_stage_math.sh —
 # they are compiled against the Core module `swift build` left behind and run
 # as a plain executable. Every sentence asserted here is §S1's or §S3's own.
 set -euo pipefail
@@ -288,6 +291,60 @@ check(!RestoreRefusals.actions(for: .createdServiceEdited).contains(.copyDetails
       && !RestoreRefusals.actions(for: .noteIsAReturnRecord).contains(.copyDetails),
       "a refusal raised before anything is written carries no Copy Details")
 
+// MARK: §4.8 — the legend's rows, from the same ring decision the stage makes.
+
+func cfg(_ snapshot: PortSnapshot) -> StagePort.Configuration { StagePort.Configuration(snapshot) }
+check(cfg(managed) == .ready && cfg(adopted) == .ready, "RDMALink's own and adopted ports wear the solid accent ring")
+check(cfg(outside) == .outside, "set up elsewhere wears the double hairline")
+check(cfg(returned) == .bridge && cfg(plain) == .bridge, "a bridge member wears the segmented ring, returned or not")
+check(cfg(drifted) == .drift, "drift wears the dashed ring")
+check(cfg(staleBare) == StagePort.Configuration.none, "out of every bridge with nothing on it wears no ring")
+let legendLabels = StageLegend.rows(for: [managed, adopted, outside, returned, plain, drifted, staleBare].map(cfg))
+    .map { text($0.label) }
+check(legendLabels == ["In a bridge", "Standalone", "Set up outside RDMALink", "Ready for RDMA", "Needs a look"],
+      "the legend lists every shape present, in §4.8's order, once each")
+check(StageLegend.rows(for: [plain, outside, outside].map(cfg)).map { text($0.label) }
+      == ["In a bridge", "Set up outside RDMALink"],
+      "this rig's legend: one bridged port and five set up outside read as two lines")
+check(StageLegend.rows(for: [StagePort.Configuration]()).isEmpty, "no ports, no legend")
+let usbStage = StagePort(
+    id: "usb", face: .front, physicalIndex: 5, kind: .usbOnly, link: .empty, cfg: .none,
+    positionName: "Front, left")
+check(StageLegend.rows(for: [usbStage]).isEmpty, "a USB-only receptacle never puts a line in the legend (§4.5)")
+check(StageLegend.rows(for: [plain].map(cfg)).map(\.glyph) == [.segmented]
+      && StageLegend.rows(for: [staleBare].map(cfg)).map(\.glyph) == [.emptySlot]
+      && StageLegend.rows(for: [outside].map(cfg)).map(\.glyph) == [.doubleHairline]
+      && StageLegend.rows(for: [managed].map(cfg)).map(\.glyph) == [.solidAccent]
+      && StageLegend.rows(for: [drifted].map(cfg)).map(\.glyph) == [.dashed],
+      "each legend line carries its own ring geometry")
+
+// MARK: §4.8 — the callout quotes the row, verbatim.
+
+let plainCallout = StageCalloutText(presentation: PortRowPresentation(snapshot: plain), showsTechnicalNames: false)
+check(plainCallout.title == "Front, left", "callout title is the position name")
+check(plainCallout.detail == "Nothing plugged in · In the Thunderbolt Bridge", "callout detail is the row's detail line")
+check(plainCallout.technical == nil, "no technical line while technical names are off")
+check(StageCalloutText(presentation: PortRowPresentation(snapshot: plain), showsTechnicalNames: true).technical
+      == "en3 · bridge0", "the technical line is the row's suffix when technical names are on")
+check(StageCalloutText(presentation: returnedRow, showsTechnicalNames: false).detail
+      == "Back in the bridge · Nothing plugged in · In the Thunderbolt Bridge",
+      "the returned row's three phrases come through with their middle dots")
+check(StageCalloutText(presentation: PortRowPresentation(snapshot: addressed), showsTechnicalNames: false).detail
+      == "Ready for RDMA · fe80::1c3d:5aff:fe22:9b04%en6", "the address goes on the end as the row draws it")
+let usb = snapshot(port("", "Front, right", isThunderbolt: false), configuration: nil)
+let usbCallout = StageCalloutText(presentation: PortRowPresentation(snapshot: usb), showsTechnicalNames: true)
+check(usbCallout.title == "Front, right" && usbCallout.detail == "USB only — this one isn't Thunderbolt",
+      "a USB-only receptacle's callout is its own subtitle, em dash and all")
+check(usbCallout.technical == nil, "a USB-only receptacle has no technical line to add")
+// The stage carries the same words, so the callout it draws cannot differ.
+var stagePort = StagePort(port: plain.port, physicalIndex: 1, configuration: cfg(plain))
+check(stagePort.callout(showsTechnicalNames: false) == nil, "no row quoted yet, no callout")
+stagePort.calloutDetail = PortRowPresentation(snapshot: plain).detail.line
+stagePort.technicalSuffix = PortRowPresentation(snapshot: plain).technicalSuffix
+check(stagePort.callout(showsTechnicalNames: true) == StageCalloutText(
+        title: "Front, left", detail: "Nothing plugged in · In the Thunderbolt Bridge", technical: "en3 · bridge0"),
+      "the stage's callout is the row's presentation, word for word")
+
 if failures > 0 {
     FileHandle.standardError.write(Data("test_presentation: \(failures) failed\n".utf8))
     exit(1)
@@ -310,6 +367,9 @@ xcrun swiftc -swift-version 6 -warnings-as-errors \
   "$ROOT_DIR/App/Flows/WizardRefusal.swift" \
   "$ROOT_DIR/App/Flows/WizardActions.swift" \
   "$ROOT_DIR/App/Presentation/RestorePresentation.swift" \
+  "$ROOT_DIR/App/Stage/StageMath.swift" \
+  "$ROOT_DIR/App/Stage/StageModel.swift" \
+  "$ROOT_DIR/App/Stage/StageLegend.swift" \
   "$WORK_DIR/main.swift"
 
 "$WORK_DIR/test_presentation"

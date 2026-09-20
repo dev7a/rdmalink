@@ -1,15 +1,5 @@
 import Foundation
 
-/// How a moment is written in the copy that quotes one: "3 September at 14:21".
-enum Moment {
-    static func text(_ date: Date, locale: Locale = .autoupdatingCurrent) -> String {
-        let day = date.formatted(.dateTime.locale(locale).day().month(.wide))
-        let time = date.formatted(
-            .dateTime.locale(locale).hour(.twoDigits(amPM: .omitted)).minute())
-        return "\(day) at \(time)"
-    }
-}
-
 /// What putting one port back would do — UX_SPEC §S10.
 public struct RestorePortPlan: Sendable, Equatable {
     public var port: OperationPort

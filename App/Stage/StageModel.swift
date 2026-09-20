@@ -60,8 +60,26 @@ struct StagePort: Identifiable, Equatable, Sendable {
     var accessibilityLabel = ""
     /// §8.2: "Its *value* carries the address when configured."
     var accessibilityValue: String?
+    /// §4.8's callout: the row's detail line, verbatim, from the same
+    /// `PortRowPresentation` as the label above. Empty where there is no
+    /// snapshot to build one from, and the callout is not shown.
+    var calloutDetail = ""
+    /// The row's technical line — `en6 · bridge0 · Thunderbolt Bridge` — for
+    /// the callout while Show Technical Names is on. Never drawn on the model
+    /// itself (§4.7).
+    var technicalSuffix: String?
 
     var isThunderbolt: Bool { kind == .thunderbolt }
+
+    /// §4.8's callout text for this receptacle, or nil while the stage has no
+    /// row to quote.
+    func callout(showsTechnicalNames: Bool) -> StageCalloutText? {
+        guard !calloutDetail.isEmpty else { return nil }
+        return StageCalloutText(
+            title: positionName, detail: calloutDetail,
+            technical: showsTechnicalNames ? technicalSuffix : nil
+        )
+    }
 }
 
 /// One kernel bridge a receptacle belongs to, reduced to what §4.4's ribbon

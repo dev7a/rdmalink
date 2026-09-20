@@ -36,6 +36,21 @@ struct StageView: View {
     @State private var hasPosedForSnapshot = false
     @FocusState private var isStageFocused: Bool
 
+    // §4.8's callout. Two ways in, one way out: the pointer resting on a
+    // receptacle for 300 ms, or keyboard focus landing on one.
+    /// The receptacle the pointer is over right now, before the rest.
+    @State private var pointerID: StagePort.ID?
+    /// The receptacle the pointer has rested on.
+    @State private var restedID: StagePort.ID?
+    /// The receptacle keyboard focus was moved to (§8.3's ← → and Tab), which
+    /// a click clears again: a click is a selection, not a question.
+    @State private var keyboardCalloutID: StagePort.ID?
+    @State private var rest: Task<Void, Never>?
+    /// §4.8: "hidden with View › Hide Legend ⌘K … and the choice is
+    /// remembered."
+    @AppStorage(AppSettings.showsLegend) private var showsLegend = true
+    @AppStorage(AppSettings.showTechnicalNames) private var showsTechnicalNames = false
+
     private var appearance: StageAppearance {
         StageAppearance(
             colorScheme: colorScheme,
@@ -68,6 +83,26 @@ struct StageView: View {
             .overlay(alignment: .top) {
                 StageNarration(line: model.narration, appearance: appearance)
                     .padding(.top, 14)
+            }
+            // §4.8's legend, "shown whenever the rings are live".
+            .overlay {
+                if showsLegend {
+                    StageLegendOverlay(
+                        rows: StageLegend.rows(for: model.ports), projection: scene.projection,
+                        viewport: scene.viewport, appearance: appearance
+                    )
+                }
+            }
+            // §4.8's callout, beside the receptacle it is about.
+            .overlay(alignment: .topLeading) {
+                let port = calloutPort
+                StageCalloutOverlay(
+                    port: port, showsTechnicalNames: showsTechnicalNames,
+                    projection: scene.projection,
+                    rowIDs: model.ports.filter { $0.face == port?.face }.map(\.id),
+                    receptaclePointSize: scene.receptaclePointSize,
+                    viewport: scene.viewport, appearance: appearance
+                )
             }
             .overlay(alignment: .bottom) { faceSelector }
             .overlay(alignment: .bottomTrailing) {
@@ -103,6 +138,10 @@ struct StageView: View {
             .onChange(of: isStageFocused) { _, focused in
                 focusedID = focused ? (model.selectedID ?? firstThunderboltID) : nil
                 scene.setFocus(focusedID)
+                // §4.8: "moving keyboard focus to it shows a small callout".
+                // Tab lands on the selected receptacle or the first one, and
+                // that is a move too; focus leaving takes the callout with it.
+                keyboardCalloutID = focused ? focusedID : nil
             }
             .onAppear {
                 scene.startScrollMonitor()
@@ -117,6 +156,16 @@ struct StageView: View {
                 else { return }
                 hasPosedForSnapshot = true
                 state.apply(to: model)
+            }
+            // Review hook only: `RDMALINK_SNAPSHOT_CALLOUT` names a receptacle
+            // by BSD name and the callout is raised on it as a rested hover
+            // would raise it, without the 300 ms nobody is waiting through.
+            .onChange(of: model.ports.count, initial: true) { _, count in
+                guard count > 0, restedID == nil, let id = SnapshotHook.callout,
+                      model.ports.contains(where: { $0.id == id })
+                else { return }
+                model.hover(id)
+                restedID = id
             }
             .onDisappear {
                 // `EventSubscription` keeps the scene alive on its own, and
@@ -259,11 +308,57 @@ struct StageView: View {
             let id = scene.portID(at: point)
             model.hover(id)
             cursor(for: id).set()
+            if id != pointerID { pointerMoved(to: id) }
         case .ended:
             scene.isPointerInside = false
             model.hover(nil)
             NSCursor.arrow.set()
+            pointerMoved(to: nil)
         }
+    }
+
+    /// §4.8: "Resting on a receptacle (300 ms, as a tooltip)". The rest is
+    /// counted from the pointer arriving over a receptacle, and leaving it —
+    /// for another or for nothing — takes the callout away in the same beat
+    /// the hover ring goes: "the callout fades with the hover."
+    private func pointerMoved(to id: StagePort.ID?) {
+        pointerID = id
+        rest?.cancel()
+        rest = nil
+        guard let id else {
+            if SnapshotHook.callout == nil { restedID = nil }
+            return
+        }
+        // Already up for the keyboard: the pointer arriving on the same
+        // receptacle has nothing to wait for.
+        if id == keyboardCalloutID {
+            restedID = id
+            return
+        }
+        restedID = nil
+        rest = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled, pointerID == id else { return }
+            restedID = id
+        }
+    }
+
+    /// The receptacle the callout is about: the rested pointer first, then
+    /// keyboard focus — and only while its face is the one in front. §4.8
+    /// puts the callout "beside" the receptacle; once the machine has turned
+    /// (↑ ↓, ⌘1–⌘4, the face selector, an orbit past the corner) the
+    /// receptacle's projected centre is a point on the far side of the
+    /// chassis and there is nothing there to be beside. `turnTo` sets
+    /// `currentFace` before the arc starts, so a ← → that crosses faces
+    /// raises the callout on the new face at once. USB-only receptacles have
+    /// a callout too — §4.8 gives them their subtitle — so the kind is not
+    /// filtered.
+    private var calloutPort: StagePort? {
+        guard let id = restedID ?? keyboardCalloutID,
+              let port = model.ports.first(where: { $0.id == id }),
+              port.face == model.currentFace
+        else { return nil }
+        return port
     }
 
     /// §4.5: the cursor becomes `.operationNotAllowed` over a USB-only
@@ -316,6 +411,7 @@ struct StageView: View {
             }
             focusedID = id
             scene.setFocus(id)
+            keyboardCalloutID = nil
             let flags = NSEvent.modifierFlags
             if let onExtendClick, flags.contains(.command) || flags.contains(.shift) {
                 onExtendClick(port)
@@ -340,15 +436,23 @@ struct StageView: View {
         focusedID = next.id
         scene.setFocus(next.id)
         model.hover(next.id)
+        keyboardCalloutID = next.id
         if next.face != model.currentFace { model.turnTo(next.face) }
         return .handled
     }
 
-    /// ↑ ↓ switch faces.
+    /// ↑ ↓ switch faces. The callout goes with the face it was on: the
+    /// keyboard one is cleared outright, and a rest timer still counting
+    /// toward a pointer callout is cancelled rather than left to raise one
+    /// on a receptacle that has just turned away.
     private func cycleFace(by step: Int) -> KeyPress.Result {
         let faces = model.relevantFaces
         guard faces.count > 1 else { return .ignored }
         let current = faces.firstIndex(of: model.currentFace) ?? 0
+        keyboardCalloutID = nil
+        restedID = nil
+        rest?.cancel()
+        rest = nil
         model.turnTo(faces[((current + step) % faces.count + faces.count) % faces.count])
         return .handled
     }
@@ -416,6 +520,142 @@ struct StageView: View {
         case .right: "right"
         }
         return String(localized: word)
+    }
+}
+
+// MARK: - §4.8's overlays
+
+/// The legend in the top-leading corner — or the top-trailing one while the
+/// chassis reaches under the leading one: "It never overlaps a receptacle: it
+/// yields to the model by moving to the top-trailing corner when the chassis
+/// reaches under it." The two positions cross-fade (§3.5's state change).
+///
+/// A view of its own so that only this re-lays out when the projection moves
+/// under a camera arc, not the whole stage.
+private struct StageLegendOverlay: View {
+    let rows: [StageLegendRow]
+    let projection: StageProjection
+    let viewport: CGSize
+    let appearance: StageAppearance
+
+    @State private var size = CGSize.zero
+
+    private static let inset: CGFloat = 12
+    /// A little daylight before the legend gives way, so it moves for a
+    /// chassis coming under it and not for one merely passing close.
+    private static let clearance: CGFloat = 6
+
+    var body: some View {
+        ZStack {
+            if !rows.isEmpty {
+                if yields {
+                    legend
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .transition(.opacity)
+                } else {
+                    legend
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .transition(.opacity)
+                }
+            }
+        }
+        .animation(appearance.reduceMotion ? nil : .smooth(duration: 0.15), value: yields)
+        .allowsHitTesting(false)
+    }
+
+    private var legend: some View {
+        StageLegendView(rows: rows)
+            .padding(Self.inset)
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+    }
+
+    /// True when the chassis's projected bounds reach the legend's resting
+    /// place and leave the top-trailing corner clear. The chassis's projected
+    /// bounds are the box's whole axis-aligned extent, nearly the stage's
+    /// width at the resting pose, so a box high enough to reach one top
+    /// corner can reach both; moving then would swap one overlap for
+    /// another, and the legend stays where §4.8 puts it. The legend's own
+    /// size is what it measured last, so the first frame decides from an
+    /// empty rectangle and the next one corrects it.
+    private var yields: Bool {
+        guard let chassis = projection.chassisBounds, size != .zero else { return false }
+        let leading = CGRect(origin: .zero, size: size)
+            .insetBy(dx: -Self.clearance, dy: -Self.clearance)
+        let trailing = CGRect(origin: CGPoint(x: viewport.width - size.width, y: 0), size: size)
+            .insetBy(dx: -Self.clearance, dy: -Self.clearance)
+        return chassis.intersects(leading) && !chassis.intersects(trailing)
+    }
+}
+
+/// The callout beside the receptacle the pointer rested on or the keyboard
+/// focused: to its trailing side, or its leading side when there is no room,
+/// and never over it. It fades in and out over 150 ms (§3.5) and a change
+/// of receptacle cross-fades.
+private struct StageCalloutOverlay: View {
+    let port: StagePort?
+    let showsTechnicalNames: Bool
+    let projection: StageProjection
+    /// The receptacles on the same face as `port` — its row, which the
+    /// callout stands clear of as a whole.
+    let rowIDs: [StagePort.ID]
+    /// How wide the receptacle's collider reads right now, in points — what
+    /// the callout stands clear of.
+    let receptaclePointSize: Double
+    let viewport: CGSize
+    let appearance: StageAppearance
+
+    @State private var size = CGSize.zero
+
+    private static let gap: CGFloat = 8
+    private static let margin: CGFloat = 8
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            if let port, let text = port.callout(showsTechnicalNames: showsTechnicalNames),
+               let centre = projection.receptacles[port.id] {
+                StageCalloutView(text: text, appearance: appearance)
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+                    .offset(origin(beside: centre))
+                    .id(port.id)
+                    .transition(.opacity)
+            }
+        }
+        .animation(appearance.reduceMotion ? nil : .smooth(duration: 0.15), value: port?.id)
+        .allowsHitTesting(false)
+    }
+
+    /// Beside the receptacle: to its trailing side when that fits and its
+    /// leading side otherwise, and above it — the callout's bottom edge at
+    /// the top of the receptacle's *row* — so a row of receptacles stays in
+    /// view under it, falling below the row when there is no room above.
+    ///
+    /// The row, not the one receptacle: a Mac Studio's back row recedes in
+    /// perspective, so the receptacles beside the hovered one sit higher on
+    /// screen than its own centre, and a callout stood off from that centre
+    /// alone lands on their rings. The stand-off is the collider's half
+    /// width plus a gap, which the hover ring — the widest, 1.85 cm on a
+    /// 1.6 cm collider — stays inside. The horizontal stand-off alone keeps
+    /// it off the receptacle itself, whichever way the vertical placement
+    /// goes.
+    private func origin(beside centre: CGPoint) -> CGSize {
+        let standoff = CGFloat(receptaclePointSize) / 2 + Self.gap
+        var x = centre.x + standoff
+        if x + size.width > viewport.width - Self.margin {
+            x = max(centre.x - standoff - size.width, Self.margin)
+        }
+        // The same face's receptacles near this one's height. No chassis in
+        // the catalogue stacks two rows on one face, so the band only keeps a
+        // receptacle the camera has carried far above or below from
+        // deciding for one it is nowhere near.
+        let row = rowIDs.compactMap { projection.receptacles[$0] }
+            .filter { abs($0.y - centre.y) < standoff * 2 }
+        let top = row.map(\.y).min() ?? centre.y
+        let bottom = row.map(\.y).max() ?? centre.y
+        var y = top - standoff - size.height
+        if y < Self.margin {
+            y = min(bottom + standoff, max(viewport.height - size.height - Self.margin, Self.margin))
+        }
+        return CGSize(width: x, height: y)
     }
 }
 

@@ -8,6 +8,9 @@ enum AppSettings {
     /// UX_SPEC §S12: adds `en6` and the exact service names to the row detail
     /// lines, and nothing else. Never drawn on the 3D model.
     static let showTechnicalNames = "ShowTechnicalNames"
+    /// UX_SPEC §4.8: the legend over the stage, hidden with View › Hide
+    /// Legend ⌘K, "and the choice is remembered".
+    static let showsLegend = "ShowLegend"
     /// §2.3: where the divider sits, remembered between launches.
     static let stageSplitFraction = "StageSplitFraction"
     /// §S12: stored in ML1 and read by nothing. The release-page check itself
@@ -24,6 +27,7 @@ struct RDMALinkApp: App {
     @Environment(\.openWindow) private var openWindow
     @State private var router = HubRouter()
     @AppStorage(AppSettings.showTechnicalNames) private var showsTechnicalNames = false
+    @AppStorage(AppSettings.showsLegend) private var showsLegend = true
 
     var body: some Scene {
         Window("RDMALink", id: Self.mainWindowID) {
@@ -43,6 +47,10 @@ struct RDMALinkApp: App {
                 Divider()
                 Toggle("Show Technical Names", isOn: $showsTechnicalNames)
                     .keyboardShortcut("t", modifiers: .command)
+                // §2.7 and §4.8: `Hide Legend`, "which then reads `Show
+                // Legend`" — one item whose title says what it will do.
+                Button(showsLegend ? "Hide Legend" : "Show Legend") { showsLegend.toggle() }
+                    .keyboardShortcut("k", modifiers: .command)
                 ChangeLogCommand()
             }
             CommandGroup(replacing: .help) {
