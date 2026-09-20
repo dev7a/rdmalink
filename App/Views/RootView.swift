@@ -249,11 +249,9 @@ struct RootView: View {
         case .restoreSheet:
             // A note if there is one; otherwise §7.5's form, which is the one
             // a Mac with no notes can actually show.
-            if actions.hasAnyNote {
+            if actions.hasRestorableNote {
                 actions.perform(actions.restoreAction)
-            } else if let standalone = model.ports.first(where: {
-                $0.port.isThunderbolt && $0.bridges.isEmpty && $0.hasServiceOfItsOwn
-            }) {
+            } else if let standalone = model.ports.first(where: \.isOutOfEveryBridge) {
                 actions.perform(.returnToBridge(portID: standalone.id))
             } else {
                 actions.perform(.restoreAll)
@@ -328,8 +326,12 @@ struct RootView: View {
         let ports = model.ports.map { OperationPort($0.port) }
         guard !ports.isEmpty else { return }
         let archetype = model.hardware?.archetype ?? .unknown
+        // R14 is measured against the folder the notes really go to.
+        let notesDirectory = NotesLocation.store.directory
         let read = await Task.detached(priority: .userInitiated) { () -> PreflightFindings? in
-            guard let world = try? ObservedWorld.read(ports: ports, archetype: archetype) else {
+            guard let world = try? ObservedWorld.read(
+                ports: ports, archetype: archetype, notesDirectory: notesDirectory)
+            else {
                 return nil
             }
             return PreflightFindings(world: world)
@@ -345,13 +347,15 @@ struct RootView: View {
 
     /// S5's plan. `SetUpPorts.preview` writes nothing and takes no credential.
     private static func planner(archetype: Archetype) -> SetUpFlow.Planner {
-        { ports in
+        let notesDirectory = NotesLocation.store.directory
+        return { ports in
             // Off the main actor, because the read spawns `ifconfig` and
             // `/sbin/mount` — but wired to the calling task's cancellation, so
             // a `Back` pressed mid-read is not answered afterwards by a
             // refusal about a screen nobody is on any more.
             let task = Task.detached(priority: .userInitiated) {
-                let world = try ObservedWorld.read(ports: ports, archetype: archetype)
+                let world = try ObservedWorld.read(
+                    ports: ports, archetype: archetype, notesDirectory: notesDirectory)
                 return SetUpPorts(ports: ports).preview(world: world)
             }
             let plan = try await withTaskCancellationHandler {
@@ -376,7 +380,7 @@ struct RootView: View {
                             try SetUpPorts(ports: plan.ports.map(\.port), reviewed: plan)
                                 .perform(
                                     session: session,
-                                    environment: OperationEnvironment(archetype: archetype),
+                                    environment: NotesLocation.environment(archetype: archetype),
                                     progress: { step, state in
                                         continuation.yield(.step(step, state))
                                     })

@@ -15,6 +15,10 @@ done
 # none — so it is compiled and run on its own. See the script's own header.
 "$ROOT_DIR/script/test_stage_math.sh"
 
+# The hub's own copy — the ready row, the port rows and what a note makes of
+# a port — is checked the same way, against the Core module built above.
+"$ROOT_DIR/script/test_presentation.sh"
+
 # No `|| true` here, ever. It forces the pipeline to exit 0 whatever xcodebuild
 # did, and the `test -d` below then passes on the bundle the *last* good build
 # left behind — so a compile error printed by grep still ended in "all passed".

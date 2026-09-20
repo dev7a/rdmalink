@@ -164,6 +164,66 @@ struct OperationsRestoreTests {
             .commitAndApply,
         ])
         #expect((try? store.load(port: "en6")) == nil, "verified, so the note is gone")
+        // The kernel agreed on the first read *after* the rewrite: that is not
+        // settling on its own, and the agreement says which it was.
+        #expect(result.agreement.agreed)
+        #expect(result.agreement.settledOnItsOwn == false)
+        #expect(result.agreement.retriedMembership)
+        #expect(result.agreement.settledAfterRetry)
+    }
+
+    /// The note Return to Bridge leaves behind (§7.5).
+    private static func returnRecord() -> PortBaseline {
+        PortBaseline(
+            bsdName: "en6", receptacle: 1, positionName: "Back, far left",
+            existingService: ServiceRecord(identifier: "FOREIGN", name: "Thunderbolt 6"),
+            returnedToBridge: BridgeReturn(bsdName: "bridge0", displayName: "Thunderbolt Bridge"),
+            recordedAt: recordedAt)
+    }
+
+    @Test("A return record is not something Restore puts back")
+    func refusesAReturnRecord() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let note = Self.returnRecord()
+        try store.save(note)
+        #expect(RestorePort.describesNothingToUndo(note))
+
+        let world = Fixtures.world(ifconfig: Fixtures.inOneBridge)
+        let plan = RestorePort(port: Fixtures.port).preview(note: note, world: world)
+        #expect(plan.returnedToBridge ==
+                BridgeReturn(bsdName: "bridge0", displayName: "Thunderbolt Bridge"))
+        #expect(plan.refusal?.code == .undoNoteMissing)
+        #expect(!plan.canProceed)
+        #expect(plan.buttonTitle == nil)
+        #expect(plan.rows.isEmpty)
+
+        let writer = FakeWriter()
+        writer.kernel = { _ in Fixtures.snapshot(Fixtures.inOneBridge) }
+        #expect {
+            try RestorePort(port: Fixtures.port).perform(
+                writer: writer, world: world,
+                environment: Fixtures.environment(store: store), progress: { _, _ in })
+        } throws: { ($0 as? Refusal)?.code == .undoNoteMissing }
+        #expect(writer.calls == [.lock], "nothing is written, and no service is touched")
+        #expect(try store.load(port: "en6") == note, "the record stays for Set It Up Again")
+    }
+
+    @Test("Restore All passes a return record over, without a write and without counting it")
+    func restoreAllSkipsAReturnRecord() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        try store.save(Self.returnRecord())
+        let writer = FakeWriter()
+        let outcome = RestoreAll(ports: [Fixtures.port]).perform(
+            writer: writer, environment: Fixtures.environment(store: store),
+            progress: { _, _ in })
+        #expect(outcome.skipped == ["Back, far left"])
+        #expect(outcome.results.isEmpty)
+        #expect(outcome.unfinished.isEmpty)
+        #expect(outcome.summary == nil)
+        #expect(writer.calls.isEmpty)
+        #expect((try? store.load(port: "en6")) != nil)
     }
 
     @Test("A kernel that refuses the first add is asked again with the membership rewritten")

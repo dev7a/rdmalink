@@ -88,6 +88,90 @@ struct StoreBaselineTests {
         #expect(loaded.createdServiceIdentifier == nil)
     }
 
+    @Test("A return record reads back whole, and says what it is")
+    func returnRecordRoundTrips() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = BaselineStore(directory: root.appending(path: "baselines"))
+        let returned = PortBaseline(
+            bsdName: "en5", receptacle: 4, positionName: "Back, far left",
+            existingService: ServiceRecord(identifier: "F0F0", name: "Thunderbolt 5"),
+            returnedToBridge: BridgeReturn(bsdName: "bridge0", displayName: "Thunderbolt Bridge"),
+            recordedAt: Date(timeIntervalSince1970: 1_758_382_823),
+            systemBuild: "26B5086k")
+
+        try store.save(returned)
+        let loaded = try store.load(port: "en5")
+        #expect(loaded == returned)
+        #expect(loaded.isReturned)
+        #expect(loaded.returnedToBridge?.name == "Thunderbolt Bridge")
+        #expect(loaded.version == PortBaseline.currentVersion)
+        #expect(!sampleBaseline().isReturned)
+        #expect(!PortBaseline.adopted(bsdName: "en7", receptacle: 2,
+                                      positionName: "Back, far right").isReturned)
+    }
+
+    @Test("A return record describes the port only while it is still in that bridge, bare")
+    func returnRecordDescribesThePortWhileItHolds() {
+        let returned = PortBaseline(
+            bsdName: "en5", receptacle: 4, positionName: "Back, far left",
+            returnedToBridge: BridgeReturn(bsdName: "bridge0", displayName: "Thunderbolt Bridge"))
+
+        // §4.3: in the bridge it was put back into, with no service of its own.
+        #expect(returned.describesTheReturnedPort(bridges: ["bridge0"], hasService: false))
+        // Either read counts, and a second bridge changes nothing.
+        #expect(returned.describesTheReturnedPort(bridges: ["bridge1", "bridge0"], hasService: false))
+        // Taken out of that bridge again, or given a service: the record
+        // describes nothing current.
+        #expect(!returned.describesTheReturnedPort(bridges: [], hasService: false))
+        #expect(!returned.describesTheReturnedPort(bridges: ["bridge1"], hasService: false))
+        #expect(!returned.describesTheReturnedPort(bridges: ["bridge0"], hasService: true))
+        // Only a return record can say this, whatever the port is doing.
+        #expect(!sampleBaseline().describesTheReturnedPort(bridges: ["bridge0"], hasService: false))
+        #expect(!PortBaseline.adopted(bsdName: "en7", receptacle: 2, positionName: "Back, far right")
+            .describesTheReturnedPort(bridges: ["bridge0"], hasService: false))
+    }
+
+    @Test("A note written before the return field existed still loads, as not returned")
+    func olderNoteLoadsWithoutTheField() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appending(path: "baselines")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = BaselineStore(directory: directory)
+        // Byte for byte the note Return to Bridge left on the rig on
+        // 2026-09-20, before the field existed.
+        let older = """
+            {"bridges":[],"bsdName":"en5","isAdopted":false,"positionName":"Back, far left",\
+            "receptacle":4,"recordedAt":"2026-09-20T15:40:23Z","systemBuild":"26B5086k","version":1}
+            """
+        try Data(older.utf8).write(to: directory.appending(path: "en5.json"))
+
+        let loaded = try store.load(port: "en5")
+        #expect(loaded.returnedToBridge == nil)
+        #expect(!loaded.isReturned)
+        #expect(loaded.version == 1)
+        #expect(loaded.bridges.isEmpty)
+    }
+
+    @Test("A return record that claims a history is not a note")
+    func returnRecordWithHistoryIsRefused() {
+        var invented = sampleBaseline()
+        invented.returnedToBridge = BridgeReturn(bsdName: "bridge0")
+        #expect(throws: BaselineStoreError.self) { try invented.validate() }
+
+        var adopted = PortBaseline.adopted(bsdName: "en7", receptacle: 2,
+                                           positionName: "Back, far right")
+        adopted.returnedToBridge = BridgeReturn(bsdName: "bridge0")
+        #expect(throws: BaselineStoreError.self) { try adopted.validate() }
+
+        var nameless = PortBaseline(bsdName: "en7", receptacle: 2, positionName: "Back, far right",
+                                    returnedToBridge: BridgeReturn(bsdName: ""))
+        #expect(throws: BaselineStoreError.self) { try nameless.validate() }
+        nameless.returnedToBridge = BridgeReturn(bsdName: "bridge0")
+        #expect(throws: Never.self) { try nameless.validate() }
+    }
+
     @Test("An adopted note that claims a history is not a note")
     func adoptedNoteWithHistoryIsRefused() {
         var invented = sampleBaseline()

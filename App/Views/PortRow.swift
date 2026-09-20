@@ -151,13 +151,14 @@ struct PortRowDetailLine: View {
     /// run's own font — the address is `.body.monospaced()` (§3.2) and the
     /// technical suffix is `.caption` tertiary (§1.3 rule 6).
     private var stateAndDetail: Text {
-        if let membership = detail.membership {
-            Text("\(Text(detail.state)) · \(Text(membership))")
-        } else if let address = detail.address {
-            Text("\(Text(detail.state)) · \(Text(verbatim: address).font(.body.monospaced()))")
-        } else {
-            Text(detail.state)
+        var text = Text(detail.state)
+        for phrase in [detail.link, detail.membership].compactMap({ $0 }) {
+            text = Text("\(text) · \(Text(phrase))")
         }
+        if let address = detail.address {
+            text = Text("\(text) · \(Text(verbatim: address).font(.body.monospaced()))")
+        }
+        return text
     }
 
     private var line: Text {

@@ -196,9 +196,10 @@ enum HubPresentation {
 
     /// §S1's footer: the primary action, and `Restore…` beside it whenever a
     /// note exists (§2.8).
-    /// §2.8's `Restore…` is not here: whether a note exists is a live answer
-    /// the hub keeps (`HubActionsModel.hasAnyNote`), and asking it in two
-    /// places is how the two come to disagree.
+    /// §2.8's `Restore…` is not here: whether a note `Restore…` can put
+    /// something back from exists is a live answer the hub keeps
+    /// (`HubActionsModel.hasRestorableNote`), and asking it in two places is
+    /// how the two come to disagree.
     static func footer(
         hardware: HardwareModel?,
         ports: [PortSnapshot]

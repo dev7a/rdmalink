@@ -108,17 +108,34 @@ enum ThisMacPresentation {
         return ThisMacRowModel(id: "bridge", text: text)
     }
 
-    /// `Ports ready for RDMA — None yet` or the position names, in the physical
-    /// order the rest of the app uses.
+    /// `Ports ready for RDMA — None yet`, the position names in the physical
+    /// order the rest of the app uses, and — since ports set up outside
+    /// RDMALink are not ready until they are adopted (§7.3) but are still
+    /// there — the count of those, in §S1's two shapes.
     static func readyRow(_ ports: [PortSnapshot]) -> ThisMacRowModel {
-        let names = ports.ready.map(\.port.positionName)
-        guard !names.isEmpty else {
-            return ThisMacRowModel(id: "ready", text: "Ports ready for RDMA — None yet")
-        }
-        return ThisMacRowModel(
+        ThisMacRowModel(
             id: "ready",
-            text: "Ports ready for RDMA — \(names.formatted(.list(type: .and)))"
-        )
+            text: readyText(
+                ready: ports.ready.map(\.port.positionName),
+                setUpOutside: ports.adoptable.count))
+    }
+
+    /// §S1's five ready-row sentences. The counts are written in words, and
+    /// "one" takes the same sentence as the rest: the spec's singular forms
+    /// ("one set up outside it", "one more") are the same words.
+    static func readyText(ready: [String], setUpOutside: Int) -> LocalizedStringResource {
+        let names = ready.formatted(.list(type: .and).locale(english))
+        let outside = spelledOut(setUpOutside, capitalized: false)
+        switch (ready.isEmpty, setUpOutside) {
+        case (true, 0):
+            return "Ports ready for RDMA — None yet"
+        case (true, _):
+            return "Ports ready for RDMA — None by RDMALink · \(outside) set up outside it"
+        case (false, 0):
+            return "Ports ready for RDMA — \(names)"
+        case (false, _):
+            return "Ports ready for RDMA — \(names) · \(outside) more set up outside RDMALink"
+        }
     }
 
     /// Every kernel bridge any receptacle on this Mac belongs to, once each.
@@ -131,11 +148,18 @@ enum ThisMacPresentation {
         return result
     }
 
+    /// The language §S1's sentences are written in. The app has no
+    /// translations, so a count spelled out or a list joined in the user's
+    /// locale would land a French "cinq" or "et" inside an English sentence;
+    /// the spelling is pinned to the sentence's own language until the app is
+    /// genuinely localized.
+    static let english = Locale(identifier: "en_US")
+
     /// `Four`, `Six` — the spec writes these counts in words (§S1).
     static func spelledOut(_ count: Int, capitalized: Bool = true) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .spellOut
-        formatter.locale = .current
+        formatter.locale = english
         guard let words = formatter.string(from: NSNumber(value: count)) else {
             return count.formatted()
         }

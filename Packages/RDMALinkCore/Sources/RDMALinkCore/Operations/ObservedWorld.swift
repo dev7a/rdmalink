@@ -175,7 +175,15 @@ public struct ObservedWorld: Sendable {
 enum BaselineCapture {
     /// Everything UX_SPEC §7.1 says a note records, except the created service
     /// — which does not exist yet, because the note is written first.
-    static func note(port: OperationPort, world: ObservedWorld, isAdopted: Bool = false) -> PortBaseline {
+    ///
+    /// - Parameter returnedTo: the bridge Return to Bridge is about to put the
+    ///   port into (§7.5). The note it writes first is a return record.
+    static func note(
+        port: OperationPort,
+        world: ObservedWorld,
+        isAdopted: Bool = false,
+        returnedTo: BridgeReturn? = nil
+    ) -> PortBaseline {
         let existing = NetworkServices.services(for: port.bsdName, in: world.services).first
         let service = existing.map {
             ServiceRecord(identifier: $0.serviceID, name: $0.name,
@@ -196,7 +204,8 @@ enum BaselineCapture {
             bridges: world.bridges(containing: port.bsdName).map(world.membership(ofBridge:)),
             existingService: service,
             ipv4: existing?.ipv4,
-            ipv6: existing?.ipv6)
+            ipv6: existing?.ipv6,
+            returnedToBridge: returnedTo)
     }
 }
 

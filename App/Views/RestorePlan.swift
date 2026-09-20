@@ -168,7 +168,12 @@ enum RestorePlanning {
         // promises "exactly as it was". Only a note with nothing of RDMALink's
         // in it goes the other way (Core asks the same question before it
         // takes a password).
-        if let baseline = port.baseline, RestorePort.describesNothingToUndo(baseline) {
+        //
+        // A return record is the other note with nothing to undo, and it goes
+        // nowhere: the port is already in the bridge. Core's preview names it
+        // and refuses, and its refusal is what the sheet shows.
+        if let baseline = port.baseline, !baseline.isReturned,
+            RestorePort.describesNothingToUndo(baseline) {
             return returnToBridge(portID: portID, hub: hub, world: world)
         }
         let operationPort = OperationPort(port.port)
@@ -252,7 +257,7 @@ enum RestorePlanning {
         // note has no history to restore (§7.3) and a note left behind by a
         // return records nothing either, so neither is charged a password to
         // change nothing and then be deleted.
-        let ports = hub.notedPorts.filter {
+        let ports = hub.restorablePorts.filter {
             guard let baseline = $0.baseline else { return false }
             return !RestorePort.describesNothingToUndo(baseline)
         }

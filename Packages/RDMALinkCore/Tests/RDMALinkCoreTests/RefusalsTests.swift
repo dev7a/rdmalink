@@ -358,3 +358,45 @@ struct CreatedServiceEditedTests {
         #expect(refusal.subjects == ["en5"])
     }
 }
+
+@Suite("R20 — the bridge doesn't have it back yet")
+struct R20Tests {
+    @Test("The steps say Try Again first, then the hand-off, in the spec's words")
+    func writesTheSpecSteps() {
+        let refusal = Refusals.notBackInBridge(
+            port: ObservedPort(bsdName: "en6", positionName: "Back, far left"),
+            bridgeName: "Thunderbolt Bridge", removedService: true)
+        #expect(refusal.code == .notBackInBridge)
+        #expect(refusal.headline == "Not quite back yet")
+        #expect(refusal.body == """
+            The service is gone, but Thunderbolt Bridge isn't listing Back, far left \
+            yet. RDMALink has kept your undo note, so nothing is lost and it can try \
+            again whenever you like.
+            """)
+        #expect(refusal.detail == """
+            Try Again usually does it: RDMALink waits for the port to settle and \
+            writes the membership afresh. If it still isn't back, open System \
+            Settings › Network, choose Manage Virtual Interfaces, open Thunderbolt \
+            Bridge and add Back, far left yourself.
+            """)
+        #expect(refusal.subjects == ["en6"])
+    }
+
+    @Test("On a port that had no service, the body never says one is gone")
+    func omitsTheServiceClauseWhenNothingWasDeleted() {
+        let refusal = Refusals.notBackInBridge(
+            port: ObservedPort(bsdName: "en6", positionName: "Back, far left"),
+            bridgeName: "Thunderbolt Bridge", removedService: false)
+        #expect(refusal.code == .notBackInBridge)
+        #expect(refusal.headline == "Not quite back yet")
+        #expect(refusal.body == """
+            Thunderbolt Bridge isn't listing Back, far left yet. RDMALink has kept \
+            your undo note, so nothing is lost and it can try again whenever you like.
+            """)
+        #expect(!refusal.body.contains("service"))
+        // The steps are the same either way.
+        #expect(refusal.detail == Refusals.notBackInBridge(
+            port: ObservedPort(bsdName: "en6", positionName: "Back, far left"),
+            bridgeName: "Thunderbolt Bridge", removedService: true).detail)
+    }
+}

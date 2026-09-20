@@ -107,7 +107,7 @@ Sheets are used for exactly five things: **Adopt**, **Restore**, **Restore All P
 
 ### 2.8 Persistent affordances
 
-- **Restore is never hidden.** Whenever any baseline exists, the footer of the hub carries `Restore…` as a plain button beside the primary, and the Port menu's `Restore…` and `Restore All Ports…` are enabled. You never have to find a row first.
+- **Restore is never hidden.** Whenever any restorable note exists — one that records a set-up to undo; a return record (§7.5) is not one — the footer of the hub carries `Restore…` as a plain button beside the primary, and the Port menu's `Restore…` and `Restore All Ports…` are enabled. You never have to find a row first.
 - **Unfinished business survives quitting** and appears as a row on the hub the next launch, phrased as a situation and not an alarm: a port that needs putting back by hand, a restart still owed, a port that drifted.
 
 ---
@@ -725,7 +725,8 @@ You can watch each sentence mean something before you agree to it.
 - Entry: **3 September, 14:40 — Back, far right** · **Adopted. RDMALink noted how it was already set up and changed nothing.** *[Stop Managing…]*
 - Entry (returned to the bridge, §7.5): **20 September, 11:40 — Back, far left** · **Put it back in Thunderbolt Bridge and removed its standalone service.** *[Set It Up Again]* — with no standalone service: **Put it back in Thunderbolt Bridge.**
 - Undone entry: **Already put back on 3 September at 15:10.**
-- Returned entry after the port is set up again: **Set up again on 20 September at 11:52.**
+- Returned entry after the port is set up again, or adopted: **Set up again on 20 September at 11:52.**
+- Adopted entry after the port is returned to the bridge: **Put back in the bridge on 20 September at 11:40.**
 - Stopped entry: **RDMALink stopped looking after this port on 3 September at 15:12.**
 - Vanished port: **This port isn't on this Mac any more, so there's nothing left to put back. The note stays until you clear it.** *[Forget This Note]*
 - Footnote: **RDMALink keeps one small note per port, in your Library folder. They're only notes — they don't change anything on their own.**
@@ -1071,8 +1072,10 @@ opens the S10 sheet in its foreign-port form.
    S11), the note stays so the row can offer **Set It Up Again**, and the row
    reads **Back in the bridge** (§4.3). A returned note is not one `Restore…`
    lists — the port already has everything the note describes — and it is not
-   drift; **Forget This Port** clears it, and setting the port up again
-   replaces it.
+   drift; **Stop Managing…** in the Port menu clears it (its sheet says
+   exactly what that means: only the note goes), and setting the port up
+   again — or adopting it, should it be set up by hand meanwhile — replaces
+   it.
 
 ### 7.4 Steady state
 

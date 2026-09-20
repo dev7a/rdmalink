@@ -27,6 +27,9 @@ extension StagePort.Configuration {
         case .managed, .adopted: self = .ready
         case .setUpElsewhere: self = .outside
         case .drifted: self = .drift
+        // §4.3: "Provenance is a panel matter: the ring says only that the
+        // port is in the bridge."
+        case .returned: self = .bridge
         case .plain: self = snapshot.bridges.isEmpty ? .none : .bridge
         }
     }

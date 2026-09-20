@@ -62,6 +62,6 @@ enum OperationHost {
 extension HubActionsModel {
     /// What every operation needs that is not the world and not the port.
     var environment: OperationEnvironment {
-        OperationEnvironment(archetype: archetype)
+        NotesLocation.environment(archetype: archetype)
     }
 }

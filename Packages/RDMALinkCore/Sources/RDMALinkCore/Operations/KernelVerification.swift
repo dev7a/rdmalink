@@ -87,6 +87,22 @@ public struct KernelAgreement: Sendable, Equatable {
         self.reads = reads
         self.ranOutOfTime = ranOutOfTime
     }
+
+    /// This agreement with a membership rewrite that happened **at add time**
+    /// folded in (``BridgeRejoin/add(_:to:at:writer:policy:)``).
+    ///
+    /// The stored list already had the port, so it was taken out and put back
+    /// before the verification began. A kernel that then agreed on the first
+    /// read did not settle on its own: the retry is what it followed, and the
+    /// "kernel settled …" line has to say so.
+    func foldingRewrite(atAddTime rewritten: Bool) -> KernelAgreement {
+        guard rewritten else { return self }
+        var folded = self
+        folded.settledOnItsOwn = false
+        folded.retriedMembership = true
+        folded.settledAfterRetry = agreed
+        return folded
+    }
 }
 
 /// One round of verification: both places bridge membership is real, read at

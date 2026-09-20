@@ -32,11 +32,20 @@ public struct ReturnToBridgeResult: Sendable, Equatable {
     public var completionLine: String { OperationTiming.completionLine(seconds: elapsed) }
     /// UX_SPEC §S10's foreign-port success.
     public var successHeadline: String { "\(positionName) is in \(bridgeName)" }
+    /// §S10's foreign-port success body, in its no-service form when no
+    /// standalone service went: the sentence never claims a deletion that did
+    /// not happen.
     public var successBody: String {
-        """
-        The port is a member of \(bridgeName) again and its standalone service \
-        is gone. Set It Up Again is one click away if you change your mind.
-        """
+        guard deletedService != nil else {
+            return """
+                The port is a member of \(bridgeName) again. Set It Up Again is \
+                one click away if you change your mind.
+                """
+        }
+        return """
+            The port is a member of \(bridgeName) again and its standalone service \
+            is gone. Set It Up Again is one click away if you change your mind.
+            """
     }
 }
 
@@ -83,25 +92,39 @@ public struct ReturnToBridge: Sendable {
         let named = bridge.displayName ?? bridge.bsdName
         plan.bridgeName = named
         plan.headline = "Return \(port.positionName) to \(named)?"
-        plan.body = """
-            RDMALink didn't set this port up, so it can't put things back \
-            exactly as they were — but it can do the ordinary thing: add the \
-            port to \(named) and remove the standalone service it has now. It \
-            writes down what it found first, so you can set the port up again \
-            afterwards.
-            """
-        plan.rows = [
-            "Add the port to \(named)",
-            service.map {
+        // §S10's foreign-port form, and its no-service form when the port was
+        // taken out of the bridge by hand and left bare: the delete row and
+        // every sentence about a service are omitted, not blanked (§7.5 step 2).
+        if let service {
+            plan.body = """
+                RDMALink didn't set this port up, so it can't put things back \
+                exactly as they were — but it can do the ordinary thing: add the \
+                port to \(named) and remove the standalone service it has now. It \
+                writes down what it found first, so you can set the port up again \
+                afterwards.
                 """
-                Delete the service \($0.name) — RDMALink didn't make this one, \
+            plan.rows = [
+                "Add the port to \(named)",
+                """
+                Delete the service \(service.name) — RDMALink didn't make this one, \
                 and a bridge member can't keep its own service
+                """,
+                "Check that it really is in the bridge",
+                "Leave every other setting alone",
+            ]
+        } else {
+            plan.body = """
+                RDMALink didn't set this port up, so it can't put things back \
+                exactly as they were — but it can do the ordinary thing: add the \
+                port to \(named). It writes down what it found first, so you can \
+                set the port up again afterwards.
                 """
-            } ?? "Delete the service — RDMALink didn't make this one, and a bridge "
-                + "member can't keep its own service",
-            "Check that it really is in the bridge",
-            "Leave every other setting alone",
-        ]
+            plan.rows = [
+                "Add the port to \(named)",
+                "Check that it really is in the bridge",
+                "Leave every other setting alone",
+            ]
+        }
         if let refusal = Refusals.nothingMountedOverThunderbolt(world.mountedVolumes) {
             plan.refusal = refusal
         } else if !world.bridges(containing: port.bsdName).isEmpty {
@@ -195,12 +218,17 @@ public struct ReturnToBridge: Sendable {
                     + "is the way back")
         }
 
-        // Step 1. The note first, recording the standalone service it found —
-        // without it, nothing is changed (§7.5 step 1, R14).
+        // Step 1. The note first, recording the standalone service it found
+        // and the bridge it is about to join — without it, nothing is changed
+        // (§7.5 step 1, R14). The bridge is what makes it a return record.
         progress(.saveUndoNote, .running)
+        let returnedTo = BridgeReturn(
+            bsdName: bridgeBSDName,
+            displayName: world.bridgeDisplayNames[bridgeBSDName])
         let recorder = BaselineRecorder.live(
             store: environment.store,
-            notes: [port.bsdName: BaselineCapture.note(port: port, world: world)])
+            notes: [port.bsdName: BaselineCapture.note(port: port, world: world,
+                                                       returnedTo: returnedTo)])
         if writer.isDryRun {
             if let refusal = recorder.checkWritable() { throw refusal }
         } else {
@@ -240,8 +268,8 @@ public struct ReturnToBridge: Sendable {
         var membership = world.membership(ofBridge: bridgeBSDName)
         if !membership.members.contains(port.bsdName) { membership.members.append(port.bsdName) }
         progress(.joinBridge(named: bridgeName), .running)
-        try BridgeRejoin.add(port.bsdName, to: membership, at: nil,
-                             writer: writer, policy: environment.policy)
+        let rewroteAtAddTime = try BridgeRejoin.add(port.bsdName, to: membership, at: nil,
+                                                    writer: writer, policy: environment.policy)
         try commitOrBusy(writer)
         progress(.joinBridge(named: bridgeName), .done)
 
@@ -262,14 +290,20 @@ public struct ReturnToBridge: Sendable {
                 }) { reading in
                     reading.isMember(port.bsdName, ofAll: [bridgeBSDName])
                 }
+                .foldingRewrite(atAddTime: rewroteAtAddTime)
             guard agreement.agreed else {
-                // On a miss the note is kept and R20 applies (§7.5 step 4).
-                throw Refusals.notBackInBridge(port: port.observed, bridgeName: bridgeName)
+                // On a miss the note is kept and R20 applies (§7.5 step 4),
+                // saying a service went only when one did.
+                throw Refusals.notBackInBridge(
+                    port: port.observed, bridgeName: bridgeName, removedService: deleted != nil)
             }
-            // Step 5. The change log records the return.
-            try? environment.log.append(ChangeEntry(
-                port: port.bsdName, positionName: port.positionName, kind: .restored,
-                sentence: ChangeSentence.alreadyPutBack(moment: Moment.text(Date()))))
+            // Step 5. The change log records the return (§S11), saying that a
+            // service went only when one did.
+            try? environment.log.append(.returned(
+                port: port.bsdName, positionName: port.positionName,
+                bridgeName: bridgeName, removedService: deleted != nil))
+        } else {
+            agreement = agreement.foldingRewrite(atAddTime: rewroteAtAddTime)
         }
         progress(.checkInBridge, .done)
 

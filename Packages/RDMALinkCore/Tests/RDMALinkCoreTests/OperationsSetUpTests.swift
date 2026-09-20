@@ -36,6 +36,71 @@ struct OperationsSetUpTests {
         #expect(result.ports.first?.agreement.retriedMembership == false)
     }
 
+    @Test("Setting a returned port up again replaces its record and marks the log entry")
+    func setsAReturnedPortUpAgain() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let environment = Fixtures.environment(store: store)
+        // What Return to Bridge left: a return record, and its log entry.
+        try store.save(PortBaseline(
+            bsdName: "en6", receptacle: 1, positionName: "Back, far left",
+            returnedToBridge: BridgeReturn(bsdName: "bridge0", displayName: "Thunderbolt Bridge")))
+        let returned = ChangeEntry.returned(
+            port: "en6", positionName: "Back, far left", bridgeName: "Thunderbolt Bridge",
+            removedService: false, date: Date(timeIntervalSince1970: 1_758_382_823))
+        try environment.log.append(returned)
+
+        let writer = FakeWriter()
+        writer.kernel = { _ in Fixtures.snapshot(Fixtures.standalone) }
+        let result = try SetUpPorts(ports: [Fixtures.port]).perform(
+            writer: writer, world: Fixtures.world(ifconfig: Fixtures.inOneBridge),
+            environment: environment, progress: { _, _ in })
+        #expect(result.ports.count == 1)
+
+        // §7.5 step 5: setting the port up again replaces the return record.
+        let note = try store.load(port: "en6")
+        #expect(!note.isReturned)
+        #expect(note.createdService?.identifier == "NEW-SERVICE-ID")
+        #expect(note.bridges.map(\.bridgeName) == ["bridge0"])
+
+        // §S11: the returned entry stays, answered by the new set-up, and
+        // reads "Set up again on…" — the log itself is only appended to.
+        let entries = try environment.log.entries()
+        #expect(entries.map(\.kind) == [.returned, .setUp])
+        #expect(entries[0] == returned)
+        let answer = try #require(ChangeLog.answer(to: returned, in: entries))
+        #expect(answer == entries[1])
+        #expect(ChangeLog.note(for: returned, answeredBy: answer) ==
+                ChangeSentence.setUpAgain(moment: Moment.text(answer.date)))
+        #expect(ChangeLog.answer(to: answer, in: entries) == nil, "the new set-up stands")
+    }
+
+    @Test("A set-up that changed nothing puts the note that was there back, not away")
+    func keepsThePreviousNoteWhenNothingChanged() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let record = PortBaseline(
+            bsdName: "en6", receptacle: 1, positionName: "Back, far left",
+            returnedToBridge: BridgeReturn(bsdName: "bridge0", displayName: "Thunderbolt Bridge"),
+            recordedAt: Date(timeIntervalSince1970: 1_758_382_823))
+        try store.save(record)
+        let writer = FakeWriter()
+        writer.kernel = { _ in Fixtures.snapshot(Fixtures.inOneBridge) }
+        writer.intercept = { call in
+            if case .removeMember = call {
+                return NetworkConfigurationError.stepFailed(
+                    step: "Remove from Thunderbolt Bridge", code: 1001, message: "Failed!")
+            }
+            return nil
+        }
+        #expect {
+            try SetUpPorts(ports: [Fixtures.port]).perform(
+                writer: writer, world: Fixtures.world(ifconfig: Fixtures.inOneBridge),
+                environment: Fixtures.environment(store: store), progress: { _, _ in })
+        } throws: { ($0 as? Refusal)?.code == .portStillInBridge }
+        #expect(try store.load(port: "en6") == record, "R9 changed nothing, the note included")
+    }
+
     @Test("The note records every bridge with its whole member list")
     func recordsTheWholeWorld() throws {
         let store = Fixtures.store()

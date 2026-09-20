@@ -123,6 +123,28 @@ public struct CreatedServiceRecord: Sendable, Codable, Equatable {
     }
 }
 
+/// The bridge Return to Bridge put a port back into (UX_SPEC §7.5).
+///
+/// Its presence is what makes a note a **return record**: the port already has
+/// everything the note describes, so there is nothing for `Restore…` to put
+/// back, and the note stays only so the row can offer `Set It Up Again`.
+public struct BridgeReturn: Sendable, Codable, Equatable {
+    /// The kernel interface name, such as `bridge0`.
+    public var bsdName: String
+    /// The name shown in System Settings, such as `Thunderbolt Bridge`, when
+    /// the stored configuration had one.
+    public var displayName: String?
+
+    public init(bsdName: String, displayName: String? = nil) {
+        self.bsdName = bsdName
+        self.displayName = displayName
+    }
+
+    /// The name to put in front of a user: what System Settings calls the
+    /// bridge, or its kernel name when macOS offers nothing.
+    public var name: String { displayName ?? bsdName }
+}
+
 /// The undo note for one port: everything needed to put it back the way it was,
 /// written **before** the first write. If it cannot be written, nothing is
 /// changed at all (R14).
@@ -157,6 +179,11 @@ public struct PortBaseline: Sendable, Codable, Equatable {
     /// The service RDMALink created, captured at creation time. `nil` until
     /// the service exists — the note is written first.
     public var createdService: CreatedServiceRecord?
+    /// The bridge Return to Bridge put the port into (§7.5). Set only on a
+    /// note that operation wrote — before its first write, like every note —
+    /// and `nil` on every other note, including those written before the
+    /// field existed. Optional on purpose so the schema stays at version 1.
+    public var returnedToBridge: BridgeReturn?
     /// When the note was taken. The restore copy quotes it verbatim.
     public var recordedAt: Date
     /// The macOS build the note was taken on, such as `26B5086k`.
@@ -173,6 +200,7 @@ public struct PortBaseline: Sendable, Codable, Equatable {
         ipv4: ProtocolConfiguration? = nil,
         ipv6: ProtocolConfiguration? = nil,
         createdService: CreatedServiceRecord? = nil,
+        returnedToBridge: BridgeReturn? = nil,
         recordedAt: Date = Date(),
         systemBuild: String = SystemBuild.current
     ) {
@@ -186,6 +214,7 @@ public struct PortBaseline: Sendable, Codable, Equatable {
         self.ipv4 = ipv4
         self.ipv6 = ipv6
         self.createdService = createdService
+        self.returnedToBridge = returnedToBridge
         self.recordedAt = recordedAt
         self.systemBuild = systemBuild
     }
@@ -221,6 +250,27 @@ public struct PortBaseline: Sendable, Codable, Equatable {
     /// The identifier of the service RDMALink created, when it has one.
     public var createdServiceIdentifier: String? { createdService?.identifier }
 
+    /// True when this note is a return record: Return to Bridge wrote it, the
+    /// port has everything it describes, and `Restore…` has nothing to do
+    /// with it (§7.5 step 5). `Set It Up Again` replaces it and `Forget This
+    /// Port` clears it.
+    public var isReturned: Bool { returnedToBridge != nil }
+
+    /// True when this note is a return record **and** the port still has what
+    /// it describes: it is a member of the bridge it was put back into — by
+    /// either read, since a port is in a bridge when the kernel or the saved
+    /// settings say so — and has no service of its own. That is §4.3's
+    /// "Back in the bridge".
+    ///
+    /// A return record whose port has since left that bridge, or gained a
+    /// service, describes nothing current. The note is kept and nothing is
+    /// raised (§7.5): it is not drift, because drift is only ever about a
+    /// setup RDMALink made or adopted.
+    public func describesTheReturnedPort(bridges: [String], hasService: Bool) -> Bool {
+        guard let returnedToBridge else { return false }
+        return !hasService && bridges.contains(returnedToBridge.bsdName)
+    }
+
     /// A kernel interface name RDMALink will accept as a note's name: it is
     /// also the note's file name, so nothing else may get in.
     public static func isValidBSDName(_ value: String) -> Bool {
@@ -249,6 +299,24 @@ public struct PortBaseline: Sendable, Codable, Equatable {
             }
             guard createdService == nil else {
                 throw BaselineStoreError.malformed("An adopted note for \(bsdName) claims a created service")
+            }
+        }
+        // A return record describes a port that was standalone when RDMALink
+        // put it back: no bridge history to restore and no service of
+        // RDMALink's. A note claiming both a return and a history would let
+        // Restore and Return to Bridge each think the other's record is theirs.
+        if let returnedToBridge {
+            guard !returnedToBridge.bsdName.isEmpty else {
+                throw BaselineStoreError.malformed("\(bsdName)'s return record names no bridge")
+            }
+            guard !isAdopted else {
+                throw BaselineStoreError.malformed("\(bsdName)'s note is both adopted and a return record")
+            }
+            guard bridges.isEmpty else {
+                throw BaselineStoreError.malformed("A return record for \(bsdName) carries bridge history")
+            }
+            guard createdService == nil else {
+                throw BaselineStoreError.malformed("A return record for \(bsdName) claims a created service")
             }
         }
         // A created service is only ever this port's. Without this, a note

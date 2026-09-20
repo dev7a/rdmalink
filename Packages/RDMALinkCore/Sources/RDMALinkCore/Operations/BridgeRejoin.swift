@@ -21,17 +21,26 @@ enum BridgeRejoin {
     /// When the stored list already has it — an earlier attempt got this far
     /// and the kernel did not follow (R20) — it is toggled instead, because
     /// committing the same list again would change nothing.
+    ///
+    /// - Returns: whether the membership was rewritten rather than simply
+    ///   added. That rewrite is the one retry there is, so the caller folds it
+    ///   into the ``KernelAgreement`` it reports
+    ///   (``KernelAgreement/foldingRewrite(atAddTime:)``): a kernel that then
+    ///   agreed on the first read did not settle on its own.
+    @discardableResult
     static func add(
         _ bsdName: String,
         to bridge: BridgeMembership,
         at position: Int?,
         writer: NetworkWriter,
         policy: KernelWaitPolicy
-    ) throws {
+    ) throws -> Bool {
         do {
             try writer.addMember(bsdName, to: bridge, at: position)
+            return false
         } catch BridgeSPIError.alreadyMember {
             try toggle(bsdName, in: bridge, at: position, writer: writer, policy: policy)
+            return true
         }
     }
 

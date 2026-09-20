@@ -40,6 +40,8 @@ struct PortList: View {
     /// stage has to be somewhere the user can see. The row a click came from,
     /// so clicking a row never scrolls it out from under the pointer.
     @State private var rowInitiated: String?
+    /// Which edges of the list have rows past them right now.
+    @State private var fold = ScrollFold()
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -66,6 +68,20 @@ struct PortList: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollBounceBehavior(.basedOnSize)
+            // §2.3: the list "scrolls independently if it cannot fit; it is
+            // never truncated away". At the default window a situation row
+            // leaves the hub's list a little short, and macOS's overlay
+            // scrollers show nothing until the list moves — so a row under
+            // the fold was indistinguishable from a group that ended there.
+            // The edge with more past it is faded, which is how the system's
+            // own folds say "there is more"; a list that fits is untouched.
+            .onScrollGeometryChange(for: ScrollFold.self) { geometry in
+                ScrollFold(geometry)
+            } action: { _, current in
+                fold = current
+            }
+            .mask { ScrollFoldMask(fold: fold) }
+            .animation(.smooth(duration: 0.18), value: fold)
             .onChange(of: stage.selectedID) { _, id in
                 let cameFromARow = rowInitiated == id
                 rowInitiated = nil
@@ -136,6 +152,40 @@ extension PortGroupSection {
     static func isExtendingClick() -> Bool {
         let flags = NSEvent.modifierFlags
         return flags.contains(.command) || flags.contains(.shift)
+    }
+}
+
+/// Whether the list has rows past its top or bottom edge.
+struct ScrollFold: Equatable {
+    var above = false
+    var below = false
+
+    init() {}
+
+    init(_ geometry: ScrollGeometry) {
+        let top = geometry.contentOffset.y + geometry.contentInsets.top
+        let bottom = top + geometry.containerSize.height
+        above = top > 1
+        below = bottom < geometry.contentSize.height - 1
+    }
+}
+
+/// Opaque over the rows, fading to nothing over the last points before an
+/// edge that has more past it. Applied as a mask, so the group's own
+/// background fades with its rows and nothing is drawn over them.
+struct ScrollFoldMask: View {
+    let fold: ScrollFold
+
+    private static let depth: CGFloat = 28
+
+    var body: some View {
+        VStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                .frame(height: fold.above ? Self.depth : 0)
+            Color.black
+            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                .frame(height: fold.below ? Self.depth : 0)
+        }
     }
 }
 

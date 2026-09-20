@@ -521,14 +521,24 @@ public struct SetUpPorts: Sendable {
         // because a leftover note claims a port is managed that nothing
         // touched: the hub would read `.drifted`, offer `Set It Up Again` over
         // an ordinary bridged port, and turn on a `Restore…` that throws.
+        //
+        // A note that was already there — a return record (§7.5) or a drifted
+        // one — is put back rather than deleted, because "changed nothing at
+        // all" includes the note: the return record is what lets the row still
+        // read "Back in the bridge" after a set-up that never got going.
         var changedSomething = false
+        let previous = writer.isDryRun ? nil : try? environment.store.load(port: port.bsdName)
         do {
             return try write(
                 plan, writer: writer, world: world, environment: environment,
                 progress: progress, changedSomething: &changedSomething)
         } catch {
             if !changedSomething, !writer.isDryRun {
-                try? environment.store.delete(port: port.bsdName)
+                if let previous {
+                    try? environment.store.save(previous)
+                } else {
+                    try? environment.store.delete(port: port.bsdName)
+                }
             }
             throw error
         }
@@ -721,11 +731,15 @@ public struct SetUpPorts: Sendable {
         var membersNow: [String] = []
         var succeeded = false
         do {
-            try undo(port: port, created: created, left: left, serviceName: serviceName,
-                     writer: writer, policy: environment.policy, progress: progress)
+            let rewroteAtAddTime = try undo(
+                port: port, created: created, left: left, serviceName: serviceName,
+                writer: writer, policy: environment.policy, progress: progress)
             if writer.isDryRun {
                 succeeded = true
             } else {
+                // A membership the stored list already had was rewritten on
+                // the way back in; that is the retry, whether or not the
+                // verification had to run one of its own.
                 let agreement = try KernelVerification.wait(
                     writer: writer, policy: environment.policy,
                     budget: environment.remainingBudget,
@@ -741,6 +755,7 @@ public struct SetUpPorts: Sendable {
                         reading.isMember(port.bsdName,
                                          ofAll: left.map(\.membership.bridgeName))
                     }
+                    .foldingRewrite(atAddTime: rewroteAtAddTime)
                 succeeded = agreement.agreed
             }
         } catch {
@@ -773,6 +788,10 @@ public struct SetUpPorts: Sendable {
     /// Each row is reported as it is reversed, so §S6's "checklist reverses
     /// with a returning symbol" and the ring re-opening its gaps are driven by
     /// what really happened rather than by a timer (§3.5).
+    ///
+    /// - Returns: whether any membership was rewritten on the way back in
+    ///   (``BridgeRejoin/add(_:to:at:writer:policy:)``).
+    @discardableResult
     private func undo(
         port: OperationPort,
         created: CreatedServiceRecord?,
@@ -781,7 +800,7 @@ public struct SetUpPorts: Sendable {
         writer: NetworkWriter,
         policy: KernelWaitPolicy,
         progress: OperationProgress
-    ) throws {
+    ) throws -> Bool {
         if let created {
             // Named exactly as the checklist row that is being reversed, which
             // is the plan's name and not the record's — a row that cannot be
@@ -802,15 +821,19 @@ public struct SetUpPorts: Sendable {
                                                          policy: policy)
             }
         }
+        var rewrote = false
         for entry in left.reversed() {
             let step = OperationStep.leaveBridge(named: entry.name)
             progress(step, .reversing)
-            try BridgeRejoin.add(port.bsdName, to: entry.membership,
-                                 at: entry.membership.members.firstIndex(of: port.bsdName),
-                                 writer: writer, policy: policy)
+            if try BridgeRejoin.add(port.bsdName, to: entry.membership,
+                                    at: entry.membership.members.firstIndex(of: port.bsdName),
+                                    writer: writer, policy: policy) {
+                rewrote = true
+            }
             progress(step, .pending)
         }
         try writer.commitAndApply()
+        return rewrote
     }
 
     private func rollBackQuietly(

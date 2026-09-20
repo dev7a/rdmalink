@@ -30,6 +30,9 @@ enum PortSymbolStyle: Sendable, Equatable {
 /// them is drawn by the row.
 struct PortRowDetail: Sendable, Equatable {
     var state: LocalizedStringResource
+    /// §S1's link-state subtitle, appended after a middle dot when `state`
+    /// is something else: a port RDMALink returned to the bridge keeps it.
+    var link: LocalizedStringResource?
     /// Appended after a middle dot on a port that has no setup of its own.
     var membership: LocalizedStringResource?
     /// `fe80::1c3d:5aff:fe22:9b04%en6`, scope suffix included.
@@ -90,17 +93,19 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
         case .adopted: return [.returnToBridge(portID: id), .stopManaging(portID: id)]
         case .setUpElsewhere: return [.adopt(portID: id), .returnToBridge(portID: id)]
         case .drifted: return [.setItUpAgain(portID: id)]
+        // §4.3 and §S1 give the returned row one button. `Forget This Port`
+        // clears its note (§7.5) and lives in the Port menu's `Stop
+        // Managing…`, which the model offers for this state too.
+        case .returned: return [.setItUpAgain(portID: id)]
         case .plain:
             // §S9's near match is reached from the row's `Adopt…` — the sheet
             // is where it says it cannot adopt this one *yet*, and what to
-            // change so it can. A port that is out of every bridge and has a
-            // service of its own can always be put back (§7.5), whoever set it
-            // up and whatever state it is in.
+            // change so it can. A port that is out of every bridge can always
+            // be put back (§7.5), whoever took it out and whether it was given
+            // a service or left bare — §S10 has a form for each.
             var actions: [HubAction] = []
             if case .nearMatch? = snapshot.configuration { actions.append(.adopt(portID: id)) }
-            if snapshot.bridges.isEmpty, snapshot.hasServiceOfItsOwn {
-                actions.append(.returnToBridge(portID: id))
-            }
+            if snapshot.isOutOfEveryBridge { actions.append(.returnToBridge(portID: id)) }
             return actions
         }
     }
@@ -111,6 +116,7 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
         case .adopted: return "checkmark.seal.fill"
         case .setUpElsewhere: return "checkmark.circle"
         case .drifted: return "exclamationmark.circle"
+        case .returned: return "arrow.uturn.backward.circle"
         case .plain: break
         }
         guard snapshot.port.isThunderbolt else { return "cable.connector.horizontal" }
@@ -125,7 +131,7 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
     private static func symbolStyle(for snapshot: PortSnapshot) -> PortSymbolStyle {
         switch snapshot.readiness {
         case .managed, .adopted: .accent
-        case .setUpElsewhere: .secondary
+        case .setUpElsewhere, .returned: .secondary
         case .drifted: .attention
         case .plain: snapshot.port.isThunderbolt ? .secondary : .tertiary
         }
@@ -146,6 +152,13 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
             return PortRowDetail(state: "Set up outside RDMALink")
         case .drifted:
             return PortRowDetail(state: "Not set up any more")
+        case .returned:
+            // §S1: "the link-state subtitle and the membership phrase stay".
+            return PortRowDetail(
+                state: "Back in the bridge",
+                link: linkState(of: snapshot.port),
+                membership: membership(of: snapshot)
+            )
         case .plain:
             return PortRowDetail(
                 state: linkState(of: snapshot.port),
@@ -207,10 +220,12 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
         let kind: String.LocalizationValue = snapshot.port.isThunderbolt
             ? "\(snapshot.port.positionName). Thunderbolt port. \(state)."
             : "\(snapshot.port.positionName). USB port. \(state)."
-        guard let membership = detail.membership else { return String(localized: kind) }
-        let joined: String.LocalizationValue =
-            "\(String(localized: kind)) \(String(localized: membership))."
-        return String(localized: joined)
+        var label = String(localized: kind)
+        for phrase in [detail.link, detail.membership].compactMap({ $0 }) {
+            let joined: String.LocalizationValue = "\(label) \(String(localized: phrase))."
+            label = String(localized: joined)
+        }
+        return label
     }
 }
 

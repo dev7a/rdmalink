@@ -146,20 +146,24 @@ enum ChangeLogRows {
     static func rows(
         entries: [ChangeEntry], ports: [PortSnapshot], noted: Set<String>
     ) -> [ChangeLogRow] {
-        // §S11 lists entry sentences for set-up and adopt, and writes "Already
-        // put back on…" only as the **note** an undone entry carries. A
-        // restore, a stop and a forget are each already shown as that note on
-        // the entry they answer, so drawing them again as rows of their own
-        // would print one moment twice — the second time as a row that repeats
-        // its own timestamp and has no action. The entries stay in the file:
-        // the log is append-only and `laterAnswer` matches on them.
-        // **Owed from the spec owner:** an entry sentence of their own, if
-        // they are meant to be rows.
-        entries.filter { $0.kind == .setUp || $0.kind == .adopted }.map { entry in
+        // §S11 lists entry sentences for set-up, adopt and a return to the
+        // bridge, and writes "Already put back on…" and its kin only as the
+        // **note** an answered entry carries. A restore, a stop and a forget
+        // are each already shown as that note on the entry they answer, so
+        // drawing them again as rows of their own would print one moment
+        // twice — the second time as a row that repeats its own timestamp and
+        // has no action. The entries stay in the file: the log is append-only
+        // and `ChangeLog.answer` matches on them. **Owed from the spec
+        // owner:** an entry sentence of their own, if they are meant to be
+        // rows.
+        entries.filter { isARow($0.kind) }.map { entry in
             let port = ports.first { $0.port.bsdName == entry.port }
             let head: String.LocalizationValue =
                 "\(Moments.dayAndTime(entry.date)) — \(entry.positionName)"
-            let later = laterAnswer(to: entry, in: entries)
+            // Core decides what answers what and which of §S11's notes that
+            // is, so the app and the `rdmalink changes` tool read the same
+            // log the same way.
+            let later = ChangeLog.answer(to: entry, in: entries)
             return ChangeLogRow(
                 id: entry.id,
                 head: String(localized: head),
@@ -171,15 +175,10 @@ enum ChangeLogRows {
         }
     }
 
-    /// The later entry that answers this one — a restore, a stop, or a note
-    /// cleared. Only entries that *did* something are answered.
-    private static func laterAnswer(to entry: ChangeEntry, in entries: [ChangeEntry])
-        -> ChangeEntry?
-    {
-        guard entry.kind == .setUp || entry.kind == .adopted else { return nil }
-        return entries.first {
-            $0.port == entry.port && $0.date > entry.date
-                && ($0.kind == .restored || $0.kind == .stoppedManaging || $0.kind == .forgotten)
+    private static func isARow(_ kind: ChangeKind) -> Bool {
+        switch kind {
+        case .setUp, .adopted, .returned: true
+        case .restored, .stoppedManaging, .forgotten: false
         }
     }
 
@@ -187,13 +186,9 @@ enum ChangeLogRows {
         for entry: ChangeEntry, answeredBy later: ChangeEntry?, portIsHere: Bool
     ) -> LocalizedStringResource? {
         if let later {
-            let moment = Moments.dayAtTime(later.date)
-            return later.kind == .restored
-                ? LocalizedStringResource(core: ChangeSentence.alreadyPutBack(moment: moment))
-                : LocalizedStringResource(
-                    core: ChangeSentence.stoppedLookingAfter(moment: moment))
+            return LocalizedStringResource(core: ChangeLog.note(for: entry, answeredBy: later))
         }
-        guard !portIsHere, entry.kind == .setUp || entry.kind == .adopted else { return nil }
+        guard !portIsHere else { return nil }
         return LocalizedStringResource(core: ChangeSentence.portIsGone)
     }
 
@@ -209,10 +204,12 @@ enum ChangeLogRows {
             // cleared, and clearing it is the only thing left to offer.
             return noted.contains(entry.port) ? .forgetThisNote(port: entry.port) : nil
         }
-        guard port.baseline != nil else { return nil }
         switch entry.kind {
-        case .setUp: return .restore(portID: port.id)
-        case .adopted: return .stopManaging(portID: port.id)
+        // §S11's returned entry offers `Set It Up Again`, which needs no note:
+        // it is the ordinary set-up of a port that is in the bridge.
+        case .returned: return .setItUpAgain(portID: port.id)
+        case .setUp: return port.baseline != nil ? .restore(portID: port.id) : nil
+        case .adopted: return port.baseline != nil ? .stopManaging(portID: port.id) : nil
         case .restored, .stoppedManaging, .forgotten: return nil
         }
     }

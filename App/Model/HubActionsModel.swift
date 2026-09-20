@@ -46,7 +46,14 @@ final class HubActionsModel {
 
     /// The change log, newest first, and the notes that still exist.
     private(set) var log: [ChangeEntry] = []
+    /// Every note on disk, by interface name — including notes for ports that
+    /// are not on this Mac any more.
     private(set) var noted: Set<String> = []
+    /// The notes `Restore…` can list: every note that is not a return record.
+    /// A return record describes a port that already has everything it says
+    /// (§7.5 step 5), so it is never listed, counted or offered. A note that
+    /// cannot be read stays here, so R19 can say so.
+    private(set) var restorable: Set<String> = []
 
     /// This Mac's shape, mirrored from `InventoryModel`, so a sheet can
     /// re-read the world without reaching back into the window.
@@ -70,8 +77,8 @@ final class HubActionsModel {
     private var identifyBreath: Task<Void, Never>?
     private var closeAfterConfirmation: Task<Void, Never>?
 
-    private let store = BaselineStore()
-    private let changeLog = ChangeLog()
+    private let store = NotesLocation.store
+    private let changeLog = NotesLocation.changeLog
 
     init() {}
 
@@ -97,16 +104,22 @@ final class HubActionsModel {
     }
 
     /// §2.8: "Whenever any baseline exists, the footer of the hub carries
-    /// `Restore…`". A note for a port that is not on this Mac any more still
-    /// counts, which is why the store's own list is consulted and not only the
-    /// live ports.
-    var hasAnyNote: Bool {
-        !noted.isEmpty || ports.contains { $0.baseline != nil }
+    /// `Restore…`" — any baseline `Restore…` can put something back from,
+    /// which a return record is not (§7.5 step 5). A note for a port that is
+    /// not on this Mac any more still counts, which is why the store's own
+    /// list is consulted and not only the live ports.
+    var hasRestorableNote: Bool {
+        !restorable.isEmpty || !restorablePorts.isEmpty
     }
 
-    /// Every port with a note RDMALink can act on, in physical order.
-    var notedPorts: [PortSnapshot] {
-        ports.filter { $0.baseline != nil }
+    /// Every port with a note `Restore…` can act on, in physical order.
+    var restorablePorts: [PortSnapshot] {
+        ports.filter { $0.baseline.map(Self.isRestorable) == true }
+    }
+
+    /// §7.5 step 5: "A returned note is not one `Restore…` lists."
+    private static func isRestorable(_ note: PortBaseline) -> Bool {
+        !note.isReturned
     }
 
     /// §2.8: "Restore is never hidden." The footer's and the Port menu's
@@ -114,11 +127,11 @@ final class HubActionsModel {
     /// when there is only one, and §S10's Restore All when there is neither —
     /// the sheet that can name them all.
     var restoreAction: HubAction {
-        if let selected = selectedPort, selected.baseline != nil {
+        if let selected = selectedPort, selected.baseline.map(Self.isRestorable) == true {
             return .restore(portID: selected.id)
         }
-        let noted = notedPorts
-        if noted.count == 1, let only = noted.first { return .restore(portID: only.id) }
+        let ports = restorablePorts
+        if ports.count == 1, let only = ports.first { return .restore(portID: only.id) }
         return .restoreAll
     }
 
@@ -146,7 +159,7 @@ final class HubActionsModel {
             guard let port = snapshot(id: portID) else { return false }
             return AdoptForm(port) != nil
         case .restore(let portID):
-            return snapshot(id: portID)?.baseline != nil
+            return snapshot(id: portID)?.baseline.map(Self.isRestorable) == true
         case .returnToBridge(let portID):
             guard let port = snapshot(id: portID) else { return false }
             // §S1's one exception, and the row gives the same answer: a port
@@ -165,15 +178,24 @@ final class HubActionsModel {
                 !baseline.isAdopted, baseline.createdService != nil {
                 return false
             }
-            return port.bridges.isEmpty && port.hasServiceOfItsOwn
+            return port.isOutOfEveryBridge
         case .stopManaging(let portID):
-            return snapshot(id: portID)?.readiness == .adopted
+            // §7.5 step 5: `Forget This Port` clears a return record. §S1
+            // gives the returned row no button for it, so it is reached the
+            // way an adopted port's is — the Port menu's `Stop Managing…`,
+            // whose sheet says exactly what it does: forgets the note and
+            // changes nothing. It is keyed on the note, not on what the port
+            // is doing now: a return record whose port has since left the
+            // bridge reads as no note in the row, and this is the one door
+            // left through which it can be cleared.
+            guard let note = snapshot(id: portID)?.baseline else { return false }
+            return note.isAdopted || note.isReturned
         case .forgetThisPort(let portID):
             return snapshot(id: portID)?.baseline != nil
         case .showMe(let portID):
             return snapshot(id: portID) != nil
         case .restoreAll:
-            return hasAnyNote
+            return hasRestorableNote
         case .changeLog:
             return true
         case .forgetThisNote(let bsdName):
@@ -285,17 +307,19 @@ final class HubActionsModel {
         let reading = await Task.detached(priority: .userInitiated) { () -> LogReading in
             LogReading(
                 entries: ((try? log.entries()) ?? []).sorted { $0.date > $1.date },
-                noted: Set((try? store.list()) ?? [])
-            )
+                notes: NotesReading(store))
         }.value
         self.log = reading.entries
-        self.noted = reading.noted
+        self.noted = reading.notes.all
+        self.restorable = reading.notes.restorable
     }
 
     /// Which notes exist, without reading the whole log.
     func refreshNotes() async {
         let store = store
-        noted = await Task.detached(priority: .utility) { Set((try? store.list()) ?? []) }.value
+        let notes = await Task.detached(priority: .utility) { NotesReading(store) }.value
+        noted = notes.all
+        restorable = notes.restorable
     }
 
     /// What the open sheet is looking at: bridges, services, mounted volumes
@@ -308,9 +332,12 @@ final class HubActionsModel {
         let operationPorts = ports.map { OperationPort($0.port) }
         guard !operationPorts.isEmpty else { return }
         let archetype = archetype
+        // R14 is measured against the folder the notes really go to.
+        let notesDirectory = store.directory
         let result = await Task.detached(priority: .userInitiated) { () -> Result<ObservedWorld, any Error> in
             do {
-                return .success(try ObservedWorld.read(ports: operationPorts, archetype: archetype))
+                return .success(try ObservedWorld.read(
+                    ports: operationPorts, archetype: archetype, notesDirectory: notesDirectory))
             } catch {
                 return .failure(error)
             }
@@ -457,38 +484,19 @@ final class HubActionsModel {
 /// One read of both files in Application Support.
 private struct LogReading: Sendable {
     var entries: [ChangeEntry]
-    var noted: Set<String>
+    var notes: NotesReading
 }
 
-extension PortSnapshot {
-    /// True when the port has a service of its own, whoever made it. §7.5's
-    /// "a bridge member can't keep its own service" is about this one, and so
-    /// is the row that offers `Return to Bridge…`.
-    var hasServiceOfItsOwn: Bool {
-        switch configuration {
-        case .readyForRDMA?, .nearMatch?, .foreign?: true
-        case .unconfigured?, nil: false
-        }
-    }
+/// One read of the notes folder: every note's name, and the names of those
+/// `Restore…` can list. A note that will not load is kept in both, so that
+/// `Restore…` can raise R19 about it rather than hide it.
+private struct NotesReading: Sendable {
+    var all: Set<String>
+    var restorable: Set<String>
 
-    /// That service's identifier. Matching is by identifier, never by name
-    /// (`docs/ARCHITECTURE.md`, rule 2).
-    var serviceIdentifier: String? {
-        switch configuration {
-        case .readyForRDMA(let id)?: id
-        case .nearMatch(let id, _)?: id
-        case .foreign(let id, _)?: id
-        case .unconfigured?, nil: nil
-        }
-    }
-
-    /// The part of a port RDMALinkCore's refusals and operations take.
-    var observed: ObservedPort {
-        ObservedPort(
-            bsdName: port.bsdName,
-            positionName: port.positionName,
-            hasLinkedMac: port.link == .macLinked,
-            bridges: port.bridges.map(\.name)
-        )
+    init(_ store: BaselineStore) {
+        let names = (try? store.list()) ?? []
+        all = Set(names)
+        restorable = Set(names.filter { (try? store.load(port: $0))?.isReturned != true })
     }
 }

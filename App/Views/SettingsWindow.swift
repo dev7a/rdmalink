@@ -73,8 +73,7 @@ struct SettingsWindow: View {
     /// Exactly the folder `BaselineStore` writes to, so the button never opens
     /// a directory the app does not actually use.
     private func revealNotes() {
-        let directory = BaselineStore().directory
-        NSWorkspace.shared.activateFileViewerSelecting([directory])
+        WizardFinder.showNotesFolder()
     }
 
     private func saveDiagnostics() {
@@ -97,7 +96,7 @@ struct SettingsWindow: View {
     }
 
     private static func notesExist() -> Bool {
-        !((try? BaselineStore().list()) ?? []).isEmpty
+        !((try? NotesLocation.store.list()) ?? []).isEmpty
     }
 }
 

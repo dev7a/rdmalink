@@ -474,21 +474,39 @@ public enum Refusals {
     }
 
     /// **R20 — The bridge doesn't have it back yet.** At Restore, after the
-    /// service has gone.
+    /// service has gone, and at Return to Bridge (§7.5 step 4).
     ///
     /// The undo note is **never** deleted until verification passes, so this
     /// refusal always leaves something to try again with.
-    public static func notBackInBridge(port: ObservedPort, bridgeName: String) -> Refusal {
+    ///
+    /// - Parameter removedService: whether a service was deleted on the way.
+    ///   §S10's no-service form omits every sentence about a service (§7.5
+    ///   step 2), so on a port that was bare the body opens without the
+    ///   clause — it never claims a deletion that did not happen. **The
+    ///   no-service body is owed a sentence of its own from the spec owner.**
+    public static func notBackInBridge(
+        port: ObservedPort, bridgeName: String, removedService: Bool
+    ) -> Refusal {
         Refusal(
             code: .notBackInBridge,
             headline: "Not quite back yet",
-            body: """
-            The service is gone, but \(bridgeName) isn't listing \
-            \(port.positionName) yet. RDMALink has kept your undo note, so \
-            nothing is lost and it can try again whenever you like.
+            body: removedService
+                ? """
+                The service is gone, but \(bridgeName) isn't listing \
+                \(port.positionName) yet. RDMALink has kept your undo note, so \
+                nothing is lost and it can try again whenever you like.
+                """
+                : """
+                \(bridgeName) isn't listing \(port.positionName) yet. RDMALink \
+                has kept your undo note, so nothing is lost and it can try again \
+                whenever you like.
+                """,
+            detail: """
+            Try Again usually does it: RDMALink waits for the port to settle \
+            and writes the membership afresh. If it still isn't back, open \
+            System Settings › Network, choose Manage Virtual Interfaces, open \
+            \(bridgeName) and add \(port.positionName) yourself.
             """,
-            detail: "In System Settings, open Network, choose Manage Virtual "
-                + "Interfaces, open \(bridgeName) and add \(port.positionName) back.",
             subjects: [port.bsdName]
         )
     }

@@ -141,6 +141,8 @@ struct ChoosePortReport: Sendable, Equatable {
         // and the plan answers. **Owed from the spec owner:** §S4 has no
         // subtitle for this row.
         case .drifted: return nil
+        // In the bridge with nothing on it: the ordinary thing to set up.
+        case .returned: return nil
         }
     }
 

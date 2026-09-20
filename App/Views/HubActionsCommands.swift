@@ -52,7 +52,7 @@ struct PortCommands: View {
             guard let hub else { return }
             hub.perform(hub.restoreAction)
         }
-        .disabled(hub?.hasAnyNote != true)
+        .disabled(hub?.hasRestorableNote != true)
     }
 
     private var selectedID: String { hub?.selectedPort?.id ?? "" }

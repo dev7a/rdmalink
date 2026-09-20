@@ -269,7 +269,7 @@ enum PortReading {
         // rows fall back to what is plugged in rather than claiming a port is
         // unconfigured on the strength of a read that never happened.
         let services = try? NetworkServices.read()
-        let store = BaselineStore()
+        let store = NotesLocation.store
         let noted = Set((try? store.list()) ?? [])
 
         return ports.map { port in

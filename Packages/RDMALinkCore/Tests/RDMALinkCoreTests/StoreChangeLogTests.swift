@@ -99,7 +99,15 @@ struct StoreChangeLogTests {
     @Test("Every kind the spec names")
     func carriesEveryKind() {
         #expect(Set(ChangeKind.allCases) ==
-                [.setUp, .adopted, .restored, .stoppedManaging, .forgotten])
+                [.setUp, .adopted, .restored, .returned, .stoppedManaging, .forgotten])
+        let returned = ChangeEntry.returned(port: "en5", positionName: "Back, far left",
+                                            bridgeName: "Thunderbolt Bridge", removedService: true)
+        #expect(returned.kind == .returned)
+        #expect(returned.sentence ==
+                "Put it back in Thunderbolt Bridge and removed its standalone service.")
+        #expect(ChangeEntry.returned(port: "en5", positionName: "Back, far left",
+                                     bridgeName: "Thunderbolt Bridge", removedService: false)
+                .sentence == "Put it back in Thunderbolt Bridge.")
         #expect(ChangeEntry.setUp(port: "en6", positionName: "Back, far left").kind == .setUp)
         #expect(ChangeEntry.setUp(port: "en6", positionName: "Back, far left").sentence ==
                 ChangeSentence.setUp)
@@ -118,6 +126,69 @@ struct StoreChangeLogTests {
                 "Already put back on 3 September at 15:10.")
         #expect(ChangeSentence.stoppedLookingAfter(moment: "3 September at 15:12") ==
                 "RDMALink stopped looking after this port on 3 September at 15:12.")
+        #expect(ChangeSentence.returned(bridgeName: "Thunderbolt Bridge", removedService: true) ==
+                "Put it back in Thunderbolt Bridge and removed its standalone service.")
+        #expect(ChangeSentence.returned(bridgeName: "Thunderbolt Bridge", removedService: false) ==
+                "Put it back in Thunderbolt Bridge.")
+        #expect(ChangeSentence.returned(bridgeName: "bridge0", removedService: false) ==
+                "Put it back in bridge0.")
+        #expect(ChangeSentence.setUpAgain(moment: "20 September at 11:52") ==
+                "Set up again on 20 September at 11:52.")
+        #expect(ChangeSentence.putBackInBridge(moment: "20 September at 11:40") ==
+                "Put back in the bridge on 20 September at 11:40.")
+    }
+
+    @Test("A later entry answers an earlier one, and the note quotes the answer's moment")
+    func answersEntriesWithoutRewritingThem() {
+        let day = Date(timeIntervalSince1970: 1_758_382_800)
+        let setUp = ChangeEntry.setUp(port: "en5", positionName: "Back, far left", date: day)
+        let restored = ChangeEntry(
+            date: day + 60, port: "en5", positionName: "Back, far left", kind: .restored,
+            sentence: ChangeSentence.alreadyPutBack(moment: Moment.text(day + 60)))
+        let returned = ChangeEntry.returned(
+            port: "en5", positionName: "Back, far left", bridgeName: "Thunderbolt Bridge",
+            removedService: false, date: day + 120)
+        let setUpAgain = ChangeEntry.setUp(port: "en5", positionName: "Back, far left",
+                                           date: day + 180)
+        let otherPort = ChangeEntry.setUp(port: "en6", positionName: "Back, left middle",
+                                          date: day + 240)
+        let entries = [setUp, restored, returned, setUpAgain, otherPort]
+
+        // An undone set-up: "Already put back on…", as today.
+        #expect(ChangeLog.answer(to: setUp, in: entries) == restored)
+        #expect(ChangeLog.note(for: setUp, answeredBy: restored) ==
+                ChangeSentence.alreadyPutBack(moment: Moment.text(restored.date)))
+        // A return, once the port is set up again: "Set up again on…".
+        #expect(ChangeLog.answer(to: returned, in: entries) == setUpAgain)
+        #expect(ChangeLog.note(for: returned, answeredBy: setUpAgain) ==
+                ChangeSentence.setUpAgain(moment: Moment.text(setUpAgain.date)))
+        // The newest set-up stands, and so does the other port's; an answer
+        // is never one that answers.
+        #expect(ChangeLog.answer(to: setUpAgain, in: entries) == nil)
+        #expect(ChangeLog.answer(to: otherPort, in: entries) == nil)
+        #expect(ChangeLog.answer(to: restored, in: entries) == nil)
+        // A returned note that was cleared instead.
+        let forgotten = ChangeEntry(
+            date: day + 150, port: "en5", positionName: "Back, far left", kind: .forgotten,
+            sentence: ChangeSentence.stoppedLookingAfter(moment: Moment.text(day + 150)))
+        #expect(ChangeLog.answer(to: returned, in: entries + [forgotten]) == forgotten)
+        #expect(ChangeLog.note(for: returned, answeredBy: forgotten) ==
+                ChangeSentence.stoppedLookingAfter(moment: Moment.text(forgotten.date)))
+        // An adopted port that was returned: §S11's "Put back in the bridge on…".
+        let adopted = ChangeEntry.adopted(port: "en5", positionName: "Back, far left",
+                                          date: day + 90)
+        #expect(ChangeLog.answer(to: adopted, in: entries + [adopted]) == returned)
+        #expect(ChangeLog.note(for: adopted, answeredBy: returned) ==
+                ChangeSentence.putBackInBridge(moment: Moment.text(returned.date)))
+        // A returned port set up again by hand and then adopted: the adoption
+        // replaces the return record, so it answers the returned entry, with
+        // the one note §S11 gives a returned entry.
+        let adoptedLater = ChangeEntry.adopted(port: "en5", positionName: "Back, far left",
+                                               date: day + 170)
+        #expect(ChangeLog.answer(to: returned, in: entries + [adoptedLater]) == adoptedLater)
+        #expect(ChangeLog.note(for: returned, answeredBy: adoptedLater) ==
+                ChangeSentence.setUpAgain(moment: Moment.text(adoptedLater.date)))
+        #expect(ChangeLog.answer(to: adoptedLater, in: entries + [adoptedLater]) == nil)
     }
 
     @Test("The notes and the log live together")

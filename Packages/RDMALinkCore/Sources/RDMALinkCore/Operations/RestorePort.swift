@@ -27,6 +27,11 @@ public struct RestorePortPlan: Sendable, Equatable {
     public var bridgesToRejoin: [String]
     /// Bridges in the note that are not on this Mac any more — R21.
     public var missingBridges: [String]
+    /// Set when the note is a return record (§7.5): Return to Bridge wrote it
+    /// and the port already has everything it describes, so there is nothing
+    /// here to put back. `Set It Up Again` and `Forget This Port` are the
+    /// actions that apply, and ``refusal`` is set as well.
+    public var returnedToBridge: BridgeReturn?
     public var refusal: Refusal?
 
     /// True when the whole restore can run.
@@ -135,9 +140,20 @@ public struct RestorePort: Sendable {
             isServiceAlreadyGone: true,
             bridgesToRejoin: [],
             missingBridges: [],
+            returnedToBridge: nil,
             refusal: nil)
 
         guard let note else {
+            plan.refusal = Refusals.undoNoteMissing(port: port.observed)
+            return plan
+        }
+        // A return record is not one `Restore…` lists (§7.5 step 5): the port
+        // is in the bridge the note names and has nothing of RDMALink's on it.
+        // The plan says which record it is, and the refusal is the same one a
+        // note with nothing to undo gets below — the spec writes none for
+        // this. **Owed from the spec owner.**
+        if let returnedToBridge = note.returnedToBridge {
+            plan.returnedToBridge = returnedToBridge
             plan.refusal = Refusals.undoNoteMissing(port: port.observed)
             return plan
         }
@@ -205,7 +221,7 @@ public struct RestorePort: Sendable {
     /// behind after a return: the app asks it before offering `Restore…`, and
     /// this asks it again before a credential is taken.
     public static func describesNothingToUndo(_ note: PortBaseline) -> Bool {
-        note.isAdopted || (note.bridges.isEmpty && note.createdService == nil)
+        note.isAdopted || note.isReturned || (note.bridges.isEmpty && note.createdService == nil)
     }
 
     // MARK: - Perform
@@ -307,14 +323,17 @@ public struct RestorePort: Sendable {
         }
 
         var rejoined: [String] = []
+        var rewroteAtAddTime = false
         if mode == .full {
             for bridge in note.bridges {
                 let named = bridge.displayName ?? bridge.bridgeName
                 let step = OperationStep.rejoinBridge(named: named)
                 progress(step, .running)
-                try BridgeRejoin.add(port.bsdName, to: bridge,
-                                     at: bridge.members.firstIndex(of: port.bsdName),
-                                     writer: writer, policy: environment.policy)
+                if try BridgeRejoin.add(port.bsdName, to: bridge,
+                                        at: bridge.members.firstIndex(of: port.bsdName),
+                                        writer: writer, policy: environment.policy) {
+                    rewroteAtAddTime = true
+                }
                 rejoined.append(named)
                 progress(step, .done)
             }
@@ -342,14 +361,18 @@ public struct RestorePort: Sendable {
                 }) { reading in
                     reading.isMember(port.bsdName, ofAll: note.bridges.map(\.bridgeName))
                 }
+                .foldingRewrite(atAddTime: rewroteAtAddTime)
             guard agreement.agreed else {
                 // The note is **never** deleted until verification passes, so
                 // there is always something to try again with (R20).
                 throw Refusals.notBackInBridge(
                     port: port.observed,
                     bridgeName: note.bridges.first.map { $0.displayName ?? $0.bridgeName }
-                        ?? "Thunderbolt Bridge")
+                        ?? "Thunderbolt Bridge",
+                    removedService: true)
             }
+        } else {
+            agreement = agreement.foldingRewrite(atAddTime: rewroteAtAddTime)
         }
         progress(.checkBackInBridge, .done)
 
@@ -464,6 +487,10 @@ public struct RestoreAll: Sendable {
     public struct Outcome: Sendable {
         public var results: [RestorePortResult]
         public var unfinished: [Unfinished]
+        /// Ports whose note records nothing to put back — a return record
+        /// (§7.5) or an adopted note (§7.3) — passed over without a write and
+        /// without a password, and never counted as "back".
+        public var skipped: [String]
         public var summary: String?
     }
 
@@ -473,12 +500,32 @@ public struct RestoreAll: Sendable {
         environment: OperationEnvironment,
         progress: @escaping OperationProgress = { _, _ in }
     ) -> Outcome {
+        perform(writer: LiveNetworkWriter(session: session, runner: environment.runner),
+                environment: environment, progress: progress)
+    }
+
+    /// The same run, over the seam the tests drive.
+    func perform(
+        writer: NetworkWriter,
+        environment: OperationEnvironment,
+        progress: OperationProgress
+    ) -> Outcome {
         var results: [RestorePortResult] = []
         var unfinished: [Unfinished] = []
+        var skipped: [String] = []
         for port in ports {
+            // A note with nothing to undo is passed over, not restored: a
+            // return record already describes the port as it is, and charging
+            // a password to change nothing and then delete the record would
+            // be the rounding-up §S10 forbids.
+            if let note = try? environment.store.load(port: port.bsdName),
+                RestorePort.describesNothingToUndo(note) {
+                skipped.append(port.positionName)
+                continue
+            }
             do {
                 results.append(try RestorePort(port: port).perform(
-                    session: session, environment: environment, progress: progress))
+                    writer: writer, environment: environment, progress: progress))
             } catch let refusal as Refusal {
                 unfinished.append(Unfinished(port: port.positionName, refusal: refusal))
                 break
@@ -501,6 +548,7 @@ public struct RestoreAll: Sendable {
         return Outcome(
             results: results,
             unfinished: unfinished,
+            skipped: skipped,
             summary: Self.partialSummary(done: results.map(\.positionName),
                                          unfinished: unfinished.map(\.port)))
     }

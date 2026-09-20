@@ -32,8 +32,10 @@ struct HubActionsFooter: View {
             HStack(spacing: 10) {
                 Spacer(minLength: 0)
                 // §2.8: "Restore is never hidden." Whenever any note exists it
-                // is here, so nobody has to find a row first.
-                if hub.hasAnyNote {
+                // is here, so nobody has to find a row first — any note it can
+                // put something back from, which leaves out a return record
+                // (§7.5). With only those, there is nothing to offer.
+                if hub.hasRestorableNote {
                     Button("Restore…") { hub.perform(hub.restoreAction) }
                 }
                 // R23 removes the primary rather than disabling it (§6.1

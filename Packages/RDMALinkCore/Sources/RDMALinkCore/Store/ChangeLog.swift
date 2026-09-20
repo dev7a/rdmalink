@@ -9,6 +9,9 @@ public enum ChangeKind: String, Sendable, Codable, CaseIterable {
     case adopted
     /// A port was put back the way it was found, and verified.
     case restored
+    /// A standalone port was put back into the Thunderbolt Bridge, the
+    /// ordinary way rather than the remembered way (§7.5), and verified.
+    case returned
     /// RDMALink stopped looking after an adopted port, changing nothing.
     case stoppedManaging
     /// A note was cleared for a port that had drifted or gone away.
@@ -59,6 +62,22 @@ public struct ChangeEntry: Sendable, Codable, Equatable, Identifiable {
     public static func adopted(port: String, positionName: String, date: Date = Date()) -> ChangeEntry {
         ChangeEntry(date: date, port: port, positionName: positionName,
                     kind: .adopted, sentence: ChangeSentence.adopted)
+    }
+
+    /// The entry for a port RDMALink returned to the bridge (§7.5, §S11).
+    ///
+    /// - Parameter removedService: whether a standalone service went with it.
+    ///   Without one the sentence says only that the port was put back.
+    public static func returned(
+        port: String,
+        positionName: String,
+        bridgeName: String,
+        removedService: Bool,
+        date: Date = Date()
+    ) -> ChangeEntry {
+        ChangeEntry(date: date, port: port, positionName: positionName, kind: .returned,
+                    sentence: ChangeSentence.returned(bridgeName: bridgeName,
+                                                      removedService: removedService))
     }
 }
 
@@ -139,6 +158,54 @@ public struct ChangeLog: Sendable {
     /// How many lines of the log could not be read back.
     public func unreadableLines() throws -> Int {
         try lines().filter { decode($0) == nil }.count
+    }
+
+    // MARK: - What answered what
+
+    /// The later entry that answers `entry`, so §S11 can grey it and replace
+    /// its action with a note — without anything in the file being rewritten.
+    ///
+    /// A set-up entry is answered by the restore, stop or forget that undid
+    /// it; an adopted entry by those and by a return to the bridge; a
+    /// returned entry by the port being set up again — by RDMALink, or by
+    /// hand and then adopted, which replaces the return record the same way —
+    /// or by its note being cleared. Entries that only ever answer are never
+    /// answered themselves.
+    public static func answer(to entry: ChangeEntry, in entries: [ChangeEntry]) -> ChangeEntry? {
+        let answering: Set<ChangeKind>
+        switch entry.kind {
+        case .setUp: answering = [.restored, .stoppedManaging, .forgotten]
+        case .adopted: answering = [.restored, .returned, .stoppedManaging, .forgotten]
+        case .returned: answering = [.setUp, .adopted, .stoppedManaging, .forgotten]
+        case .restored, .stoppedManaging, .forgotten: return nil
+        }
+        // The earliest by date, not the first in the file: the log is written
+        // in order, but the answer is a fact about time either way.
+        return entries
+            .filter { $0.port == entry.port && $0.date > entry.date && answering.contains($0.kind) }
+            .min { $0.date < $1.date }
+    }
+
+    /// §S11's note on an answered entry, quoting the moment of the answer:
+    /// "Already put back on…", "Set up again on…", "Put back in the bridge
+    /// on…" or "RDMALink stopped looking after this port on…".
+    ///
+    /// A returned entry answered by an adoption reads "Set up again on…" (the
+    /// port was set up again by hand, then adopted — §S11 says "set up again,
+    /// or adopted"); an adopted entry answered by a return reads "Put back in
+    /// the bridge on…".
+    public static func note(for entry: ChangeEntry, answeredBy later: ChangeEntry) -> String {
+        let moment = Moment.text(later.date)
+        if entry.kind == .returned, later.kind == .adopted {
+            return ChangeSentence.setUpAgain(moment: moment)
+        }
+        switch later.kind {
+        case .returned: return ChangeSentence.putBackInBridge(moment: moment)
+        case .restored: return ChangeSentence.alreadyPutBack(moment: moment)
+        case .setUp: return ChangeSentence.setUpAgain(moment: moment)
+        case .adopted, .stoppedManaging, .forgotten:
+            return ChangeSentence.stoppedLookingAfter(moment: moment)
+        }
     }
 
     // MARK: - Private

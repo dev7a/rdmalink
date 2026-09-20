@@ -209,8 +209,12 @@ enum AdoptForm: Sendable, Equatable {
     init?(_ port: PortSnapshot) {
         switch port.configuration {
         case .readyForRDMA?:
-            // A port RDMALink already looks after has nothing to adopt.
-            guard port.baseline == nil else { return nil }
+            // A port RDMALink already looks after has nothing to adopt. A
+            // return record is not that: its port has left the bridge and been
+            // given a matching service since, so the record describes nothing
+            // current, and adopting replaces it with the adopted note (the
+            // same replacement §7.5 step 5 describes for set-up).
+            guard port.baseline?.isReturned != false else { return nil }
             self = .fullMatch
         case .nearMatch(_, let differences)?:
             // §7.3: Adopt is for a port that is "out of every bridge, its own

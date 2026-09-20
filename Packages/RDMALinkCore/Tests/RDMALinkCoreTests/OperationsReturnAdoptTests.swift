@@ -100,10 +100,130 @@ struct OperationsReturnToBridgeTests {
         #expect(result.successHeadline == "Back, far left is in Thunderbolt Bridge")
         #expect(result.successBody.contains("Set It Up Again is one click away"))
 
-        // The note records what was found, so the port can be set up again.
+        // The note records what was found, so the port can be set up again —
+        // and which bridge it went into, which is what makes it a return record.
         let note = try store.load(port: "en6")
         #expect(note.existingService?.identifier == "FOREIGN")
         #expect(note.bridges.isEmpty)
+        #expect(note.isReturned)
+        #expect(note.returnedToBridge ==
+                BridgeReturn(bsdName: "bridge0", displayName: "Thunderbolt Bridge"))
+        #expect(result.agreement.settledOnItsOwn)
+        #expect(!result.agreement.retriedMembership)
+
+        // §S11: the log records the return, and that a service went with it.
+        let entries = try Fixtures.environment(store: store).log.entries()
+        #expect(entries.last?.kind == .returned)
+        #expect(entries.last?.sentence ==
+                "Put it back in Thunderbolt Bridge and removed its standalone service.")
+        #expect(entries.last?.port == "en6")
+    }
+
+    @Test("No standalone service: no delete row, no delete step, and no sentence about one")
+    func returnsABarePort() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let world = Fixtures.world(ifconfig: Fixtures.standalone, services: [],
+                                   bridges: [Self.thunderboltBridge])
+        let plan = ReturnToBridge(port: Fixtures.port).preview(world: world)
+        #expect(plan.headline == "Return Back, far left to Thunderbolt Bridge?")
+        #expect(plan.body == """
+            RDMALink didn't set this port up, so it can't put things back exactly \
+            as they were — but it can do the ordinary thing: add the port to \
+            Thunderbolt Bridge. It writes down what it found first, so you can set \
+            the port up again afterwards.
+            """)
+        #expect(plan.rows == [
+            "Add the port to Thunderbolt Bridge",
+            "Check that it really is in the bridge",
+            "Leave every other setting alone",
+        ])
+        #expect(plan.serviceID == nil)
+        #expect(plan.buttonTitle == "Return to Bridge")
+
+        let writer = FakeWriter()
+        writer.bridgesValue = [Self.thunderboltBridge]
+        writer.kernel = { _ in Fixtures.snapshot(Fixtures.inOneBridge) }
+        let log = ProgressLog()
+        let result = try ReturnToBridge(port: Fixtures.port).perform(
+            writer: writer, world: world,
+            environment: Fixtures.environment(store: store), progress: log.record)
+
+        #expect(writer.calls == [
+            .lock,
+            .addMember(port: "en6", bridge: "bridge0", position: nil),
+            .commitAndApply,
+        ])
+        #expect(log.text == [
+            "running Saving how to undo this…",
+            "done Saved",
+            "running Returning the port to Thunderbolt Bridge…",
+            "done Add the port to Thunderbolt Bridge",
+            "running Checking that it's back…",
+            "done Check that it really is in the bridge",
+        ])
+        #expect(!log.text.contains { $0.contains("Deleting the service") })
+        #expect(result.deletedService == nil)
+        #expect(result.successHeadline == "Back, far left is in Thunderbolt Bridge")
+        #expect(result.successBody == """
+            The port is a member of Thunderbolt Bridge again. Set It Up Again is \
+            one click away if you change your mind.
+            """)
+
+        let note = try store.load(port: "en6")
+        #expect(note.isReturned)
+        #expect(note.existingService == nil)
+        let entries = try Fixtures.environment(store: store).log.entries()
+        #expect(entries.map(\.kind) == [.returned])
+        #expect(entries.last?.sentence == "Put it back in Thunderbolt Bridge.")
+    }
+
+    @Test("The bridge is named as the stored configuration names it, or by its kernel name")
+    func namesTheBridgeInTheNote() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let writer = FakeWriter()
+        writer.bridgesValue = [Self.soleBridge]
+        writer.kernel = { _ in Fixtures.snapshot(Fixtures.inOneBridge) }
+        let result = try ReturnToBridge(port: Fixtures.port).perform(
+            writer: writer,
+            world: Fixtures.world(ifconfig: Fixtures.standalone, services: [],
+                                  bridges: [Self.soleBridge]),
+            environment: Fixtures.environment(store: store), progress: { _, _ in })
+        #expect(result.bridgeName == "bridge0")
+        #expect(try store.load(port: "en6").returnedToBridge ==
+                BridgeReturn(bsdName: "bridge0", displayName: nil))
+        #expect(try Fixtures.environment(store: store).log.entries().last?.sentence ==
+                "Put it back in bridge0.")
+    }
+
+    @Test("A stored list that already has the port is rewritten at add time, and the agreement says so")
+    func reportsARewriteAtAddTime() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let writer = FakeWriter()
+        // An earlier return got as far as the stored list and the kernel did
+        // not follow (R20); the session's copy lists en6 already.
+        writer.bridgesValue = [BridgeSPI.Membership(
+            bsdName: "bridge0", displayName: "Thunderbolt Bridge", members: ["en5", "en6"])]
+        writer.kernel = { _ in Fixtures.snapshot(Fixtures.inOneBridge) }
+        let result = try ReturnToBridge(port: Fixtures.port).perform(
+            writer: writer,
+            world: Fixtures.world(ifconfig: Fixtures.standalone, services: [],
+                                  bridges: [Self.thunderboltBridge]),
+            environment: Fixtures.environment(store: store), progress: { _, _ in })
+        #expect(writer.calls == [
+            .lock,
+            .addMember(port: "en6", bridge: "bridge0", position: nil),
+            .removeMember(port: "en6", bridge: "bridge0"),
+            .commitAndApply,
+            .addMember(port: "en6", bridge: "bridge0", position: nil),
+            .commitAndApply,
+        ])
+        #expect(result.agreement.agreed)
+        #expect(result.agreement.settledOnItsOwn == false)
+        #expect(result.agreement.retriedMembership)
+        #expect(result.agreement.settledAfterRetry)
     }
 
     @Test("The sheet says what §S10's foreign-port form says")
@@ -135,8 +255,36 @@ struct OperationsReturnToBridgeTests {
                 world: Fixtures.world(ifconfig: Fixtures.standalone, services: [Self.foreign],
                                       bridges: [Self.thunderboltBridge]),
                 environment: Fixtures.environment(store: store), progress: { _, _ in })
-        } throws: { ($0 as? Refusal)?.code == .notBackInBridge }
+        } throws: {
+            guard let refusal = $0 as? Refusal, refusal.code == .notBackInBridge else { return false }
+            // A service went, and R20 says so.
+            return refusal.body.hasPrefix("The service is gone, but Thunderbolt Bridge")
+        }
         #expect((try? store.load(port: "en6")) != nil)
+    }
+
+    @Test("R20 on a bare port: the note is kept, and the body never claims a deletion")
+    func keepsTheNoteOnAMissWithoutAService() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let writer = FakeWriter()
+        writer.kernel = { _ in Fixtures.snapshot(Fixtures.standalone) }
+        #expect {
+            try ReturnToBridge(port: Fixtures.port).perform(
+                writer: writer,
+                world: Fixtures.world(ifconfig: Fixtures.standalone, services: [],
+                                      bridges: [Self.thunderboltBridge]),
+                environment: Fixtures.environment(store: store), progress: { _, _ in })
+        } throws: {
+            guard let refusal = $0 as? Refusal, refusal.code == .notBackInBridge else { return false }
+            return refusal.body == """
+                Thunderbolt Bridge isn't listing Back, far left yet. RDMALink has kept \
+                your undo note, so nothing is lost and it can try again whenever you like.
+                """
+        }
+        #expect(!writer.calls.contains { if case .deleteService = $0 { true } else { false } })
+        #expect(try store.load(port: "en6").isReturned)
+        #expect(try Fixtures.environment(store: store).log.entries().isEmpty)
     }
 }
 
@@ -207,6 +355,19 @@ struct OperationsAdoptTests {
             world: Fixtures.world(ifconfig: Fixtures.inOneBridge, services: [Self.readyService]))
         #expect(plan.match != .full)
         #expect(plan.buttonTitles.isEmpty || plan.canAdopt == false)
+    }
+
+    @Test("Stop Managing forgets a return record too")
+    func stopsManagingAReturnedPort() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        try store.save(PortBaseline(
+            bsdName: "en6", receptacle: 1, positionName: "Back, far left",
+            returnedToBridge: BridgeReturn(bsdName: "bridge0", displayName: "Thunderbolt Bridge")))
+        let environment = Fixtures.environment(store: store)
+        _ = try StopManaging(port: Fixtures.port).perform(environment: environment)
+        #expect((try? store.load(port: "en6")) == nil)
+        #expect(try environment.log.entries().last?.kind == .stoppedManaging)
     }
 
     @Test("Stop Managing forgets the note and says exactly that")

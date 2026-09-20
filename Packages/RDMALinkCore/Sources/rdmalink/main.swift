@@ -91,6 +91,15 @@ func list(_ values: [String]) -> String {
     values.isEmpty ? "none" : values.joined(separator: ", ")
 }
 
+/// Where the notes and the change log live: the app's own folder, or the one
+/// `RDMALINK_APPLICATION_SUPPORT` names — so a note or a log can be shown to
+/// the tool without touching the real ones.
+let applicationDirectory = ProcessInfo.processInfo.environment["RDMALINK_APPLICATION_SUPPORT"]
+    .map { URL(fileURLWithPath: $0) } ?? BaselineStore.applicationDirectory
+let notesStore = BaselineStore(
+    directory: applicationDirectory.appending(path: BaselineStore.notesFolderName))
+let changeLog = ChangeLog(url: applicationDirectory.appending(path: ChangeLog.fileName))
+
 func fail(_ message: String) -> Never {
     FileHandle.standardError.write(Data("rdmalink: \(message)\n".utf8))
     exit(1)
@@ -202,7 +211,7 @@ func runRefusals() throws {
         primaryInterfaces: primary
     ))
     report("R14", "The undo note has somewhere to go", Refusals.baselineWritable(
-        BaselineStore.defaultDirectory
+        notesStore.directory
     ))
 
     print("")
@@ -322,7 +331,14 @@ func checklist(_ step: OperationStep, _ state: StepState) {
 }
 
 func environment(_ inventory: Inventory) -> OperationEnvironment {
-    OperationEnvironment(archetype: inventory.model.archetype)
+    OperationEnvironment(archetype: inventory.model.archetype, store: notesStore, log: changeLog)
+}
+
+/// This Mac as the operations see it, with R14 measured against the notes
+/// folder the tool is using.
+func observe(_ ports: [OperationPort], _ inventory: Inventory) throws -> ObservedWorld {
+    try ObservedWorld.read(ports: ports, archetype: inventory.model.archetype,
+                           notesDirectory: notesStore.directory)
 }
 
 /// `setup <bsd…>` — UX_SPEC §S5's review, and §S6's burst behind the flags.
@@ -330,7 +346,7 @@ func runSetUp(_ names: [String]) throws {
     guard !names.isEmpty else { fail("usage: rdmalink setup <bsd> [<bsd>…]") }
     let inventory = try Inventory.read()
     let ports = names.map { operationPort($0, in: inventory) }
-    let world = try ObservedWorld.read(ports: ports, archetype: inventory.model.archetype)
+    let world = try observe(ports, inventory)
     let operation = SetUpPorts(ports: ports)
     let plan = operation.preview(world: world)
 
@@ -380,12 +396,35 @@ func runRestore(_ bsdName: String?) throws {
     guard let bsdName else { fail("usage: rdmalink restore <bsd>") }
     let inventory = try Inventory.read()
     let port = operationPort(bsdName, in: inventory)
-    let world = try ObservedWorld.read(ports: [port], archetype: inventory.model.archetype)
-    let note = try? BaselineStore().load(port: bsdName)
+    let world = try observe([port], inventory)
+    let note = try? notesStore.load(port: bsdName)
     let operation = RestorePort(port: port)
     let plan = operation.preview(note: note, world: world)
 
     print(plan.headline)
+    // What the note on disk says, so a note written by an earlier build is
+    // shown to load — and a return record shown to be one.
+    if let note {
+        let returned = note.returnedToBridge.map { "yes, \($0.name) (\($0.bsdName))" } ?? "no"
+        print("  note: recorded \(note.recordedAt.formatted(.iso8601)) on \(note.systemBuild) · "
+            + "bridges \(list(note.bridges.map(\.bridgeName))) · "
+            + "created service \(note.createdServiceIdentifier ?? "none") · "
+            + (note.isAdopted ? "adopted · " : "")
+            + "return record: \(returned)")
+    }
+    // A return record is not one Restore… lists (§7.5 step 5); the sheet
+    // never reaches this preview for one, so the tool says in its own words
+    // what the note is and which actions apply, and stops.
+    if let returned = plan.returnedToBridge, let note {
+        print("")
+        print("Refusing: \(bsdName)'s note is a return record, not an undo note — Return to "
+            + "Bridge put the port in \(returned.name) (\(returned.bsdName)) on "
+            + "\(note.recordedAt.formatted(.iso8601)) and kept the note so the port can be "
+            + "set up again. There is nothing to restore. Set It Up Again "
+            + "(`rdmalink setup \(bsdName)`) or Forget This Port "
+            + "(`rdmalink stop-managing \(bsdName)`) apply.")
+        return
+    }
     print(plan.body)
     for row in plan.rows { print("  · \(row)") }
     for note in plan.notes { print("  \(note)") }
@@ -412,7 +451,7 @@ func runRestore(_ bsdName: String?) throws {
 /// `restore-all` — every port with a note, one after the other.
 func runRestoreAll() throws {
     let inventory = try Inventory.read()
-    let store = BaselineStore()
+    let store = notesStore
     let names = try store.list()
     guard !names.isEmpty else {
         print("Nothing yet. When RDMALink changes something, it'll be listed here with a way back.")
@@ -446,6 +485,7 @@ func runRestoreAll() throws {
     let outcome = operation.perform(session: session, environment: environment(inventory),
                                     progress: checklist)
     for result in outcome.results { print("  done: \(result.positionName)") }
+    for name in outcome.skipped { print("  (skipped \(name): its note records nothing to put back)") }
     for problem in outcome.unfinished {
         if let refusal = problem.refusal {
             show(refusal)
@@ -463,7 +503,7 @@ func runReturnToBridge(_ bsdName: String?) throws {
     guard let bsdName else { fail("usage: rdmalink return-to-bridge <bsd>") }
     let inventory = try Inventory.read()
     let port = operationPort(bsdName, in: inventory)
-    let world = try ObservedWorld.read(ports: [port], archetype: inventory.model.archetype)
+    let world = try observe([port], inventory)
     let operation = ReturnToBridge(port: port)
     let plan = operation.preview(world: world)
 
@@ -477,7 +517,11 @@ func runReturnToBridge(_ bsdName: String?) throws {
     }
 
     guard plan.canProceed, let bridge = plan.bridgeName else { return }
-    guard confirmedWrite("adds \(bsdName) to \(bridge) and deletes its standalone service")
+    // §7.5 step 2: with no service there is no deletion, and the warning does
+    // not claim one.
+    guard confirmedWrite(plan.serviceID != nil
+        ? "adds \(bsdName) to \(bridge) and deletes its standalone service"
+        : "adds \(bsdName) to \(bridge) (it has no standalone service to delete)")
     else { return }
     let session = try AuthorizedSession.begin(mode: .live)
     defer { session.end() }
@@ -489,12 +533,33 @@ func runReturnToBridge(_ bsdName: String?) throws {
     print("  \(describe(result.agreement))")
 }
 
+/// `changes` — the change log as §S11 reads it: every entry, newest first,
+/// each with the note a later entry left on it. Read-only.
+func runChanges() throws {
+    let log = changeLog
+    let entries = try log.entries()
+    guard !entries.isEmpty else {
+        print("Nothing yet. When RDMALink changes something, it'll be listed here with a way back.")
+        return
+    }
+    for entry in entries.reversed() {
+        print("\(entry.date.formatted(.iso8601)) — \(entry.positionName) (\(entry.port)) "
+            + "· \(entry.kind.rawValue)")
+        print("  \(entry.sentence)")
+        if let later = ChangeLog.answer(to: entry, in: entries) {
+            print("  \(ChangeLog.note(for: entry, answeredBy: later))")
+        }
+    }
+    let unreadable = try log.unreadableLines()
+    if unreadable > 0 { print("(\(unreadable) line\(unreadable == 1 ? "" : "s") could not be read)") }
+}
+
 /// `adopt <bsd>` — UX_SPEC §S9. Writes a note and nothing else.
 func runAdopt(_ bsdName: String?) throws {
     guard let bsdName else { fail("usage: rdmalink adopt <bsd>") }
     let inventory = try Inventory.read()
     let port = operationPort(bsdName, in: inventory)
-    let world = try ObservedWorld.read(ports: [port], archetype: inventory.model.archetype)
+    let world = try observe([port], inventory)
     let operation = AdoptPort(port: port)
     let plan = operation.preview(world: world)
 
@@ -543,8 +608,12 @@ func printUsage() {
       restore <bsd>           put a port back the way it was found
       restore-all             every port with an undo note, one at a time
       return-to-bridge <bsd>  put any standalone port back in Thunderbolt Bridge
+      changes                 the change log, newest first (read-only)
       adopt <bsd>             keep an eye on a port set up by hand (no password)
       stop-managing <bsd>     forget the note, change nothing (no password)
+
+    RDMALINK_APPLICATION_SUPPORT=<dir> reads and writes the notes and the change
+    log under <dir> instead of the app's own folder.
     """)
 }
 
@@ -559,6 +628,7 @@ do {
     case "restore": try runRestore(positional.dropFirst().first)
     case "restore-all": try runRestoreAll()
     case "return-to-bridge": try runReturnToBridge(positional.dropFirst().first)
+    case "changes": try runChanges()
     case "adopt": try runAdopt(positional.dropFirst().first)
     case "stop-managing": try runStopManaging(positional.dropFirst().first)
     case nil, "help", "-h": printUsage()

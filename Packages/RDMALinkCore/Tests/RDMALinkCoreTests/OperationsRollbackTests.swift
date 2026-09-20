@@ -160,6 +160,81 @@ struct OperationsRollbackTests {
         ])
     }
 
+    @Test("A membership the stored list still had is rewritten on the way back, once")
+    func rewritesAtAddTimeDuringRollback() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let writer = FakeWriter()
+        writer.kernel = { _ in Fixtures.snapshot(Fixtures.inOneBridge) }
+        // The first add on the way back finds the port already in the stored
+        // list, as the SPI reports it; the rewrite that follows is the retry.
+        let adds = KernelState()
+        writer.intercept = { call in
+            guard case .addMember = call else { return nil }
+            adds.membersAdded += 1
+            return adds.membersAdded == 1
+                ? BridgeSPIError.alreadyMember(bsdName: "en6", bridge: "bridge0") : nil
+        }
+        #expect {
+            try SetUpPorts(ports: [Fixtures.port]).perform(
+                writer: writer, world: Fixtures.world(ifconfig: Fixtures.inOneBridge),
+                environment: Fixtures.environment(store: store), progress: { _, _ in })
+        } throws: { ($0 as? Refusal)?.code == .rolledBack }
+        // One rewrite at add time, and none from the verification: the kernel
+        // agreed on its first read after it.
+        #expect(writer.calls == [
+            .lock,
+            .removeMember(port: "en6", bridge: "bridge0"),
+            .createService(interface: "en6", name: "RDMA — Back, far left"),
+            .commitAndApply,
+            .deleteService(identifier: "NEW-SERVICE-ID", expecting: "en6"),
+            .commitAndApply,
+            .addMember(port: "en6", bridge: "bridge0", position: 1),
+            .removeMember(port: "en6", bridge: "bridge0"),
+            .commitAndApply,
+            .addMember(port: "en6", bridge: "bridge0", position: 1),
+            .commitAndApply,
+        ])
+        #expect((try? store.load(port: "en6")) != nil)
+    }
+
+    @Test("BridgeRejoin says whether it had to rewrite, and the agreement folds it in")
+    func reportsTheRewrite() throws {
+        let writer = FakeWriter()
+        writer.bridgesValue = [Fixtures.bridge0]  // en5 and en6
+        let membership = BridgeMembership(bridgeName: "bridge0", members: ["en5", "en6"],
+                                          isActive: true)
+        #expect(try BridgeRejoin.add("en6", to: membership, at: 1, writer: writer,
+                                     policy: Fixtures.quickPolicy))
+        #expect(writer.calls == [
+            .addMember(port: "en6", bridge: "bridge0", position: 1),
+            .removeMember(port: "en6", bridge: "bridge0"),
+            .commitAndApply,
+            .addMember(port: "en6", bridge: "bridge0", position: 1),
+        ])
+        let fresh = FakeWriter()
+        fresh.bridgesValue = [BridgeSPI.Membership(bsdName: "bridge0", displayName: nil,
+                                                   members: ["en5"])]
+        #expect(try BridgeRejoin.add("en6", to: membership, at: 1, writer: fresh,
+                                     policy: Fixtures.quickPolicy) == false)
+        #expect(fresh.calls == [.addMember(port: "en6", bridge: "bridge0", position: 1)])
+
+        let settled = KernelAgreement(agreed: true, settledOnItsOwn: true,
+                                      retriedMembership: false, settledAfterRetry: false,
+                                      reads: 1)
+        #expect(settled.foldingRewrite(atAddTime: false) == settled)
+        let folded = settled.foldingRewrite(atAddTime: true)
+        #expect(folded.settledOnItsOwn == false)
+        #expect(folded.retriedMembership)
+        #expect(folded.settledAfterRetry)
+        #expect(folded.reads == 1)
+        let missed = KernelAgreement(agreed: false, settledOnItsOwn: false,
+                                     retriedMembership: true, settledAfterRetry: false,
+                                     reads: 8).foldingRewrite(atAddTime: true)
+        #expect(missed.retriedMembership)
+        #expect(missed.settledAfterRetry == false)
+    }
+
     @Test("Another app holding the network is R12, and nothing is put back")
     func passesBusyStraightThrough() throws {
         let store = Fixtures.store()

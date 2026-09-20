@@ -50,7 +50,7 @@ enum WizardFinder {
 
     /// R14's `Show the Notes Folder`.
     @MainActor
-    static func showNotesFolder(_ directory: URL = BaselineStore.defaultDirectory) {
+    static func showNotesFolder(_ directory: URL = NotesLocation.store.directory) {
         NSWorkspace.shared.activateFileViewerSelecting([directory])
     }
 }
