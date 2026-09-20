@@ -60,19 +60,36 @@ public enum StoredBridges {
     public static let preferencesFileURL = URL(
         fileURLWithPath: "/Library/Preferences/SystemConfiguration/preferences.plist")
 
-    /// The stored bridges, from the SPI when it is there and from the
-    /// preferences file when it is not.
+    /// The stored bridges as the SPI reports them, on a handle that cannot
+    /// write. Throws rather than answering `[]` when the call fails — the
+    /// difference is what makes the fallback below reachable.
+    static func readThroughSPI(clientName: String) throws -> [BridgeSPI.Membership] {
+        guard let preferences = SCPreferencesCreate(nil, clientName as CFString, nil) else {
+            throw NetworkConfigurationError.preferencesUnavailable(SCError())
+        }
+        return try BridgeSPI.bridges(in: preferences)
+    }
+
+    /// The stored bridges, from the SPI when it answers and from the
+    /// preferences file when it does not.
     ///
     /// The SPI is tried first because it is the same object the writes edit;
     /// the file is the fallback that keeps membership a known fact on a macOS
-    /// that has dropped `SCBridgeInterfaceCopyAll` (`docs/ARCHITECTURE.md`,
-    /// rule 5).
+    /// that has dropped `SCBridgeInterfaceCopyAll`, or on which the call
+    /// fails (`docs/ARCHITECTURE.md`, rule 5). Only when **neither** answers
+    /// is the source ``Source/unavailable`` — which is never the same as "no
+    /// bridges", and every caller that could sign something off on the
+    /// strength of an empty list checks for it.
+    ///
+    /// - Parameter spi: how the SPI read is made. `nil` is
+    ///   ``readThroughSPI(clientName:)``; a parameter so the fallback can be
+    ///   exercised on a Mac whose SPI answers perfectly well.
     public static func read(
         clientName: String = "RDMALink",
-        fileURL: URL = preferencesFileURL
+        fileURL: URL = preferencesFileURL,
+        spi: ((String) throws -> [BridgeSPI.Membership])? = nil
     ) -> StoredBridgeReading {
-        if let preferences = SCPreferencesCreate(nil, clientName as CFString, nil),
-           let bridges = try? BridgeSPI.bridges(in: preferences) {
+        if let bridges = try? (spi ?? readThroughSPI(clientName:))(clientName) {
             return StoredBridgeReading(bridges: bridges, source: .bridgeSPI)
         }
         if let data = try? Data(contentsOf: fileURL),

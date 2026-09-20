@@ -81,22 +81,62 @@ struct NetworkStoredBridgeTests {
             Self.plist(["VirtualNetworkInterfaces": ["VLAN": [String: Any]()]])).isEmpty)
     }
 
-    @Test("The fallback reads the file when the SPI is not the source")
-    func readsTheFallbackFile() throws {
+    /// A preferences file in the shape this Mac had, removed afterwards.
+    static func temporaryPreferences() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appending(path: "rdmalink-preferences-\(UUID().uuidString).plist")
-        try Self.plist(Self.thisMacPreferences()).write(to: url)
+        try plist(thisMacPreferences()).write(to: url)
+        return url
+    }
+
+    /// An SPI read that fails the way a dropped symbol or a refused call does.
+    static func failingSPI(_: String) throws -> [BridgeSPI.Membership] {
+        throw BridgeSPIError.symbolMissing("SCBridgeInterfaceCopyAll")
+    }
+
+    @Test("A failed SPI read falls through to the preferences file")
+    func readsTheFallbackFile() throws {
+        let url = try Self.temporaryPreferences()
         defer { try? FileManager.default.removeItem(at: url) }
 
-        // The real read prefers the SPI, which resolves on this Mac, so the
-        // file path is exercised through the parser it delegates to — and the
-        // missing-file case proves the honest answer for "neither answered".
-        let reading = StoredBridges.read(fileURL: url)
-        #expect(reading.source == .bridgeSPI || reading.source == .preferencesFile)
+        // The SPI resolves on every Mac there is today, so the branch that
+        // exists for the one where it does not is driven directly.
+        let reading = StoredBridges.read(fileURL: url, spi: Self.failingSPI)
+        #expect(reading.source == .preferencesFile)
+        #expect(reading.bridges.map(\.bsdName) == ["bridge0"])
+        #expect(reading.bridges[0].displayName == "Thunderbolt Bridge")
+        #expect(reading.names(containing: "en5") == ["bridge0"])
+    }
 
+    @Test("The SPI is preferred while it answers")
+    func prefersTheSPI() throws {
+        let url = try Self.temporaryPreferences()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let reading = StoredBridges.read(fileURL: url, spi: { _ in [Self.storedBridge0] })
+        #expect(reading.source == .bridgeSPI)
+        #expect(reading.bridges == [Self.storedBridge0])
+    }
+
+    @Test("Neither read answering is 'unavailable', which is not 'no bridges'")
+    func saysSoWhenNeitherAnswers() {
         let absent = StoredBridges.read(
-            clientName: "", fileURL: url.appending(path: "does-not-exist"))
-        #expect(absent.source != .preferencesFile)
+            fileURL: URL(fileURLWithPath: "/does-not-exist/preferences.plist"),
+            spi: Self.failingSPI)
+        #expect(absent.source == .unavailable)
+        #expect(absent.bridges.isEmpty)
+        // The distinction the whole design rests on: an empty list from an
+        // answered read is a Mac with no bridges, and this is not that.
+        #expect(StoredBridges.read(spi: { _ in [] }).source == .bridgeSPI)
+    }
+
+    @Test("An SPI read that answers nothing at all is a failure, not an empty Mac")
+    func aFailedCopyAllIsNotAnEmptyList() {
+        // `BridgeSPI.copyAll` throws rather than returning `[]` when the call
+        // fails, which is what makes the fallback above reachable at all. The
+        // error carries the code macOS gave.
+        let error = BridgeSPIError.bridgeListUnreadable(code: 1001)
+        #expect(error.description.contains("would not say what bridges"))
+        #expect(error.description.contains("1001"))
     }
 
     // MARK: - The merge
@@ -145,7 +185,7 @@ struct NetworkStoredBridgeTests {
         let port = ObservedPort(bsdName: "en6", positionName: "Back, far left",
                                 hasLinkedMac: false)
         let kernel = Fixtures.snapshot(Self.kernelHasNoMembers)
-        #expect(Refusals.portStillBridged(port, in: kernel) == nil)
+        #expect(Refusals.portStillBridged(port, in: kernel, storedBridges: []) == nil)
         let refusal = try #require(Refusals.portStillBridged(
             port, in: kernel, storedBridges: [Self.storedBridge0],
             bridgeNames: ["bridge0": "Thunderbolt Bridge"]))
@@ -181,6 +221,52 @@ struct NetworkStoredBridgeTests {
     }
 
     // MARK: - The error configd gives instead of a reason
+
+    @Test("A create refused while only the committed settings claim the port")
+    func namesTheBridgeFromTheCommittedConfiguration() throws {
+        // The shape `SetUpPorts` is in when it gets here: the member has
+        // already been taken out of the session's copy, so only a fresh read
+        // of what is on disk can say why configd refused.
+        let error = StandalonePortSetup.createFailure(
+            bsdName: "en5", code: 1001, session: [], committed: [Self.storedBridge0])
+        guard case let .interfaceIsStoredBridgeMember(bsdName, bridges, code) = error else {
+            Issue.record("expected the stored-member diagnosis, got \(error)")
+            return
+        }
+        #expect(bsdName == "en5")
+        #expect(bridges == ["bridge0"])
+        #expect(code == 1001)
+    }
+
+    @Test("A bridge both stored reads name is named once")
+    func doesNotNameTheBridgeTwice() {
+        let error = StandalonePortSetup.createFailure(
+            bsdName: "en5", code: 1001,
+            session: [Self.storedBridge0], committed: [Self.storedBridge0])
+        #expect(error == .interfaceIsStoredBridgeMember(
+            bsdName: "en5", bridges: ["bridge0"], code: 1001))
+    }
+
+    @Test("A 1001 with nothing claiming the port stays the step that failed")
+    func keepsTheOrdinaryErrorWhenNoBridgeClaimsThePort() {
+        let error = StandalonePortSetup.createFailure(
+            bsdName: "en5", code: 1001, session: [], committed: [])
+        #expect(error.scStatus == 1001)
+        guard case .stepFailed = error else {
+            Issue.record("expected the ordinary failure, got \(error)")
+            return
+        }
+    }
+
+    @Test("Another code is not diagnosed as a bridge membership")
+    func doesNotBlameTheBridgeForOtherCodes() {
+        let error = StandalonePortSetup.createFailure(
+            bsdName: "en5", code: 1003, session: [Self.storedBridge0], committed: [])
+        guard case .stepFailed = error else {
+            Issue.record("expected the ordinary failure, got \(error)")
+            return
+        }
+    }
 
     @Test("A refused create names the bridge that is still holding the port")
     func nameTheBridgeBehindKSCStatusFailed() {

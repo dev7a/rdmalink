@@ -44,11 +44,17 @@ public struct PreflightContext: Sendable, Equatable {
     ///
     /// Call this **inside** the burst, immediately before the write, not once
     /// at preflight — that is the whole point of the type.
+    /// - Parameter storedBridges: the stored bridge configuration, when the
+    ///   caller has already read it. Threaded through rather than read again
+    ///   so everything measured inside one burst — the refusals, the plan and
+    ///   the port rows — is measured against the same stored snapshot.
     public static func read(
         archetype: Archetype,
-        runner: CommandRunner = CommandRunner()
+        runner: CommandRunner = CommandRunner(),
+        storedBridges: StoredBridgeReading? = nil
     ) throws -> PreflightContext {
-        let ports = try Inventory.readPorts(archetype: archetype, runner: runner)
+        let ports = try Inventory.readPorts(archetype: archetype, runner: runner,
+                                            storedBridges: storedBridges)
         let primary = NetworkGlobals.primaryInterfaces()
         return PreflightContext(
             observedPorts: ports.map(\.observed),

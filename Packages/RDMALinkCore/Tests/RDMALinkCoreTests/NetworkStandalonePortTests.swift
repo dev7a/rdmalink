@@ -38,6 +38,13 @@ private func snapshot(_ text: String) -> InterfaceSnapshot {
     InterfaceSnapshot(interfaces: InterfaceSnapshot.parse(text))
 }
 
+/// The stored configuration of a Mac whose two reads agree with this
+/// `ifconfig` text, which is the ordinary state of one. The case they
+/// disagree in is a suite of its own, where it is set out explicitly.
+private func stored(_ text: String) -> [BridgeSPI.Membership] {
+    FakeWriter.mirror(snapshot(text))
+}
+
 private let manualIPv4 = ProtocolConfiguration(isEnabled: true, configMethod: "Manual",
                                                hasManualAddresses: true)
 
@@ -51,7 +58,8 @@ struct StandalonePortPlanTests {
     @Test("A standalone port with nothing on it is ready to go")
     func plansACleanPort() {
         let plan = StandalonePortSetup(port: port)
-            .preview(snapshot: snapshot(standaloneFixture), services: [], context: context())
+            .preview(snapshot: snapshot(standaloneFixture), services: [], context: context(),
+                     storedBridges: stored(standaloneFixture))
         #expect(plan.canProceed)
         #expect(plan.outcome == .setUp)
         #expect(plan.serviceName == "RDMA — Back, far left")
@@ -63,6 +71,7 @@ struct StandalonePortPlanTests {
     func refusesAPortThatIsStillABridgeMember() {
         let plan = StandalonePortSetup(port: port).preview(
             snapshot: snapshot(bridgedFixture), services: [], context: context(),
+            storedBridges: stored(bridgedFixture),
             bridgeNames: ["bridge0": "Thunderbolt Bridge"])
         #expect(!plan.canProceed)
         #expect(plan.outcome == .refused)
@@ -77,7 +86,8 @@ struct StandalonePortPlanTests {
                                            interfaceBSDName: "en6", isEnabled: true,
                                            ipv4: manualIPv4, ipv6: nil)]
         let plan = StandalonePortSetup(port: port)
-            .preview(snapshot: snapshot(standaloneFixture), services: services, context: context())
+            .preview(snapshot: snapshot(standaloneFixture), services: services,
+                     context: context(), storedBridges: stored(standaloneFixture))
         #expect(!plan.canProceed)
         #expect(plan.refusal?.code == .foreignService)
         #expect(plan.refusal?.headline == "This port already has a setup RDMALink didn't make")
@@ -91,7 +101,8 @@ struct StandalonePortPlanTests {
                                            interfaceBSDName: "en6", isEnabled: true,
                                            ipv4: manualIPv4, ipv6: nil)]
         let plan = StandalonePortSetup(port: port)
-            .preview(snapshot: snapshot(bridgedFixture), services: services, context: context())
+            .preview(snapshot: snapshot(bridgedFixture), services: services,
+                     context: context(), storedBridges: stored(bridgedFixture))
         #expect(plan.refusal?.code == .portStillInBridge)
     }
 
@@ -107,7 +118,8 @@ struct StandalonePortPlanTests {
                                  hasLinkedMac: true, bridges: ["bridge0"])
         let plan = StandalonePortSetup(port: left).preview(
             snapshot: snapshot(bridgedFixture), services: [],
-            context: context(ports: [left, right]))
+            context: context(ports: [left, right]),
+            storedBridges: stored(bridgedFixture))
         #expect(!plan.canProceed)
         #expect(plan.refusal?.code == .twoMacsConnected)
     }
@@ -131,7 +143,8 @@ struct StandalonePortPlanTests {
         let both = [ObservedPort(bsdName: "en5", positionName: "Back, far right"), port]
         let plan = StandalonePortSetup(port: port).preview(
             snapshot: snapshot(text), services: [],
-            context: context(ports: both, primary: ["bridge0"]))
+            context: context(ports: both, primary: ["bridge0"]),
+            storedBridges: stored(text))
         #expect(!plan.canProceed)
         #expect(plan.refusal?.code == .onlyRouteIsThunderbolt)
     }
@@ -148,7 +161,8 @@ struct StandalonePortPlanTests {
             ipv6: ProtocolConfiguration(isEnabled: true, configMethod: "LinkLocal",
                                         hasManualAddresses: false))
         let plan = StandalonePortSetup(port: port)
-            .preview(snapshot: snapshot(standaloneFixture), services: [ready], context: context())
+            .preview(snapshot: snapshot(standaloneFixture), services: [ready],
+                     context: context(), storedBridges: stored(standaloneFixture))
         #expect(plan.existing == .readyForRDMA(serviceID: "READY"))
         // The review screen keeps its default button on `canProceed` alone, and
         // `perform` throws for any port that already has a service.
@@ -167,7 +181,8 @@ struct StandalonePortPlanTests {
                                         hasManualAddresses: false),
             ipv6: nil)
         let plan = StandalonePortSetup(port: port)
-            .preview(snapshot: snapshot(standaloneFixture), services: [near], context: context())
+            .preview(snapshot: snapshot(standaloneFixture), services: [near],
+                     context: context(), storedBridges: stored(standaloneFixture))
         #expect(!plan.canProceed)
         #expect(plan.routesToAdopt)
     }

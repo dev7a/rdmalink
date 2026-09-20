@@ -113,9 +113,13 @@ public struct ThunderboltPort: Sendable, Identifiable, Equatable {
         /// here, so a bridge this says is up is one the kernel is really
         /// running traffic through.
         public var isUp: Bool
-        /// Which of the two reads said so. A membership seen only in the
-        /// stored configuration has `isUp == false`, because the kernel is not
-        /// running it — but it still blocks a service on this port.
+        /// Which of the two reads said so.
+        ///
+        /// ``isUp`` stays the kernel's answer about the bridge interface
+        /// itself and is not inferred from this: a bridge the kernel is
+        /// running for other members, while the preferences list this port
+        /// and `ifconfig` does not, is `stored` **and** up. Either way the
+        /// membership blocks a service on this port.
         public var source: Source
 
         /// The kernel name: unique among one port's bridges, because an

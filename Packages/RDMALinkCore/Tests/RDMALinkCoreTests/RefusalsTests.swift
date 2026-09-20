@@ -105,7 +105,8 @@ struct OneCableOnlyTests {
 struct PortStillBridgedTests {
     @Test("A bridge that is down counts exactly as much as one that is up")
     func refusesWhileAMemberOfADownBridge() throws {
-        let refusal = try #require(Refusals.portStillBridged(farLeft, in: snapshot(mixedFixture)))
+        let refusal = try #require(Refusals.portStillBridged(
+            farLeft, in: snapshot(mixedFixture), storedBridges: []))
         #expect(refusal.code == .portStillInBridge)
         #expect(refusal.headline == "macOS wouldn't let go of that port")
         #expect(refusal.detail == "en5 is still a member of bridge0.")
@@ -115,7 +116,7 @@ struct PortStillBridgedTests {
     @Test("The bridge is named the way the rest of the app names it")
     func usesTheDisplayNameWhenThereIsOne() throws {
         let refusal = try #require(Refusals.portStillBridged(
-            farLeft, in: snapshot(mixedFixture),
+            farLeft, in: snapshot(mixedFixture), storedBridges: [],
             bridgeNames: ["bridge0": "Thunderbolt Bridge"]))
         #expect(refusal.body.contains(
             "RDMALink couldn't remove Back, far left from Thunderbolt Bridge"))
@@ -128,7 +129,8 @@ struct PortStillBridgedTests {
         bridge1: flags=8822<BROADCAST,SMART,SIMPLEX,MULTICAST> mtu 1500
             member: en5 flags=3<LEARNING,DISCOVER>
         """
-        let refusal = try #require(Refusals.portStillBridged(farLeft, in: snapshot(text)))
+        let refusal = try #require(Refusals.portStillBridged(
+            farLeft, in: snapshot(text), storedBridges: []))
         #expect(refusal.detail == "en5 is still a member of bridge0 and bridge1.")
     }
 
@@ -138,7 +140,7 @@ struct PortStillBridgedTests {
         en5: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
             status: active
         """
-        #expect(Refusals.portStillBridged(farLeft, in: snapshot(text)) == nil)
+        #expect(Refusals.portStillBridged(farLeft, in: snapshot(text), storedBridges: []) == nil)
     }
 }
 

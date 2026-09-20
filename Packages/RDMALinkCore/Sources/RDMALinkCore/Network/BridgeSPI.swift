@@ -62,6 +62,11 @@ public enum BridgeSPIError: Error, Sendable, Equatable, CustomStringConvertible 
     /// "no members": rewriting a member list from an empty read would evict
     /// every other member of someone else's bridge.
     case memberListUnreadable(String)
+    /// The SPI would not say what bridges there are. Never treated as "there
+    /// are none": a port a bridge still claims is a port no service can be
+    /// created on, so a failed read has to fall through to the other way of
+    /// reading it rather than answer an empty list.
+    case bridgeListUnreadable(code: Int32)
     /// The bridge that answered to the note's identifier or name is carrying
     /// members the note never saw, so it is not the bridge the note is about.
     case notTheRecordedBridge(bridge: String, members: [String], recorded: [String])
@@ -81,6 +86,9 @@ public enum BridgeSPIError: Error, Sendable, Equatable, CustomStringConvertible 
             return "No network interface named \(name)"
         case let .memberListUnreadable(name):
             return "macOS would not say which interfaces are members of \(name)"
+        case let .bridgeListUnreadable(code):
+            return "macOS would not say what bridges the configuration has "
+                + "(\(code) \(NetworkConfigurationError.message(code)))"
         case let .notTheRecordedBridge(bridge, members, recorded):
             return "\(bridge) has members \(members.joined(separator: ", ")), "
                 + "which is not the bridge recorded with \(recorded.joined(separator: ", "))"
@@ -204,7 +212,12 @@ public enum BridgeSPI {
     /// probe from the configuration push — gate on ``BridgeSPIAvailability/canReadActiveBridges``.
     public static func activeBridges() throws -> [Membership] {
         let call = unsafeBitCast(try symbol("_SCBridgeInterfaceCopyActive"), to: CopyActive.self)
-        let bridges = call()?.takeRetainedValue() as? [SCBridgeInterfaceRef] ?? []
+        // Same distinction as `copyAll`: a NULL is a call that failed, not a
+        // Mac with no live bridges.
+        guard let value = call()?.takeRetainedValue(),
+              let bridges = value as? [SCBridgeInterfaceRef] else {
+            throw BridgeSPIError.bridgeListUnreadable(code: SCError())
+        }
         return try bridges.map(describe)
     }
 
@@ -397,10 +410,24 @@ public enum BridgeSPI {
 
     // MARK: - Plumbing
 
+    /// Every bridge the configuration has, or the reason macOS would not say.
+    ///
+    /// Never `[]` on failure, for the same reason ``memberInterfaces(of:)`` is
+    /// not: "the call failed" and "there are no bridges" are different facts,
+    /// and only one of them means a port is free. An empty `CFArray` is the
+    /// second and comes back as an empty list; a NULL is the first and throws,
+    /// so ``StoredBridges/read(clientName:fileURL:spi:)`` falls through to the
+    /// preferences file instead of reporting a Mac with no bridges.
     private static func copyAll(in preferences: SCPreferences) throws -> [SCBridgeInterfaceRef] {
         let call = unsafeBitCast(try symbol("SCBridgeInterfaceCopyAll"),
                                  to: CopyFromPreferences.self)
-        return call(preferences)?.takeRetainedValue() as? [SCBridgeInterfaceRef] ?? []
+        guard let value = call(preferences)?.takeRetainedValue() else {
+            throw BridgeSPIError.bridgeListUnreadable(code: SCError())
+        }
+        guard let bridges = value as? [SCBridgeInterfaceRef] else {
+            throw BridgeSPIError.bridgeListUnreadable(code: SCError())
+        }
+        return bridges
     }
 
     /// A bridge's members, or the reason macOS would not say.

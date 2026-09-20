@@ -25,8 +25,6 @@ public struct ObservedWorld: Sendable {
     /// `SCNetworkServiceCreate` refuses with `kSCStatusFailed`: configd will
     /// not put a service on an interface a stored bridge still claims.
     public var bridges: [BridgeSPI.Membership]
-    /// Which read answered for ``bridges``, so a diagnostic can name it.
-    public var bridgeSource: StoredBridgeReading.Source
     /// R1 and R5, which no single port can see.
     public var context: PreflightContext
     /// The RDMA switch, for S5's warning row. Not RDMALink's to change.
@@ -41,7 +39,6 @@ public struct ObservedWorld: Sendable {
         services: [NetworkServiceInfo],
         serviceOrder: [String] = [],
         bridges: [BridgeSPI.Membership] = [],
-        bridgeSource: StoredBridgeReading.Source = .bridgeSPI,
         context: PreflightContext,
         rdma: RDMAStatus = .unknown,
         mountedVolumes: [MountedVolume] = [],
@@ -51,7 +48,6 @@ public struct ObservedWorld: Sendable {
         self.services = services
         self.serviceOrder = serviceOrder
         self.bridges = bridges
-        self.bridgeSource = bridgeSource
         self.context = context
         self.rdma = rdma
         self.mountedVolumes = mountedVolumes
@@ -80,8 +76,8 @@ public struct ObservedWorld: Sendable {
             services: NetworkServices.read(from: preferences),
             serviceOrder: NetworkServices.serviceOrder(in: preferences),
             bridges: stored.bridges,
-            bridgeSource: stored.source,
-            context: try PreflightContext.read(archetype: archetype, runner: runner),
+            context: try PreflightContext.read(archetype: archetype, runner: runner,
+                                               storedBridges: stored),
             rdma: RDMAStatus.read(runner: runner),
             mountedVolumes: (try? MountedVolumes.over(ports, runner: runner)) ?? [],
             notesAreWritable: Refusals.baselineWritable(notesDirectory))
@@ -100,17 +96,16 @@ public struct ObservedWorld: Sendable {
         // edit — and the world-readable preferences file when the SPI refuses,
         // because a burst that read "no bridges" from a failure would plan no
         // removal and then fail at `SCNetworkServiceCreate`.
-        var stored = (try? writer.bridges()).map {
+        let stored = (try? writer.bridges()).map {
             StoredBridgeReading(bridges: $0, source: .bridgeSPI)
-        }
-        if stored == nil { stored = StoredBridges.read() }
+        } ?? StoredBridges.read()
         return ObservedWorld(
             snapshot: try writer.readKernel(),
             services: try writer.services(),
             serviceOrder: try writer.serviceOrder(),
-            bridges: stored?.bridges ?? [],
-            bridgeSource: stored?.source ?? .unavailable,
-            context: try PreflightContext.read(archetype: archetype, runner: runner),
+            bridges: stored.bridges,
+            context: try PreflightContext.read(archetype: archetype, runner: runner,
+                                               storedBridges: stored),
             rdma: RDMAStatus.read(runner: runner),
             mountedVolumes: (try? MountedVolumes.over(ports, runner: runner)) ?? [],
             notesAreWritable: Refusals.baselineWritable(notesDirectory))

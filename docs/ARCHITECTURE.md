@@ -57,9 +57,10 @@ geometry reference for the real model.
 - Kernel bridge membership is visible in `ifconfig` output (`member:` lines
   under `bridgeN`; `ifconfig -a` and `ifconfig bridge0` both print them). A
   port must be out of every bridge, even an inactive one. The kernel list can
-  change under the app: on 2026-09-20 `bridge0` had no members when the first
-  write failed and listed `en5` again twenty minutes later, with nothing
-  written by RDMALink in between.
+  change without RDMALink writing anything: when the first real write failed
+  on 2026-09-20 the app's own read showed `bridge0` with no members at all,
+  and twenty minutes later `ifconfig` listed `en5` in it again — no membership
+  write had been committed in between.
 - Two Thunderbolt cables between the same pair of Macs loop only when a
   bridge forwards between them, so R1 counts a linked Mac only through a
   bridge: it fires when two ports with a Mac on the end share a bridge. Two

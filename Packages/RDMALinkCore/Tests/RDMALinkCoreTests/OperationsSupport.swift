@@ -53,13 +53,17 @@ final class FakeWriter: NetworkWriter {
     /// write below edits this copy — exactly as the bridge SPI edits an open
     /// `SCPreferences`.
     ///
-    /// A test that does not set one gets a mirror of the kernel's first read,
-    /// which is the ordinary state of a Mac: the two agree. Set it explicitly
-    /// to make them disagree, which is the state this whole seam exists for.
+    /// A test that does not set one gets a mirror of the kernel as it is at
+    /// **read zero**, which is the ordinary state of a Mac: the two agree. The
+    /// kernel closure is asked with a fresh ``KernelState`` and the writer's
+    /// own read counter is left alone, so the value does not depend on when it
+    /// is first touched — a test whose kernel varies by read count gets the
+    /// same stored configuration either way. Set it explicitly to make the two
+    /// disagree, which is the state this whole seam exists for.
     var bridgesValue: [BridgeSPI.Membership] {
         get {
             if let sessionBridges { return sessionBridges }
-            let mirrored = FakeWriter.mirror(kernel(state))
+            let mirrored = FakeWriter.mirror(kernel(KernelState()))
             sessionBridges = mirrored
             return mirrored
         }

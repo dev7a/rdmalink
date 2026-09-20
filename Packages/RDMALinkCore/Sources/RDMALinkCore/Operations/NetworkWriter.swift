@@ -93,7 +93,11 @@ final class LiveNetworkWriter: NetworkWriter {
         let reading = StoredBridges.read()
         // An unreadable configuration is not an empty one, and the difference
         // is the whole point here: `[]` would read as "the port is out of
-        // every bridge" and sign off a removal nobody observed.
+        // every bridge" and sign off a removal nobody observed. The two reads
+        // underneath keep the distinction rather than flatten it — a failed
+        // `SCBridgeInterfaceCopyAll` throws instead of answering `[]`, and the
+        // preferences file is tried next — so `.unavailable` really does mean
+        // neither of them answered.
         guard reading.source != .unavailable else {
             throw NetworkConfigurationError.missing("the stored bridge configuration")
         }

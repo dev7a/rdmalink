@@ -90,7 +90,7 @@ public enum Refusals {
     public static func portStillBridged(
         _ port: ObservedPort,
         in snapshot: InterfaceSnapshot,
-        storedBridges: [BridgeSPI.Membership] = [],
+        storedBridges: [BridgeSPI.Membership],
         bridgeNames: [String: String] = [:]
     ) -> Refusal? {
         let kernel = snapshot.bridges(containing: port.bsdName)

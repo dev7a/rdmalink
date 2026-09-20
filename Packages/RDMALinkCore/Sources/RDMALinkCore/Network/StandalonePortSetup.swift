@@ -143,7 +143,7 @@ public struct StandalonePortSetup: Sendable {
         snapshot: InterfaceSnapshot,
         services: [NetworkServiceInfo],
         context: PreflightContext,
-        storedBridges: [BridgeSPI.Membership] = [],
+        storedBridges: [BridgeSPI.Membership],
         bridgeNames: [String: String] = [:]
     ) -> StandalonePortPlan {
         let bridges = Self.bridges(of: port.bsdName, snapshot: snapshot, stored: storedBridges)
@@ -188,7 +188,7 @@ public struct StandalonePortSetup: Sendable {
         snapshot: InterfaceSnapshot,
         services: [NetworkServiceInfo],
         context: PreflightContext,
-        storedBridges: [BridgeSPI.Membership] = [],
+        storedBridges: [BridgeSPI.Membership],
         bridgeNames: [String: String] = [:]
     ) -> Refusal? {
         if let refusal = Refusals.oneCableOnly(context.observedPorts) { return refusal }
@@ -324,6 +324,33 @@ public struct StandalonePortSetup: Sendable {
     /// rather than off what was asked for — Restore compares the live service
     /// against it, so it has to be what a freshly-made RDMA service looks like
     /// on this build, not what RDMALink intended.
+    /// The error a refused `SCNetworkServiceCreate` deserves.
+    ///
+    /// configd answers with a bare `kSCStatusFailed`, whose `SCErrorString` is
+    /// the single word "Failed!", when the interface is still a member of a
+    /// bridge in the stored configuration — by far the likeliest reason to be
+    /// here, and one the caller can act on. Either stored list naming the port
+    /// is enough to say so: the session's copy is what the call was made
+    /// against, and the committed one is what a fresh handle — and the next
+    /// process — would see.
+    static func createFailure(
+        bsdName: String,
+        code: Int32,
+        session: [BridgeSPI.Membership],
+        committed: [BridgeSPI.Membership]
+    ) -> NetworkConfigurationError {
+        let inSession = StoredBridges.names(in: session, containing: bsdName)
+        let inCommitted = StoredBridges.names(in: committed, containing: bsdName)
+        let claiming = inSession + inCommitted.filter { !inSession.contains($0) }
+        if code == kSCStatusFailed, !claiming.isEmpty {
+            return .interfaceIsStoredBridgeMember(
+                bsdName: bsdName, bridges: claiming, code: code)
+        }
+        return .stepFailed(
+            step: "Create the RDMA service", code: code,
+            message: NetworkConfigurationError.message(code))
+    }
+
     static func createService(
         bsdName: String,
         named name: String,
@@ -340,22 +367,15 @@ public struct StandalonePortSetup: Sendable {
             throw NetworkConfigurationError.missing("the interface \(bsdName)")
         }
         guard let service = SCNetworkServiceCreate(preferences, interface) else {
-            let code = SCError()
-            // configd refuses — with a bare `kSCStatusFailed`, which says
-            // nothing — to put a service on an interface a stored bridge still
-            // claims. That is the single most likely reason to be here, and
-            // the caller is entitled to be told which bridge rather than
-            // "Failed!".
-            let stored = (try? BridgeSPI.bridges(in: preferences))
-                ?? StoredBridges.read().bridges
-            let claiming = StoredBridges.names(in: stored, containing: bsdName)
-            if code == kSCStatusFailed, !claiming.isEmpty {
-                throw NetworkConfigurationError.interfaceIsStoredBridgeMember(
-                    bsdName: bsdName, bridges: claiming, code: code)
-            }
-            throw NetworkConfigurationError.stepFailed(
-                step: "Create the RDMA service", code: code,
-                message: NetworkConfigurationError.message(code))
+            throw createFailure(
+                bsdName: bsdName, code: SCError(),
+                // Both stored lists, because they answer different questions.
+                // The session's is the one this call was made against; the
+                // committed one is what is on disk, and a burst that has
+                // already removed the member from its session copy would find
+                // nothing in it.
+                session: (try? BridgeSPI.bridges(in: preferences)) ?? [],
+                committed: StoredBridges.read().bridges)
         }
         try session.check(SCNetworkServiceEstablishDefaultConfiguration(service),
                           "Create the RDMA service")
