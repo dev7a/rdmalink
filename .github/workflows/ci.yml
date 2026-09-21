@@ -1,0 +1,63 @@
+name: CI
+
+# The whole gate on every change: the Core package's tests, the two
+# script-compiled suites, the app target, the release machinery, and the
+# shell the release runs on.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    # macOS 27 with Xcode 27.0 (27A266a): the Core package declares
+    # .macOS("27.0") and the app's deployment target is 27.0, so nothing here
+    # builds on an older image. `xcode-27` is a preview image — when it is
+    # withdrawn or renamed, this label is the one line to change.
+    runs-on: xcode-27
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Show the toolchain
+        run: |
+          set -euo pipefail
+          # Apple silicon only: the app is built and shipped arm64 only.
+          test "$(uname -m)" = arm64
+          sw_vers
+          xcodebuild -version
+          swift --version
+      - name: Run the test gate
+        # script/test.sh is the same gate a developer runs: swift build and
+        # test, the stage and presentation suites, the release-script tests,
+        # and a Debug build of the app (ad-hoc signed, so no identity is
+        # needed). It writes only inside the checkout.
+        run: |
+          set -euo pipefail
+          script/test.sh
+      - name: Check the shell the release runs on
+        run: |
+          set -euo pipefail
+          for script in script/*.sh script/release/*.sh; do
+            bash -n "$script"
+          done
+          shellcheck script/*.sh script/release/*.sh
+      - name: Run the release-script tests
+        # Also run inside script/test.sh; kept here so a reader of the CI log
+        # sees the release machinery checked by name.
+        run: |
+          set -euo pipefail
+          python3 script/release/test_release.py
+          python3 script/release/test_release_tag.py
+          python3 script/release/test_receipt.py

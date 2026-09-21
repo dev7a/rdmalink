@@ -12,6 +12,18 @@
 # app is submitted to Apple first and stapled, so it carries its own ticket
 # once dragged to Applications; then the image is submitted and stapled too.
 # Both submissions use the notarytool Keychain profile named below.
+#
+# Two things change when the environment says this is a release run, and
+# nothing else does:
+#
+#   * NOTARY_KEY_PATH, APPLE_API_KEY_ID and APPLE_API_ISSUER_ID together make
+#     notarytool authenticate with an App Store Connect API key instead of the
+#     Keychain profile, which is what a GitHub runner has (dev7a/lnpctl
+#     tools/release/package.sh does the same).
+#   * RELEASE_TAG, RELEASE_SHA and RELEASE_TAG_OBJECT — the tag the release
+#     workflow verified — make the script check that it is building exactly
+#     that source, and then write dist/release-assets/ with the image,
+#     SHA256SUMS over its stapled bytes and release.json, the receipt.
 set -euo pipefail
 
 NOTARIZE=0
@@ -88,7 +100,7 @@ IDENTITY_LINES="$(/usr/bin/security find-identity -v -p codesigning |
 IDENTITY_COUNT="$(printf '%s\n' "$IDENTITY_LINES" |
   /usr/bin/awk 'NF { n++ } END { print n + 0 }')"
 if (( IDENTITY_COUNT == 0 )); then
-  fail "No valid Developer ID Application identity for team $TEAM_ID is in the Keychain." 3
+  fail "No valid Developer ID Application identity for team $TEAM_ID is in the Keychain (on a runner: the imported .p12 is missing or the temporary keychain is not in the search list)." 3
 fi
 if (( IDENTITY_COUNT > 1 )); then
   fail "More than one Developer ID Application identity for team $TEAM_ID is in the Keychain; remove the stale one." 3
@@ -107,11 +119,68 @@ for value in "$VERSION" "$BUILD_NUMBER"; do
     fail "App/Info.plist has a missing or unsafe version value: '$value'" 2
 done
 
-# --- notary profile (--notarize only) -------------------------------------
-# Checked before the two-minute build so a missing profile fails at once.
+MINIMUM_SYSTEM_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$SOURCE_PLIST")"
+[[ "$MINIMUM_SYSTEM_VERSION" =~ ^[0-9]+(\.[0-9]+)*$ ]] ||
+  fail "App/Info.plist has a missing or unsafe LSMinimumSystemVersion: '$MINIMUM_SYSTEM_VERSION'" 2
+
+# --- notarytool credentials ------------------------------------------------
+# A Keychain profile on a Mac someone is sitting at; an App Store Connect API
+# key on a runner, where there is no Keychain profile to store. All three key
+# variables must arrive together: a partial set would otherwise fall back to
+# the profile and sign a release with whatever credentials the machine holds.
+NOTARY_CREDENTIALS=(--keychain-profile "$NOTARY_PROFILE")
+NOTARY_KEY_SET=0
+for value in "${NOTARY_KEY_PATH:-}" "${APPLE_API_KEY_ID:-}" "${APPLE_API_ISSUER_ID:-}"; do
+  [[ -z "$value" ]] || NOTARY_KEY_SET=$((NOTARY_KEY_SET + 1))
+done
+if (( NOTARY_KEY_SET == 3 )); then
+  NOTARY_CREDENTIALS=(
+    --key "$NOTARY_KEY_PATH"
+    --key-id "$APPLE_API_KEY_ID"
+    --issuer "$APPLE_API_ISSUER_ID"
+  )
+elif (( NOTARY_KEY_SET > 0 )); then
+  fail "Set NOTARY_KEY_PATH, APPLE_API_KEY_ID and APPLE_API_ISSUER_ID together, or none of them." 2
+fi
+
+# The team is pinned in this script; a workflow variable may only agree with it.
+if [[ -n "${APPLE_TEAM_ID:-}" && "${APPLE_TEAM_ID:-}" != "$TEAM_ID" ]]; then
+  fail "APPLE_TEAM_ID is '$APPLE_TEAM_ID' but this app is signed by team $TEAM_ID." 2
+fi
+
+# --- release source (release runs only) ------------------------------------
+# The workflow has already verified the signed tag, that its commit is an
+# ancestor of main, and that the push was for that commit; what is checked
+# here is that this working tree is that commit and carries that version.
+RELEASE_MODE=0
+if [[ -n "${RELEASE_TAG:-}${RELEASE_SHA:-}${RELEASE_TAG_OBJECT:-}" ]]; then
+  : "${RELEASE_TAG:?Set RELEASE_TAG, RELEASE_SHA and RELEASE_TAG_OBJECT together}"
+  : "${RELEASE_SHA:?Set RELEASE_TAG, RELEASE_SHA and RELEASE_TAG_OBJECT together}"
+  : "${RELEASE_TAG_OBJECT:?Set RELEASE_TAG, RELEASE_SHA and RELEASE_TAG_OBJECT together}"
+  RELEASE_MODE=1
+  (( NOTARIZE )) ||
+    fail "A release run must notarize: pass --notarize." 2
+  [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    fail "Not a release tag: $RELEASE_TAG" 2
+  [[ "$RELEASE_TAG" == "v$VERSION" ]] ||
+    fail "Tag $RELEASE_TAG does not name App/Info.plist's version $VERSION." 2
+  [[ "$RELEASE_TAG_OBJECT" =~ ^[0-9a-f]{40}$ ]] ||
+    fail "Not a tag object hash: $RELEASE_TAG_OBJECT" 2
+  HEAD_SHA="$(/usr/bin/git -C "$ROOT_DIR" rev-parse HEAD)"
+  [[ "$HEAD_SHA" == "$RELEASE_SHA" ]] ||
+    fail "HEAD is $HEAD_SHA but the release is for $RELEASE_SHA." 2
+fi
+
+# --- notary credentials work (--notarize only) -----------------------------
+# Checked before the two-minute build so missing credentials fail at once.
 if (( NOTARIZE )); then
-  /usr/bin/xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1 ||
-    fail "No notarytool Keychain profile named '$NOTARY_PROFILE'. Create it with: xcrun notarytool store-credentials $NOTARY_PROFILE --apple-id <id> --team-id $TEAM_ID" 3
+  if (( NOTARY_KEY_SET == 3 )); then
+    [[ -s "$NOTARY_KEY_PATH" ]] ||
+      fail "No App Store Connect API key at NOTARY_KEY_PATH ('$NOTARY_KEY_PATH')." 3
+  else
+    /usr/bin/xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1 ||
+      fail "No notarytool Keychain profile named '$NOTARY_PROFILE'. Create it with: xcrun notarytool store-credentials $NOTARY_PROFILE --apple-id <id> --team-id $TEAM_ID" 3
+  fi
 fi
 
 # --- archive and export ----------------------------------------------------
@@ -236,13 +305,18 @@ APP_CDHASH="$(printf '%s\n' "$APP_DETAILS" | /usr/bin/awk -F= '/^CDHash=/ { prin
 # The app is notarized on its own and stapled before it goes into the image,
 # so the copy the person drags to Applications carries its ticket and opens
 # offline. Apple dedupes submissions by content: rerunning is safe.
+# NOTARY_RESULT_JSON is where the accepted submission's own words are left,
+# for the release receipt to quote.
+NOTARY_RESULT_JSON=""
+NOTARY_APP_JSON=""
+NOTARY_IMAGE_JSON=""
 notarize() {
   local artefact="$1"
   local artefact_name submit_plist submission_id submission_status notary_log
   artefact_name="$(/usr/bin/basename "$artefact")"
   submit_plist="$WORK_DIR/notary-$artefact_name.plist"
   /usr/bin/xcrun notarytool submit "$artefact" \
-    --keychain-profile "$NOTARY_PROFILE" \
+    "${NOTARY_CREDENTIALS[@]}" \
     --wait --output-format plist >"$submit_plist"
   submission_id="$(/usr/bin/plutil -extract id raw -o - "$submit_plist")"
   submission_status="$(/usr/bin/plutil -extract status raw -o - "$submit_plist")"
@@ -250,10 +324,12 @@ notarize() {
     /bin/mkdir -p "$DIST_DIR"
     notary_log="$DIST_DIR/notary-$submission_id.json"
     /usr/bin/xcrun notarytool log "$submission_id" \
-      --keychain-profile "$NOTARY_PROFILE" "$notary_log" ||
+      "${NOTARY_CREDENTIALS[@]}" "$notary_log" ||
       echo "could not fetch the notary log for $submission_id" >&2
     fail "Notarization of $artefact_name ended as $submission_status (submission $submission_id); see $notary_log"
   fi
+  NOTARY_RESULT_JSON="$WORK_DIR/notary-$artefact_name.json"
+  /usr/bin/plutil -convert json -o "$NOTARY_RESULT_JSON" "$submit_plist"
   echo "notarization accepted: $artefact_name (submission $submission_id)"
 }
 
@@ -261,6 +337,7 @@ if (( NOTARIZE )); then
   APP_ZIP="$WORK_DIR/RDMALink.zip"
   /usr/bin/ditto -c -k --keepParent "$APP_BUNDLE" "$APP_ZIP"
   notarize "$APP_ZIP"
+  NOTARY_APP_JSON="$NOTARY_RESULT_JSON"
   /usr/bin/xcrun stapler staple "$APP_BUNDLE"
   /usr/bin/xcrun stapler validate "$APP_BUNDLE"
 fi
@@ -312,6 +389,7 @@ IMAGE_ATTACHED=0
 # --- notarize the image (--notarize only) ----------------------------------
 if (( NOTARIZE )); then
   notarize "$TEMP_DMG"
+  NOTARY_IMAGE_JSON="$NOTARY_RESULT_JSON"
   /usr/bin/xcrun stapler staple "$TEMP_DMG"
   /usr/bin/xcrun stapler validate "$TEMP_DMG"
   DMG_ASSESSMENT="$(/usr/sbin/spctl --assess --type open \
@@ -339,6 +417,29 @@ fi
 [[ ! -e "$OUTPUT_DMG" ]] || /bin/rm "$OUTPUT_DMG"
 /bin/mv "$TEMP_DMG" "$OUTPUT_DMG"
 /usr/bin/codesign --verify --verbose=2 "$OUTPUT_DMG"
+
+# --- release assets (release runs only) ------------------------------------
+# What the workflow uploads: the image the release ships, the sum over its
+# final stapled bytes and the receipt that says where it came from. The
+# directory is rebuilt from scratch so no file from an earlier run can ride
+# along (dev7a/lnpctl builds its assets directory the same way).
+if (( RELEASE_MODE )); then
+  ASSETS_DIR="$DIST_DIR/release-assets"
+  [[ ! -e "$ASSETS_DIR" ]] || /bin/rm -r "$ASSETS_DIR"
+  /bin/mkdir -p "$ASSETS_DIR"
+  /bin/cp "$OUTPUT_DMG" "$ASSETS_DIR/RDMALink-$VERSION.dmg"
+  # `env` rather than an assignment prefix: the prefix would hide the values
+  # this command line itself reads (shellcheck SC2097).
+  /usr/bin/env \
+    VERSION="$VERSION" \
+    BUILD_NUMBER="$BUILD_NUMBER" \
+    TEAM_ID="$TEAM_ID" \
+    BUNDLE_IDENTIFIER="$BUNDLE_IDENTIFIER" \
+    MINIMUM_MACOS="$MINIMUM_SYSTEM_VERSION" \
+    NOTARY_APP_JSON="$NOTARY_APP_JSON" \
+    NOTARY_IMAGE_JSON="$NOTARY_IMAGE_JSON" \
+    "$ROOT_DIR/script/release/receipt.sh" "$ASSETS_DIR" "RDMALink-$VERSION.dmg"
+fi
 
 DMG_SIZE="$(/usr/bin/stat -f %z "$OUTPUT_DMG")"
 DMG_SHA256="$(/usr/bin/shasum -a 256 "$OUTPUT_DMG" | /usr/bin/awk '{ print $1 }')"

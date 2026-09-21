@@ -254,6 +254,138 @@ before it goes into the image, submits and staples the image too, assesses
 both with `spctl` (`source=Notarized Developer ID` required) and writes
 `dist/RDMALink-<version>.dmg`, the file a release ships.
 
+The same script runs the release on a GitHub runner, where two things in the
+environment change what it does and nothing else does. `NOTARY_KEY_PATH`,
+`APPLE_API_KEY_ID` and `APPLE_API_ISSUER_ID` — all three or none — make
+`notarytool` authenticate with an App Store Connect API key instead of the
+`rotorfs` Keychain profile. `RELEASE_TAG`, `RELEASE_SHA` and
+`RELEASE_TAG_OBJECT` make it a release run: it checks that `HEAD` is that
+commit and that the tag names `App/Info.plist`'s version, and, after the
+image is stapled and assessed, calls `script/release/receipt.sh` to write
+`dist/release-assets/` with the image, `SHA256SUMS` over its stapled bytes
+and `release.json`. `release.json` records the tag, commit and tag object,
+version and build, architecture and minimum macOS, team and bundle
+identifier, both notarization results and the Xcode version.
+
+## Continuous integration and releases
+
+Two workflows, both with `permissions: {}` at the top and job-level scopes
+only. Every third-party action is pinned to a commit hash with its tag in a
+comment, and every checkout uses `persist-credentials: false`, so no job
+keeps a usable token in `.git/config`. Both macOS jobs run on GitHub's
+`xcode-27` preview image (macOS 27.0, Xcode 27.0 build 27A266a): the Core
+package declares `.macOS("27.0")` and the app's deployment target is 27.0, so
+nothing here builds on an older image. The label is a preview one and is
+listed in `.github/actionlint.yaml` so `actionlint` recognizes it.
+
+`.github/workflows/ci.yml` runs on pushes to `main`, on pull requests and on
+demand, one job, `contents: read`: `script/test.sh` (the same gate a
+developer runs), then `bash -n` and `shellcheck` over `script/*.sh` and
+`script/release/*.sh`, then the three release-script tests. The app builds
+Debug, which is ad-hoc signed, so CI needs no identity and no secret.
+
+`.github/workflows/release.yml` is the tag-driven release. The event flow:
+
+1. **Event** — a push of a tag matching `v*`, or a manual run naming an
+   existing tag, which is allowed only from `main` (where the approval keys
+   live).
+2. **preflight** (`ubuntu-24.04`, `contents: read`) checks out the full
+   history at the pushed ref, reads `script/release/trusted-signers.asc` from
+   `refs/remotes/origin/main` — never from the tag's own contents, or a tag
+   could approve itself — and runs `script/release/verify-tag.sh`, which
+   imports those keys into a throwaway `GNUPGHOME` so no other key on the
+   runner can authorize a release. The tag must be annotated, signed by an
+   approved key, and match `^v[0-9]+\.[0-9]+\.[0-9]+$`; its commit must be an
+   ancestor of `main`; on a push the commit must equal `github.sha`; and
+   `CFBundleShortVersionString` in `App/Info.plist` *at that commit* must
+   equal the tag without its `v`. The job outputs the tag, the commit and the
+   tag object hash. Nothing moving is carried forward: later jobs check out
+   the commit, not the tag or a branch.
+3. **notarize** (`xcode-27`, `contents: read`, environment `release`) checks
+   out that commit, runs `script/test.sh` before any credential exists on the
+   runner (the workflow never consults CI's verdict on `main`, so the gate is
+   its own step, as lnpctl's `make test` is), imports the Developer ID certificate into a temporary
+   keychain whose password is random and masked, decodes the App Store
+   Connect key to `$RUNNER_TEMP/notary-key.p8`, and asserts that the imported
+   keychain really holds a Developer ID Application identity for
+   `BV5XC39R5P` — there is no signing-identity variable, because
+   `script/package_dmg.sh` finds the one identity for the team and pins its
+   SHA-1. The script then runs with `--notarize`; `NOTARY_KEY_PATH`,
+   `APPLE_API_KEY_ID` and `APPLE_API_ISSUER_ID` together switch `notarytool`
+   from the local Keychain profile to that API key, and `RELEASE_TAG`,
+   `RELEASE_SHA` and `RELEASE_TAG_OBJECT` make it assert that `HEAD` is the
+   release commit and the tag names the version it is about to build. After
+   the image is stapled and assessed it writes `dist/release-assets/` — the
+   DMG, `SHA256SUMS` over the stapled bytes and `release.json`, the receipt
+   (`script/release/receipt.sh`). The directory is uploaded as an artifact
+   named for the run and the attempt. An `always()` step deletes the keychain
+   and both key files whatever happened.
+4. **publish** (`ubuntu-24.04`, `contents: write` — the only writable token
+   in either workflow) checks out the same commit, downloads *this* run and
+   attempt's artifact, and runs `script/release/publish.sh`.
+5. **Result** — a published release at `v<version>` carrying the DMG,
+   `SHA256SUMS` and `release.json`.
+
+What is pinned and what moves: the actions are pinned by commit hash, the
+tag's object hash and commit are pinned by preflight and rechecked on GitHub
+before and after the upload, and the artifact name carries the run and
+attempt. What moves — `main`, the tag ref on GitHub, the `xcode-27` image —
+is either checked against the pinned value or, in the image's case, the one
+deliberate exception.
+
+Failure, rerun and partial failure:
+
+- **Unapproved, unsigned, lightweight or mismatched tag** — preflight fails
+  and nothing is built. A tag that names a version the plist does not carry
+  fails there too.
+- **A tag that was deleted and repointed after preflight** — publish compares
+  the tag object hash *and* the peeled commit on GitHub before creating the
+  draft and again after the upload, and refuses.
+- **A release already published for that tag** — publish refuses to touch it.
+  A *draft* is resumed only if its target commit is this release's commit.
+- **A failed or interrupted upload** — the release is still a draft, so
+  nothing half-uploaded is visible. Rerunning the workflow rebuilds and
+  notarizes (Apple dedupes submissions by content), and `gh release upload
+  --clobber` replaces the assets of that validated draft only.
+- **A stale artifact** — impossible to publish by accident: the artifact name
+  contains the run id and the attempt number, so a rerun never downloads the
+  previous attempt's assets. Before uploading, publish checks that the three
+  files are exactly the expected three, that `release.json` names this tag,
+  commit and tag object, that both notarizations were accepted, and that
+  `SHA256SUMS` matches the bytes on disk; after uploading, that every asset
+  on GitHub has the size it has locally.
+- **Concurrency** — release runs for one tag are serialized and never
+  cancelled, because a cancelled run can leave a draft that the next attempt
+  has to see whole.
+
+Where the trust actually sits: for a tag push GitHub runs the workflow file
+*from the tagged commit*, and the release scripts are checked out from it too.
+Reading the approval keys from `main` stops a tag from approving itself with
+keys it carries, and the ancestor check stops a tag off `main` from shipping,
+but both of those checks live in code that comes from the tag. Anyone who can
+push a tag to this repository can therefore change them. The boundary that
+holds is who may push tags — the repository is private and has one owner — and
+the `release` environment, which is where the signing secrets live. This is
+the same boundary as in the model repository; it is written down here so it is
+a decision and not an oversight.
+
+What the repository owner must configure once, under **Settings →
+Environments → `release`** (create the environment first; its protection
+rules are what gate the signing secrets):
+
+| Kind | Name | Value |
+| --- | --- | --- |
+| Secret | `DEVELOPER_ID_P12_BASE64` | base64 of the Developer ID Application `.p12` |
+| Secret | `DEVELOPER_ID_P12_PASSWORD` | that `.p12`'s password |
+| Secret | `APPLE_API_KEY_BASE64` | base64 of the App Store Connect `.p8` key |
+| Variable | `APPLE_TEAM_ID` | `BV5XC39R5P` (asserted; anything else fails) |
+| Variable | `APPLE_API_KEY_ID` | the key's id |
+| Variable | `APPLE_API_ISSUER_ID` | the key's issuer id |
+
+Secrets reach the scripts only through `env:`, never through an `if:`
+expression, and none is ever printed. `script/release/README.md` has the
+step-by-step for cutting a release.
+
 ## Core contracts
 
 These types are the seams between modules. Keep them small and value-typed.

@@ -11,8 +11,12 @@ notarized download, never through the App Store.
 ## Install
 
 1. Download `RDMALink-<version>.dmg` from the
-   [GitHub release](https://github.com/dev7a/rdmalink/releases), open it and
-   drag RDMALink to Applications.
+   [releases page](https://github.com/dev7a/rdmalink/releases), open it and
+   drag RDMALink to Applications. Each release also carries `SHA256SUMS` and
+   `release.json`; to check the download, put it next to `SHA256SUMS` and run
+   `shasum -a 256 -c SHA256SUMS`, which must print `OK`. `release.json` says
+   which commit and which signed tag the image was built from and records
+   Apple's notarization of both the app and the image.
 2. Open RDMALink from Applications. The app is signed with a Developer ID and
    notarized, so macOS opens it without any override.
 3. When you set up a port, macOS asks for an administrator password. That is
@@ -28,7 +32,9 @@ a pair or cluster.
 
 Build from source: `script/test.sh` builds and tests everything with an
 ad-hoc signature; `script/package_dmg.sh` builds the signed disk image (see
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#packaging)).
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#packaging)). Releases are cut by
+pushing a signed `v<version>` tag, which builds and notarizes on GitHub; see
+[script/release/README.md](script/release/README.md).
 
 - Design: [docs/UX_SPEC.md](docs/UX_SPEC.md)
 - Architecture and decisions: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)

@@ -1,0 +1,198 @@
+name: Release
+
+# A signed tag is the only thing that can produce a release. preflight proves
+# the tag on Ubuntu, notarize builds and notarizes on macOS from the commit
+# that tag names, publish uploads to a draft release and only then makes it
+# visible. Modelled on dev7a/lnpctl .github/workflows/release.yml.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing signed version tag to release
+        required: true
+        type: string
+
+permissions: {}
+
+# Never cancel a release in flight: a cancelled run can leave a draft with
+# half its assets, and the next attempt has to see that draft whole.
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    # A manual run may only be started from main, where the approval keys live.
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.source.outputs.tag }}
+      sha: ${{ steps.source.outputs.sha }}
+      tag_object: ${{ steps.source.outputs.tag_object }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: source
+        name: Validate exact tag and source
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          # Approval keys come from main, never from the release tag's contents.
+          git show refs/remotes/origin/main:script/release/trusted-signers.asc > "$RUNNER_TEMP/trusted-signers.asc"
+          bash script/release/verify-tag.sh "$TAG" "$RUNNER_TEMP/trusted-signers.asc"
+          sha="$(git rev-parse --verify "refs/tags/$TAG^{commit}")"
+          if [[ "$EVENT_NAME" == push ]]; then
+            [[ "$sha" == "$(git rev-parse "$EVENT_SHA^{commit}")" ]] || exit 1
+          fi
+          git merge-base --is-ancestor "$sha" refs/remotes/origin/main
+          # PlistBuddy is macOS-only, so the version comes out of the plist at
+          # the tag's commit with plistlib.
+          version="$(git show "$sha:App/Info.plist" |
+            python3 -c 'import plistlib, sys; print(plistlib.loads(sys.stdin.buffer.read())["CFBundleShortVersionString"])')"
+          [[ "$TAG" == "v$version" ]] || exit 1
+          tag_object="$(git rev-parse "refs/tags/$TAG")"
+          {
+            echo "tag=$TAG"
+            echo "sha=$sha"
+            echo "tag_object=$tag_object"
+          } >> "$GITHUB_OUTPUT"
+
+  notarize:
+    needs: preflight
+    # macOS 27 with Xcode 27.0 (27A266a); see .github/actionlint.yaml for the
+    # preview label. The Release archive needs this toolchain.
+    runs-on: xcode-27
+    timeout-minutes: 60
+    # The environment holds the signing secrets, so approval and secret access
+    # are one gate: Settings -> Environments -> release.
+    environment: release
+    outputs:
+      artifact_name: ${{ steps.artifact.outputs.name }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit the verified tag names, not the branch head.
+          ref: ${{ needs.preflight.outputs.sha }}
+          persist-credentials: false
+      - name: Run the test gate
+        # dev7a/lnpctl's package.sh runs `make test` before it packages. Here
+        # the gate is its own step, before any credential exists on the
+        # runner, so a release is never cut from a commit that fails it: this
+        # workflow does not consult CI's verdict on main.
+        run: |
+          set -euo pipefail
+          script/test.sh
+      - name: Import signing credentials into a temporary keychain
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          NOTARY_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          : "${CERTIFICATE_P12_BASE64:?Missing Developer ID certificate secret}"
+          : "${CERTIFICATE_PASSWORD:?Missing certificate password secret}"
+          : "${NOTARY_KEY_BASE64:?Missing notarization API key secret}"
+          # The app is signed by one team; a variable may only agree with it.
+          [[ "$APPLE_TEAM_ID" == BV5XC39R5P ]] || exit 1
+          umask 077
+          keychain="$RUNNER_TEMP/rdmalink-signing.keychain-db"
+          password="$(openssl rand -hex 32)"
+          echo "::add-mask::$password"
+          printf '%s' "$CERTIFICATE_P12_BASE64" | /usr/bin/base64 -D > "$RUNNER_TEMP/certificate.p12"
+          printf '%s' "$NOTARY_KEY_BASE64" | /usr/bin/base64 -D > "$RUNNER_TEMP/notary-key.p8"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$CERTIFICATE_PASSWORD" -k "$keychain" -t cert -f pkcs12 -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$password" "$keychain" > /dev/null
+          # The search list is what `security find-identity` reads, and what
+          # script/package_dmg.sh pins the identity from.
+          security list-keychains -d user -s "$keychain"
+          rm "$RUNNER_TEMP/certificate.p12"
+          # There is no signing-identity variable: the script finds the one
+          # Developer ID Application identity for the team and pins its SHA-1.
+          # Fail here, before the build, if the import did not land.
+          # Not `grep -q`: under pipefail a quitting reader would make the
+          # pipeline fail on SIGPIPE instead of succeeding.
+          identities="$(security find-identity -v -p codesigning)"
+          printf '%s\n' "$identities" |
+            grep -F "\"Developer ID Application:" | grep -F "($APPLE_TEAM_ID)\"" > /dev/null
+      - name: Build, sign, notarize, and staple
+        env:
+          RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
+          RELEASE_SHA: ${{ needs.preflight.outputs.sha }}
+          RELEASE_TAG_OBJECT: ${{ needs.preflight.outputs.tag_object }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APPLE_API_KEY_ID: ${{ vars.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ vars.APPLE_API_ISSUER_ID }}
+          # These three together switch notarytool from the local Keychain
+          # profile to the App Store Connect API key.
+          NOTARY_KEY_PATH: ${{ runner.temp }}/notary-key.p8
+        run: |
+          set -euo pipefail
+          script/package_dmg.sh --notarize
+      - name: Identify release artifact
+        id: artifact
+        run: |
+          set -euo pipefail
+          echo "name=notarized-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          # Named per run and attempt, so a rerun can never publish the assets
+          # an earlier attempt left behind.
+          name: ${{ steps.artifact.outputs.name }}
+          path: dist/release-assets/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove signing credentials
+        if: always()
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/rdmalink-signing.keychain-db"
+          cleanup_rc=0
+          if [[ -f "$keychain" ]]; then
+            security delete-keychain "$keychain" || cleanup_rc=$?
+          fi
+          rm -f "$RUNNER_TEMP/certificate.p12" "$RUNNER_TEMP/notary-key.p8"
+          exit "$cleanup_rc"
+
+  publish:
+    needs: [preflight, notarize]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      # The only writable token in this workflow, and only for releases.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.preflight.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.notarize.outputs.artifact_name }}
+          path: release-assets
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
+          RELEASE_SHA: ${{ needs.preflight.outputs.sha }}
+          RELEASE_TAG_OBJECT: ${{ needs.preflight.outputs.tag_object }}
+        run: |
+          set -euo pipefail
+          bash script/release/publish.sh

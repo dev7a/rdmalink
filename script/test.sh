@@ -5,8 +5,15 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build/DerivedData"
 APP="$BUILD_DIR/Build/Products/Debug/RDMALink.app"
 
-for script in "$ROOT_DIR"/script/*.sh; do
+for script in "$ROOT_DIR"/script/*.sh "$ROOT_DIR"/script/release/*.sh; do
   /bin/bash -n "$script"
+done
+
+# The release machinery: what publish.sh refuses to publish, which tags
+# verify-tag.sh accepts, and what receipt.sh writes. All three run on
+# fixtures — no network, no GitHub, no signing identity, about four seconds.
+for test in test_release.py test_release_tag.py test_receipt.py; do
+  python3 "$ROOT_DIR/script/release/$test"
 done
 
 (cd "$ROOT_DIR/Packages/RDMALinkCore" && swift build -Xswiftc -warnings-as-errors && swift test)
