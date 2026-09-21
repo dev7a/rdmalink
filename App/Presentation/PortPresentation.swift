@@ -81,6 +81,36 @@ struct StageCalloutText: Sendable, Equatable {
     }
 }
 
+/// Which screen is drawing the row.
+///
+/// UX_SPEC §S1 and §S4 ask two different things of the same row. On the hub it
+/// is **status**: what this port is, with §S1's trailing buttons beside it. On
+/// S4 it is a **picker**, where "every row is a selection target;
+/// non-selectable rows are dimmed with an explanatory subtitle" — so a row
+/// that cannot be chosen says why instead of what it is, and carries no button
+/// offering a different journey mid-choice.
+///
+/// One mode for the whole list rather than a decision per row: which screen is
+/// up is the only thing that changes, and §2.3 band 3's promise that the list
+/// "never reorders and never resizes a row" is easier to keep when the
+/// difference between the two is one switch.
+enum PortRowMode: Sendable, Equatable {
+    case status
+    case picker
+
+    /// Which screen this is, worked out once: the picker is S4 and nothing
+    /// else. S4b is S4 still choosing, so its list is the picker's too, and
+    /// the hub (`nil`), the review, the apply and the payoff are all status —
+    /// "the list and the model are status there, not a picker" (§S4).
+    ///
+    /// The list asks this, and so does ``StageInput``: §4.8's callout quotes
+    /// "the row's title and detail line, verbatim", so both have to be reading
+    /// the same row (§2.4, §8.2).
+    init(step: WizardStep?) {
+        self = step == .choose ? .picker : .status
+    }
+}
+
 struct PortRowPresentation: Sendable, Equatable, Identifiable {
     let id: String
     /// SF Symbol from UX_SPEC §3.3.
@@ -103,10 +133,19 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
     /// the spec, so no other state is given one here.
     /// **Owed from the spec owner:** the compact badge for the remaining rows.
     let compactBadge: LocalizedStringResource?
+    /// §S4: this row cannot be chosen on the picker, so it is drawn at the
+    /// same 45 % a USB-only row is. False everywhere else — a row that is
+    /// status is never dimmed for being status.
+    let isDimmed: Bool
 
-    init(snapshot: PortSnapshot) {
+    init(snapshot: PortSnapshot, mode: PortRowMode = .status) {
+        // §S4 "Layout": "non-selectable rows are dimmed with an explanatory
+        // subtitle". Non-selectable is exactly what `ChoosePortReport` already
+        // decides for the screen and the model, so the row asks it rather than
+        // working the states out a second time and drifting from it.
+        let route = mode == .picker ? ChoosePortReport.route(for: snapshot) : nil
         let port = snapshot.port
-        let detail = Self.detail(for: snapshot)
+        let detail = Self.detail(for: snapshot, dimmedBy: route)
         self.id = port.id
         self.symbol = Self.symbol(for: snapshot)
         self.symbolStyle = Self.symbolStyle(for: snapshot)
@@ -115,8 +154,9 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
         self.technicalSuffix = Self.technicalSuffix(for: snapshot)
         self.accessibilityLabel = Self.accessibilityLabel(for: snapshot, detail: detail)
         self.accessibilityValue = detail.address
-        self.actions = Self.actions(for: snapshot)
+        self.actions = Self.actions(for: snapshot, dimmedBy: route)
         self.compactBadge = snapshot.readiness.isReady ? "Ready" : nil
+        self.isDimmed = route != nil
     }
 
     /// §S1's "Trailing buttons, by state", with §7.5's addition: any port that
@@ -128,7 +168,42 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
     /// and offering both would be two buttons for one thing (§1.3 rule 5).
     /// A drifted port has nothing to put back — its note describes a world
     /// that moved — so it is offered the way forward instead.
-    private static func actions(for snapshot: PortSnapshot) -> [HubAction] {
+    ///
+    /// On §S4's picker a dimmed row keeps the routes §S4 names for it and no
+    /// more. Its states name two: "Already-ready port clicked (row reads
+    /// **Already ready for RDMA** and offers `Restore…`)" and "Hand-configured
+    /// port clicked (routes to Adopt, S9 — **never to set-up**)". `Restore…`
+    /// and `Adopt…` are those two journeys; `Return to Bridge…` and `Stop
+    /// Managing…` are the hub offering a third one mid-choice, which a picker
+    /// is not the place for.
+    ///
+    /// `Adopt…` stays because it is the only thing on the screen that reaches
+    /// S9: clicking the row prints R27's line — "Let me show you what I found"
+    /// — and nothing else happens (`SetUpFlow.routeClick`), so filtering the
+    /// button away would leave the sentence with nowhere to land (§1.3 rule 5).
+    /// **Owed from the spec owner:** whether that click should open S9 itself,
+    /// which is what §S4's "routes to Adopt" reads like.
+    ///
+    /// A row whose state can offer neither keeps the hub's buttons rather than
+    /// none, for the same reason: an adopted port is ready too, but its note is
+    /// an adoption record and §S10's restore form has nothing to put back, so
+    /// `Restore…` cannot be minted for it — and its click prints "Want to see
+    /// how it's doing?", which has to have somewhere to answer. R16's row is
+    /// the other one, and §S4 gives it no subtitle either. **Owed from the
+    /// spec owner:** what a dimmed adopted row offers.
+    private static func actions(
+        for snapshot: PortSnapshot, dimmedBy route: ChooseRefusalRoute?
+    ) -> [HubAction] {
+        guard route == nil else {
+            let hub = actions(for: snapshot, dimmedBy: nil)
+            let named = hub.filter {
+                switch $0 {
+                case .restore, .adopt: true
+                default: false
+                }
+            }
+            return named.isEmpty ? hub : named
+        }
         let id = snapshot.id
         switch snapshot.readiness {
         case .managed: return [.restore(portID: id)]
@@ -179,7 +254,22 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
         }
     }
 
-    private static func detail(for snapshot: PortSnapshot) -> PortRowDetail {
+    /// §S1's subtitle, or — on §S4's picker, for a row that cannot be chosen
+    /// — the "explanatory subtitle" §S4 gives it instead: **USB only — this
+    /// one isn't Thunderbolt** · **Already ready for RDMA** · **Set up
+    /// outside RDMALink**. It is one sentence and no more: the address, the
+    /// bridge membership and the middle dots belong to the row that is
+    /// status, and a picker row's job is to say why the click will not land.
+    ///
+    /// A route §S4 has no sentence for keeps the hub's subtitle rather than
+    /// being given a new one here (`dimmedSubtitle` returns nil for it), and
+    /// the row is still dimmed — which is the honest half of the pair.
+    private static func detail(
+        for snapshot: PortSnapshot, dimmedBy route: ChooseRefusalRoute?
+    ) -> PortRowDetail {
+        if let route, let subtitle = ChoosePortReport.dimmedSubtitle(for: route) {
+            return PortRowDetail(state: subtitle)
+        }
         switch snapshot.readiness {
         case .managed:
             guard let address = snapshot.linkLocalAddress else {

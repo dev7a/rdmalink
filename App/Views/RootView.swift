@@ -99,7 +99,10 @@ struct RootView: View {
         // §2.4: the inventory is mirrored onto the stage every time it changes,
         // and nothing else writes the stage's port list.
         .onChange(
-            of: StageInput(hardware: model.hardware, ports: model.ports), initial: true
+            of: StageInput(
+                hardware: model.hardware, ports: model.ports,
+                mode: PortRowMode(step: flow?.step)),
+            initial: true
         ) { previous, input in
             stage.apply(input)
             actions.ports = input.ports

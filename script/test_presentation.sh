@@ -574,6 +574,117 @@ check(frozenStage.frozenSelection == ["en5", "en6"] && frozenStage.selectedID ==
       "a two-port run: both held, the first in physical order lit")
 frozenStage.thawSelection()
 
+// §S5 3D: "unselected receptacles fade to 25 %, so the scene shows the subject
+// and its context and nothing else". The same 25 % holds through S6 (the
+// camera is locked) and S7 (the configured receptacle keeps its solid ring).
+// §4.5's USB hover dim is the hub's, and the freeze is not on there.
+let usbOnly = snapshot(port("", "Front, left", isThunderbolt: false), configuration: nil)
+let dimStage = StageModel()
+if let chassis = ReceptacleCatalogue.chassis(for: .studioSix) { dimStage.picture = .chassis(chassis) }
+dimStage.ports = [farLeftPort, leftMiddle, usbOnly].enumerated().map {
+    StagePort(port: $1.port, physicalIndex: $0 + 1, configuration: cfg($1))
+}
+@MainActor func dims(_ model: StageModel) -> [Float] {
+    let moment = model.moment()
+    return moment.ports.map { moment.dim(for: $0) }
+}
+check(dims(dimStage) == [1, 1, 1], "nothing frozen: the whole machine is drawn at full strength")
+dimStage.hover("Front, left")
+check(dims(dimStage) == [1, 1, StageMoment.usbHoverDim],
+      "§4.5: a hovered USB-only receptacle dims 15 %, and nothing else moves")
+dimStage.hover(nil)
+dimStage.freezeSelection(on: ["en5"])
+check(dims(dimStage) == [1, StageMoment.frozenDim, StageMoment.frozenDim],
+      "§S5: the chosen receptacle holds; every other one fades to 25 %, USB included")
+dimStage.freezeSelection(on: ["en5", "en6"])
+check(dims(dimStage) == [1, 1, StageMoment.frozenDim],
+      "a two-port run: both chosen receptacles hold — the second is the subject too")
+// §S3: "When a check names a port, that receptacle takes a 1.5 pt attention
+// ring" — and with two Macs "both receptacles ring simultaneously and a faint
+// light thread leaves each one, making the loop visible rather than described".
+// R1 on S5 is exactly that: one of the two ports is the frozen choice and the
+// other is not, and fading the one the user has been told to unplug would put
+// out the light the sentence is pointing at.
+dimStage.freezeSelection(on: ["en5"])
+dimStage.attention(ids: ["en6"])
+check(dims(dimStage) == [1, 1, StageMoment.frozenDim],
+      "§S3 outranks §S5: a receptacle a check names is drawn in full, freeze or no freeze")
+dimStage.attention(ids: [])
+check(dims(dimStage) == [1, StageMoment.frozenDim, StageMoment.frozenDim],
+      "…and it fades again the moment the check is satisfied")
+dimStage.thawSelection()
+check(dims(dimStage) == [1, 1, 1], "thaw puts every receptacle back")
+check(dimStage.moment().frozenSelection == nil,
+      "a thawed moment says 'not frozen' rather than 'frozen on nothing'")
+
+// MARK: §S4 — the picker's rows: dimmed, with the explanatory subtitle.
+
+// "The port list is in full density and every row is a selection target;
+// non-selectable rows are dimmed with an explanatory subtitle."
+func picker(_ snapshot: PortSnapshot) -> PortRowPresentation {
+    PortRowPresentation(snapshot: snapshot, mode: .picker)
+}
+let foreign = snapshot(port("en8", "Front, right"),
+                       configuration: .foreign(serviceID: "THEIRS", reason: .staticIPv4Address))
+check(ChoosePortReport.route(for: managed) == .alreadyReady
+      && ChoosePortReport.route(for: adopted) == .alreadyReady
+      && ChoosePortReport.route(for: outside) == .adopt
+      && ChoosePortReport.route(for: usbOnly) == .usbPort
+      && ChoosePortReport.route(for: foreign) == .foreignService,
+      "the routes the picker dims by")
+check(ChoosePortReport.route(for: plain) == nil && ChoosePortReport.route(for: returned) == nil
+      && ChoosePortReport.route(for: drifted) == nil,
+      "…and the three that simply select")
+
+check(picker(managed).isDimmed && text(picker(managed).detail.state) == "Already ready for RDMA"
+      && picker(managed).detail.address == nil && picker(managed).detail.membership == nil,
+      "§S4: an already-ready row is dimmed and reads Already ready for RDMA, and nothing else")
+check(picker(managed).actions == [.restore(portID: "en6")],
+      "§S4: …and offers Restore…")
+check(picker(adopted).isDimmed && text(picker(adopted).detail.state) == "Already ready for RDMA",
+      "an adopted row is dimmed and reads the same sentence")
+check(picker(adopted).actions
+      == [.returnToBridge(portID: "en7"), .stopManaging(portID: "en7")],
+      "…and keeps the hub's buttons: §S4's Restore… is not a thing an adopted note can offer, and its click's question has to have somewhere to answer")
+check(picker(outside).isDimmed && text(picker(outside).detail.state) == "Set up outside RDMALink",
+      "§S4: a hand-configured row is dimmed and reads Set up outside RDMALink")
+check(picker(outside).actions == [.adopt(portID: "en2")],
+      "§S4: …and keeps Adopt…, the one route on this screen that reaches S9 — Return to Bridge… goes")
+check(picker(usbOnly).isDimmed
+      && text(picker(usbOnly).detail.state) == "USB only — this one isn't Thunderbolt"
+      && picker(usbOnly).actions.isEmpty,
+      "§S4: the USB sentence is the picker's too, and a USB row has no button on either screen")
+check(picker(foreign).isDimmed
+      && text(picker(foreign).detail.state) == text(PortRowPresentation(snapshot: foreign).detail.state),
+      "R16's row is dimmed but keeps the hub's subtitle: §S4 has no sentence for it")
+
+// A selectable row is the hub's row, untouched: §S4's selectable subtitles are
+// §S1's, and the screen is still a picker for it.
+for selectable in [plain, returned, drifted] {
+    let row = picker(selectable)
+    let hub = PortRowPresentation(snapshot: selectable)
+    check(!row.isDimmed && row.detail == hub.detail && row.actions == hub.actions,
+          "a selectable row on the picker is the row the hub draws: \(selectable.port.positionName)")
+}
+// And every row off the picker is the hub's, dimmed rows included.
+check(PortRowPresentation(snapshot: managed).isDimmed == false
+      && text(PortRowPresentation(snapshot: managed).detail.state)
+          == "Ready for RDMA · the address appears when a Mac arrives",
+      "the hub's own already-ready row is untouched")
+check(picker(managed).accessibilityLabel
+      == "Back, left middle. Thunderbolt port. Already ready for RDMA.",
+      "§8.2: VoiceOver reads the picker's row, not the hub's")
+// §4.8: the callout quotes "the row's title and detail line, verbatim", so the
+// receptacle says what the row beside it says on this screen too. `StageInput`
+// carries the mode for exactly this (App/Model/StageBinding.swift).
+check(StageCalloutText(presentation: picker(managed), showsTechnicalNames: false).detail
+      == "Already ready for RDMA",
+      "§4.8: the callout over a dimmed receptacle quotes the picker's row, not the hub's")
+check(PortRowMode(step: .choose) == .picker
+      && PortRowMode(step: .review) == .status && PortRowMode(step: .apply) == .status
+      && PortRowMode(step: .ready) == .status && PortRowMode(step: nil) == .status,
+      "§S4: the picker is S4 and nothing else — the hub and the frozen steps are status")
+
 // MARK: §S5 — a check that said no disables the button; a refusal removes it.
 
 await settle { fromHub.reviewPlan != nil }

@@ -605,17 +605,15 @@ final class StageScene {
         for node in graph.receptacles {
             guard let port = moment.ports.first(where: { $0.id == node.id }) else { continue }
             Self.setStub(node, to: port.link != .empty)
-            guard node.isThunderbolt else {
-                // §4.5: a USB-only receptacle never takes a ring and never
-                // takes a hover glow; it dims 15 % and that is the whole
-                // answer the model gives.
-                let dim: Float = port.hovered ? 0.85 : 1
-                if node.dim != dim {
-                    node.dim = dim
-                    node.root.components.set(OpacityComponent(opacity: dim))
-                }
-                continue
-            }
+            // §4.5's hover dim on the hub and §S5's 25 % under the frozen
+            // choice are the same one number on the same one node, so they
+            // are asked for together — and on every receptacle, because a
+            // Thunderbolt one fades under the freeze too. It moves on §3.5's
+            // 150 ms like every other opacity in the scene.
+            dim(node: node, to: moment.dim(for: port), deltaTime: deltaTime)
+            // §4.5: a USB-only receptacle never takes a ring, and the dim
+            // above is the whole answer the model gives.
+            guard node.isThunderbolt else { continue }
 
             Self.reshape(node, port: port, moment: moment)
             pulse(node)
@@ -819,12 +817,11 @@ final class StageScene {
         for node in graph.receptacles {
             guard let port = moment.ports.first(where: { $0.id == node.id }) else { continue }
             setStub(node, to: port.link != .empty)
-            guard node.isThunderbolt else {
-                let dim: Float = port.hovered ? 0.85 : 1
-                node.dim = dim
-                node.root.components.set(OpacityComponent(opacity: dim))
-                continue
-            }
+            // No cross-fade left to run: the dim is already where the live
+            // scene would have taken it (§4.5, §S5).
+            node.dim = moment.dim(for: port)
+            node.root.components.set(OpacityComponent(opacity: node.dim))
+            guard node.isThunderbolt else { continue }
             reshape(node, port: port, moment: moment)
             for role in StageRingRole.allCases {
                 guard let entity = node.layers[role] else { continue }
@@ -942,6 +939,17 @@ final class StageScene {
         case .serviceRing:
             return preview == .addresses ? 1 : 0
         }
+    }
+
+    /// The whole-receptacle dim, on the node's root so the recess, the stub
+    /// and every ring fade together (§4.5, §S5). Nothing is written once it
+    /// has arrived: `components.set` re-registers the entity in the
+    /// transparency pass, and six settled receptacles doing that every frame
+    /// is what the ring fade above is careful to avoid too.
+    private func dim(node: StageReceptacleNode, to target: Float, deltaTime: TimeInterval) {
+        guard node.dim != target else { return }
+        node.dim = step(node.dim, to: target, over: Self.crossFade, deltaTime: deltaTime)
+        node.root.components.set(OpacityComponent(opacity: node.dim))
     }
 
     private func fade(

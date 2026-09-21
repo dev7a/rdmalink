@@ -21,6 +21,11 @@ import SwiftUI
 struct StageInput: Equatable {
     var hardware: HardwareModel?
     var ports: [PortSnapshot]
+    /// Which screen the port list is drawing (§S4). It belongs in here because
+    /// the callout and the accessibility strings below are the row's own words
+    /// and change with it — so the stage is re-derived when the step changes,
+    /// exactly as it is when a cable moves.
+    var mode: PortRowMode = .status
 }
 
 extension StageModel {
@@ -68,8 +73,12 @@ extension StageModel {
             // state diff must not wipe it half way through.
             port.attention = attention.contains(port.id)
             // §8.2: the stage speaks with the port list's voice, not its own —
-            // and §4.8's callout quotes the same row, verbatim.
-            let presentation = PortRowPresentation(snapshot: snapshot)
+            // and §4.8's callout quotes the same row, verbatim. Including on
+            // §S4, where the row says why a receptacle cannot be chosen rather
+            // than what it is: two answers about one port on the one screen
+            // where the difference is the point would be the worst place to
+            // have them (§2.4).
+            let presentation = PortRowPresentation(snapshot: snapshot, mode: input.mode)
             port.accessibilityLabel = presentation.accessibilityLabel
             port.accessibilityValue = presentation.accessibilityValue
             port.calloutDetail = presentation.detail.line

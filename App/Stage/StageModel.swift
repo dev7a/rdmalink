@@ -349,7 +349,11 @@ final class StageModel {
     func moment(focused: StagePort.ID? = nil) -> StageMoment {
         StageMoment(
             ports: ports, ribbons: ribbons, progress: progress, identify: identify,
-            preview: preview, handoff: handoff, loopedPair: loopedPair, focused: focused
+            preview: preview, handoff: handoff, loopedPair: loopedPair, focused: focused,
+            // Nil while nothing is held, so the moment says "not frozen"
+            // rather than "frozen on nothing" — which would fade the whole
+            // machine (§S5's 25 %).
+            frozenSelection: isSelectionFrozen ? frozenSelection : nil
         )
     }
 
@@ -713,4 +717,43 @@ struct StageMoment: Equatable, Sendable {
     var handoff: StageHandoff?
     var loopedPair: StageLoopedPair?
     var focused: StagePort.ID?
+    /// §S4's frozen choice, as the scene sees it: the receptacles S5, S6 and
+    /// S7 hold, or nil while the user is still choosing. See ``dim(for:)``.
+    var frozenSelection: Set<StagePort.ID>?
+}
+
+extension StageMoment {
+    /// §S5's 25 %: "unselected receptacles fade to 25 %, so the scene shows
+    /// the subject and its context and nothing else". §S6 keeps it — the
+    /// camera is locked and nothing else in the scene moves — and §S7 keeps
+    /// it while the configured receptacle holds its solid accent ring.
+    static let frozenDim: Float = 0.25
+    /// §4.5: a hovered USB-only receptacle "dims 15 % and that is the whole
+    /// answer the model gives".
+    static let usbHoverDim: Float = 0.85
+
+    /// How strongly this receptacle is drawn, 0…1, applied to the whole node
+    /// so its rings go with it.
+    ///
+    /// §S3's attention ring outranks §S5's fade. A check that is not satisfied
+    /// names a port — "Two Macs are connected, on Back, far left and Back,
+    /// middle left" — and §S3 answers by ringing that receptacle and, for two
+    /// Macs, running a light thread from each, "making the loop visible rather
+    /// than described". Fading the receptacle the user has just been told to
+    /// unplug would put out the one light the sentence is pointing at, so a
+    /// ringed port is drawn in full however the freeze falls: §S5's 25 % is
+    /// about "the subject and its context", and a blocking check's port is
+    /// context.
+    ///
+    /// The freeze comes next because it is the screen's rule rather than one
+    /// receptacle's: while it is on, nothing is hovered anyway (``StageModel``
+    /// clears and refuses hover for the duration), so the two never argue —
+    /// but stating the order here keeps §4.5's hub behaviour and §S5's review
+    /// behaviour in one readable place instead of two branches in the scene.
+    func dim(for port: StagePort) -> Float {
+        if port.attention { return 1 }
+        if let frozenSelection, !frozenSelection.contains(port.id) { return Self.frozenDim }
+        if !port.isThunderbolt, port.hovered { return Self.usbHoverDim }
+        return 1
+    }
 }

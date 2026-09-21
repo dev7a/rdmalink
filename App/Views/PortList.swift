@@ -26,6 +26,9 @@ struct PortList: View {
     let isProbing: Bool
     let showsTechnicalNames: Bool
     var density: PortListDensity = .full
+    /// §S4: on the picker the rows that cannot be chosen are dimmed and say
+    /// why. One mode for the list, not a decision per row.
+    var mode: PortRowMode = .status
     /// §S5: "the target port(s) marked **About to change**".
     var aboutToChange: Set<String> = []
     /// §4.5: clicking a USB-only row produces R3 in the working area, exactly
@@ -63,6 +66,7 @@ struct PortList: View {
                                 stage: stage,
                                 showsTechnicalNames: showsTechnicalNames,
                                 density: density,
+                                mode: mode,
                                 aboutToChange: aboutToChange,
                                 onUSBClick: onUSBClick,
                                 onExtend: onExtend,
@@ -154,6 +158,7 @@ struct PortGroupSection: View {
     let stage: StageModel
     let showsTechnicalNames: Bool
     var density: PortListDensity = .full
+    var mode: PortRowMode = .status
     var aboutToChange: Set<String> = []
     var onUSBClick: (String) -> Void = { _ in }
     var onExtend: ((String) -> Void)?
@@ -187,7 +192,7 @@ struct PortGroupSection: View {
     }
 
     private func row(_ port: PortSnapshot) -> some View {
-        let presentation = PortRowPresentation(snapshot: port)
+        let presentation = PortRowPresentation(snapshot: port, mode: mode)
         let isSelected = stage.selectedID == port.id
         return PortRow(
             presentation: presentation,
@@ -205,7 +210,11 @@ struct PortGroupSection: View {
             // "The others" are the ports outside the frozen selection, not
             // outside the one receptacle the model can light: the second of
             // a two-port run is chosen too (§S5 "the target port(s)").
-            isDimmed: stage.isSelectionFrozen && !stage.frozenSelection.contains(port.id),
+            // …and §S4's other dimmed rows: on the picker the ones that
+            // cannot be chosen, which the presentation has already decided
+            // along with their subtitle and which buttons they keep.
+            isDimmed: presentation.isDimmed
+                || (stage.isSelectionFrozen && !stage.frozenSelection.contains(port.id)),
             select: {
                 // A frozen list takes no click at all: not a selection, not
                 // R3, nothing (§S4).

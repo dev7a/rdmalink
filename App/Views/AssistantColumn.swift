@@ -45,6 +45,16 @@ struct AssistantColumn: View {
         return flow.step == .choose ? .full : .compact
     }
 
+    /// §2.3 band 3 and §S4: on the picker "every row is a selection target;
+    /// non-selectable rows are dimmed with an explanatory subtitle". Every
+    /// other screen — the hub, Identify's frozen list, the compact list
+    /// beside a review — shows the row as status, with §S1's own subtitle
+    /// and buttons. The stage asks ``PortRowMode/init(step:)`` the same
+    /// question, because §4.8's callout quotes this row verbatim.
+    private var mode: PortRowMode {
+        PortRowMode(step: flow?.step)
+    }
+
     /// §S5: "Port list compact, with the target port(s) marked **About to
     /// change**." S6 keeps the badge: the change is under way, and the row
     /// reads **Ready** once S7 has the re-read to say so.
@@ -57,6 +67,17 @@ struct AssistantColumn: View {
     /// offered what is left above this and no more — a face header and three
     /// compact rows, enough to keep every receptacle a scroll away rather
     /// than a step away.
+    ///
+    /// The list yields first, and all of it: `layoutPriority(1)` below means
+    /// the stack reserves this floor for the list and gives band 2 the rest.
+    /// Measured on S5 at §2.1's default 1000 × 720 window, on a six-port Mac
+    /// Studio: band 2 wants 801.5 pt, the list is squeezed to exactly this
+    /// 120, and band 2 still gets only 453 — so S5's fourth change row and
+    /// its footnote are below the fold by about 280 pt and the last two
+    /// disclosures by 348.5. **There is no split that fits them at 720 pt**;
+    /// the window would have to be about 1070 pt tall, and shrinking §3.2's
+    /// type or §S5's spacing to close the gap is not on offer. Band 2 scrolls,
+    /// which is what §2.3 band 2 is for.
     private static let portListFloor: CGFloat = 120
 
     /// What band 2 measures at its natural height, so the scroll view around
@@ -120,6 +141,7 @@ struct AssistantColumn: View {
                 isProbing: model.phase == .probing,
                 showsTechnicalNames: showsTechnicalNames,
                 density: density,
+                mode: mode,
                 aboutToChange: aboutToChange,
                 onUSBClick: onUSBClick,
                 // §S4's multi-select belongs to Choose a port and nowhere

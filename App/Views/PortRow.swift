@@ -27,8 +27,11 @@ struct PortRow: View {
     var isThunderbolt = true
     var isSelected = false
     var isHovered = false
-    /// §S4: a row that is not the chosen one while the choice is frozen. Drawn
-    /// at the same 45 % as a USB-only row: status, not a picker.
+    /// §S4, both ways round. On the picker: a row that cannot be chosen,
+    /// "dimmed with an explanatory subtitle". After the picker: a row that is
+    /// not the chosen one while the choice is frozen — "the list and the model
+    /// are status there, not a picker". Either way it is drawn at the same
+    /// 45 % as a USB-only row.
     var isDimmed = false
     var select: () -> Void = {}
     var hover: (Bool) -> Void = { _ in }
