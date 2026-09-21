@@ -14,7 +14,8 @@
 # the legend's rows from the stage's own ring decision (App/Stage/StageLegend,
 # with App/Stage/StageModel and StageMath under it) and the callout's words
 # from the row's presentation — and §6.2 R31's read-only hub: its headline
-# and body over R23's, a footer with no buttons, and a stage with nothing to
+# and body over R23's, a footer with no button the model decides (§S1's `Quit`
+# is the view's, on every hub state alike), and a stage with nothing to
 # turn or select (App/Presentation/HubPresentation, with
 # App/Presentation/ThunderboltGeneration under it for R23).
 #
@@ -376,7 +377,12 @@ let tb4 = HardwareModel(identifier: "Mac16,1", marketingName: "MacBook Pro", chi
 check(text(HubPresentation.copy(hardware: tb4, ports: []).headline) == "Nothing to configure here",
       "R23 stands on a recognized Thunderbolt 4 Mac")
 let r31Footer = HubPresentation.footer(hardware: unrecognized, ports: [managed])
-check(r31Footer.primary == nil && !r31Footer.offersRestore, "R31: the footer has no buttons at all")
+// §S1: R31's footer holds `Quit` and nothing else. `Quit` is neither the
+// primary nor Restore — it is the same button on every hub state, so the view
+// draws it unconditionally and the model has nothing to say about it. What
+// the model must still refuse here is everything that writes.
+check(r31Footer.primary == nil && !r31Footer.offersRestore,
+      "R31: the footer offers neither the primary nor Restore…")
 let tb4Footer = HubPresentation.footer(hardware: tb4, ports: [managed])
 check(tb4Footer.primary == nil && tb4Footer.offersRestore, "R23: no primary, and Restore… stays")
 let hubFooter = HubPresentation.footer(hardware: studio, ports: [managed])

@@ -109,8 +109,9 @@ struct CopyButton: View {
     }
 }
 
-/// The one button in the app that ends the session. Only refusals that leave
-/// nothing to do offer it (§6.2 R24, R25).
+/// The app's one way out, so every `Quit` ends the session the same way.
+/// §S1's hub footer carries it in every hub state, and so do the refusals that
+/// leave nothing else to do (§6.2 R24, R25).
 struct QuitButton: View {
     var body: some View {
         Button("Quit") { NSApplication.shared.terminate(nil) }

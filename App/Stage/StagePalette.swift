@@ -176,6 +176,18 @@ struct StagePalette {
         flat(active ? ink : ribbonInactiveInk)
     }
 
+    /// §4.2's light thread: the ink, faded along the tube by `fade`, which
+    /// `StageMesh.threadFade()` draws as the thread's opacity against the
+    /// sweep's own `u`. The fade has to be in the material because it runs
+    /// *along one mesh* — the spec's "never a chain of visible segments"
+    /// rules out the alternative of one material per piece. The cross-fade
+    /// on and off stays an `OpacityComponent` above it, as everywhere else.
+    func threadMaterial(fade: TextureResource) -> UnlitMaterial {
+        var material = inkMaterial
+        material.blending = .transparent(opacity: .init(texture: .init(fade)))
+        return material
+    }
+
     // MARK: - Private
 
     private func surface(

@@ -81,7 +81,9 @@ final class StageGhostNode {
     /// §S8: "at 40 % opacity".
     static let restingOpacity: Float = 0.4
     /// The cable is a line, not a ribbon: thinner than a ring track and
-    /// quieter than the ghost it joins.
+    /// quieter than the ghost it joins. Constant over the whole run — §S8
+    /// asks for "a single thin connecting line", and a line that thinned
+    /// towards one end would say which Mac it belongs to.
     private static let cableRadius = 0.045
     private static let cableOpacity: Float = 0.6
     private static let pulseRadius = 0.16
@@ -91,8 +93,9 @@ final class StageGhostNode {
     let root: Entity
     /// The hollow, unlit far port, a child of ``root``.
     private let port: Entity
-    /// The cable, in world coordinates under the graph's root.
-    let cable: Entity
+    /// The cable, in world coordinates under the graph's root: one swept
+    /// tube, remade whenever the run moves (see ``place(face:near:)``).
+    let cable: ModelEntity
     /// The returning pulse, in world coordinates under the graph's root.
     let pulse: ModelEntity
 
@@ -152,7 +155,7 @@ final class StageGhostNode {
         }
         root.addChild(port)
 
-        cable = Entity()
+        cable = ModelEntity()
         cable.name = "ghost.cable"
         cable.components.set(OpacityComponent(opacity: 0))
         cable.isEnabled = false
@@ -185,29 +188,18 @@ final class StageGhostNode {
             angle: Float(StageSceneBuilder.yaw(for: face)), axis: SIMD3(0, 1, 0)
         )
 
-        for child in cable.children.reversed() { child.removeFromParent() }
         path = near.map { StageMath.handoffCable(from: $0, to: far, normal: layout.normal) } ?? []
-        for (start, end) in zip(path, path.dropFirst()) {
-            let run = end - start
-            let length = simd_length(run)
-            guard length > 1e-6 else { continue }
-            let segment = ModelEntity(
-                mesh: .generateCylinder(
-                    height: StageMesh.metres(length), radius: StageMesh.metres(Self.cableRadius)
-                ),
-                materials: [inkMaterial]
-            )
-            let middle = (start + end) / 2
-            segment.position = SIMD3(
-                StageMesh.metres(middle.x), StageMesh.metres(middle.y), StageMesh.metres(middle.z)
-            )
-            let direction = run / length
-            segment.orientation = simd_quatf(
-                from: SIMD3<Float>(0, 1, 0),
-                to: SIMD3(Float(direction.x), Float(direction.y), Float(direction.z))
-            )
-            cable.addChild(segment)
-        }
+        // §S8 draws "a single thin connecting line", so the whole run — out
+        // of the near face, across the daylight, into the ghost's port — is
+        // one mesh swept along `path` by ``StageMesh/tube(along:radius:name:)``.
+        // A cylinder per leg was a chain: each one ended in a flat cap, so
+        // both turns read as joints, which is a linkage between the two Macs
+        // rather than the single line the spec asks for. `path` is untouched,
+        // so the returning pulse still walks the same polyline.
+        cable.model = StageMesh.tube(
+            along: path, radius: Self.cableRadius, name: "ghost.cable"
+        )
+        .map { ModelComponent(mesh: $0, materials: [inkMaterial]) }
         // A re-aim mid-handoff lands where the previous placement was.
         slide = -1
     }

@@ -77,9 +77,10 @@ struct HubFooterModel: Sendable, Equatable {
     /// printed above the footer separator".
     var disabledReason: LocalizedStringResource?
     /// Whether §2.8's `Restore…` may stand beside the primary at all. False
-    /// only in R31's read-only mode — "The footer has no buttons at all" —
-    /// where a note is not RDMALink's to act on; whether a note *exists* is
-    /// the hub's live answer (`HubActionsModel.hasRestorableNote`).
+    /// only in R31's read-only mode — §S1's footer there "holds `Quit` and
+    /// nothing else", and `Quit` is not the model's to decide — where a note
+    /// is not RDMALink's to act on; whether a note *exists* is the hub's live
+    /// answer (`HubActionsModel.hasRestorableNote`).
     var offersRestore: Bool
 }
 
@@ -216,8 +217,10 @@ enum HubPresentation {
         ports: [PortSnapshot]
     ) -> HubFooterModel {
         let twoMacs = ports.inALoop.count >= 2
-        // R31: "The footer has no buttons at all." R23: no primary button at
-        // all, and `Identify a Port…` stays in the Port menu.
+        // R31: §6.2 "Buttons: **Quit** only" — and `Quit` is the view's, not
+        // the model's, so there is nothing here for it to offer. R23: no
+        // primary button at all, and `Identify a Port…` stays in the Port
+        // menu.
         let unrecognized = hardware?.isRecognized == false
         let readOnly = unrecognized || hardware?.isThunderbolt4 == true
         return HubFooterModel(

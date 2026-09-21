@@ -445,6 +445,18 @@ check(near(nearEnd.x, cable[0].x) && near(nearEnd.z, cable[0].z), "and ends at t
 let midway = StageMath.cablePoint(cable, at: 0.5)
 check(near(midway.z, -9.85 - StageMath.handoffReach) && midway.x > -22 && midway.x < 8,
       "half way, the pulse is on the run between the two")
+// §S8's "single thin connecting line" is one swept tube over the whole run,
+// the same way §4.2's thread is: a cylinder per leg capped off at both turns.
+let cableTube = StageMath.sweep(
+    along: cable.map { SIMD3(Float($0.x), Float($0.y), Float($0.z)) },
+    sides: 12, radius: { _ in 0.045 }
+)
+check(cableTube?.positions.count == cable.count * 12,
+      "the cable sweeps in one piece, a vertex per sample per side")
+check(cableTube?.samples == cable.count && cableTube?.sides == 12,
+      "with one ring at every corner of the run and none dropped")
+check(cableTube?.indices.count == (cable.count - 1) * 12 * 6,
+      "and the turns are closed by triangles, not by caps")
 
 // UX_SPEC 6.2 R2: the one thread between two ports of the same machine
 // stands further off the chassis than a ribbon, never below the ring tracks
@@ -455,6 +467,79 @@ check(near(StageMath.loopLift(from: loopA, to: loopB), StageMath.ribbonLift(from
 check(StageMath.loopLift(from: loopA, to: loopA + SIMD3(0.5, 0, 0)) >= 0.6, "and never under 6 mm")
 check(StageMath.loopLift(from: SIMD3(-9.85, 3.4, -9.85), to: SIMD3(9.85, 3.4, 9.85)) <= 2.2,
       "and never over 2.2 cm, even back to front")
+
+// UX_SPEC 4.2's light thread: one continuous tube, so what can be wrong
+// without looking obviously wrong is the sweep's sampling.
+let threadSpine = StageMath.threadPath(samples: 48)
+check(threadSpine.count == 48, "the thread is sampled 48 times")
+check(threadSpine[0] == SIMD3(0, 0, 0.4), "it starts just clear of the opening")
+check(near(threadSpine[47].y, -7) && near(threadSpine[47].z, 10),
+      "and ends where the thread fades out")
+// It leaves along the receptacle's normal and droops: z leads all the way,
+// y only falls, and the fall accelerates rather than running straight.
+check(zip(threadSpine, threadSpine.dropFirst()).allSatisfy { $0.z < $1.z && $0.y >= $1.y },
+      "the thread runs out of the face and never climbs")
+let earlyDrop = threadSpine[0].y - threadSpine[8].y
+let lateDrop = threadSpine[39].y - threadSpine[47].y
+check(earlyDrop < lateDrop * 0.2, "it leaves along the normal before it droops")
+
+let tube = StageMath.sweep(along: threadSpine.map { SIMD3(Float($0.x), Float($0.y), Float($0.z)) },
+                           sides: 12, radius: { StageMath.threadTaper(at: $0) })
+check(tube?.positions.count == 48 * 12, "the sweep makes one vertex per sample per side")
+check(tube?.normals.count == 48 * 12 && tube?.coordinates.count == 48 * 12,
+      "with a normal and a texture coordinate on each")
+check(tube?.indices.count == 47 * 12 * 6, "and two triangles per quad between the rings")
+if let tube {
+    let u = stride(from: 0, to: tube.positions.count, by: 12).map { tube.coordinates[$0].x }
+    check(u.first == 0 && u.last == 1, "u runs 0 to 1 along the length")
+    check(zip(u, u.dropFirst()).allSatisfy { $0 < $1 }, "and only forwards")
+    check(tube.coordinates[0..<12].map(\.y) == (0..<12).map { Float($0) / 12 },
+          "v runs round the ring without repeating the seam")
+    // Every vertex of a ring is one radius off its own centre, and the radius
+    // only ever gets smaller: 4.2's "tapering gently".
+    let radii = (0..<48).map { ring -> Float in
+        let centre = SIMD3(Float(threadSpine[ring].x), Float(threadSpine[ring].y),
+                           Float(threadSpine[ring].z))
+        return (0..<12).map { simd_distance(tube.positions[ring * 12 + $0], centre) }
+            .reduce(0, +) / 12
+    }
+    check(zip(radii, radii.dropFirst()).allSatisfy { $0 > $1 }, "the radius only tapers")
+    check(abs(radii[0] - 1) < 1e-5 && abs(radii[47] - StageMath.threadTipShare) < 1e-5,
+          "from full at the receptacle to a quarter of it at the far end")
+    // The ring stays square to the curve, which is what keeps the tube from
+    // twisting where it bends.
+    let bend = 24
+    let tangent = simd_normalize(SIMD3(Float(threadSpine[bend + 1].x - threadSpine[bend - 1].x),
+                                       Float(threadSpine[bend + 1].y - threadSpine[bend - 1].y),
+                                       Float(threadSpine[bend + 1].z - threadSpine[bend - 1].z)))
+    check((0..<12).allSatisfy { abs(simd_dot(tube.normals[bend * 12 + $0], tangent)) < 1e-4 },
+          "every ring normal is square to the curve")
+}
+// §6.2 R2's loop is the same sweep along the ribbon's path at a constant
+// radius, so the polyline a chassis's outline produces has to sweep too.
+let loopPath = StageMath.ribbonPath(
+    from: loopA, to: loopB, halfWidth: 9.85, halfDepth: 9.85,
+    lift: StageMath.loopLift(from: loopA, to: loopB),
+    rise: StageMath.ribbonRise(span: simd_length(loopB - loopA), room: 3), samples: 24
+)
+let loopTube = StageMath.sweep(
+    along: loopPath.map { SIMD3(Float($0.x), Float($0.y), Float($0.z)) },
+    sides: 12, radius: { _ in 0.09 }
+)
+check(loopTube?.positions.count == loopPath.count * 12, "the loop sweeps along its whole path")
+check(loopTube?.samples == loopPath.count && loopTube?.sides == 12,
+      "and reports the rings it made")
+
+// The fade is peak at the receptacle, gone at the end, and never climbs.
+check(StageMath.threadFade(at: 0) == 1 && StageMath.threadFade(at: 1) == 0,
+      "the fade runs full to nothing")
+check(StageMath.threadFade(at: 0.5) < 0.5, "most of it is gone by half way")
+// Degenerate spines make no tube rather than a NaN one.
+check(StageMath.sweep(along: [SIMD3(0, 0, 0)], radius: { _ in 1 }) == nil, "one point is no tube")
+check(StageMath.sweep(along: [SIMD3(0, 0, 0), SIMD3(0, 0, 0)], radius: { _ in 1 }) == nil,
+      "and neither is the same point twice")
+check(StageMath.sweep(along: [SIMD3(0, 0, 0), SIMD3(0, 0, 1)], sides: 2, radius: { _ in 1 }) == nil,
+      "a ring needs three sides")
 
 // UX_SPEC §4.8's overlays are laid out from the rig's own projection.
 let eye = StageMath.orbitPosition(target: .zero, yaw: .pi, pitch: 0, radius: 0.5)

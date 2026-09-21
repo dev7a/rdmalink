@@ -163,7 +163,8 @@ enum StageMesh {
     }
 
     @MainActor private static var rings: [RingKey: MeshResource] = [:]
-    @MainActor private static var threadSegments: [ThreadSegment]?
+    @MainActor private static var threadMesh: MeshResource?
+    @MainActor private static var threadFadeRamp: TextureResource?
     @MainActor private static var grilleTile: TextureResource?
 
     /// A flat rounded-rectangle outline in the XY plane, facing `+z`.
@@ -304,47 +305,30 @@ enum StageMesh {
     /// the cable's direction, fading out. It is the only ornament in the scene
     /// and it exists only when a real Mac is really linked.
     ///
-    /// Returned as segments so the fade is a gradient of opacities — one mesh
-    /// would need a shader, and a single `OpacityComponent` would fade the
-    /// whole thread evenly, which reads as a rod rather than as light.
-    struct ThreadSegment {
-        var mesh: MeshResource
-        var transform: Transform
-        var opacity: Float
-    }
-
+    /// **One** mesh with **one** material: §4.2 asks for "one continuous tube
+    /// — a smooth curve with the sag of a real cable, tapering gently and
+    /// fading along its length — never a chain of visible segments". So the
+    /// taper is in the geometry (`StageMath.threadTaper`) and the fade is in
+    /// ``threadFade()``, a gradient the material reads by the tube's own `u`.
+    /// A chain of cylinders at stepped opacities has a joint and a step at
+    /// every seam, which is an insect's antenna rather than light.
+    ///
     /// The thread is the same curve on every receptacle — it is drawn in the
     /// receptacle's own frame — so it is built once and shared.
     @MainActor
-    static func thread() -> [ThreadSegment] {
-        if let threadSegments { return threadSegments }
-        let segments = makeThread()
-        threadSegments = segments
-        return segments
-    }
-
-    @MainActor
-    private static func makeThread(
-        segments count: Int = 8, peakOpacity: Float = threadPeakOpacity
-    ) -> [ThreadSegment] {
-        let start = SIMD3<Float>(0, 0, metres(0.4))
-        let control = SIMD3<Float>(0, metres(-0.5), metres(6))
-        let end = SIMD3<Float>(metres(0.6), metres(-7), metres(10))
-
-        func point(_ t: Float) -> SIMD3<Float> {
-            let inverse = 1 - t
-            return inverse * inverse * start + 2 * inverse * t * control + t * t * end
+    static func thread() -> MeshResource? {
+        if let threadMesh { return threadMesh }
+        let spine = StageMath.threadPath().map {
+            SIMD3(metres($0.x), metres($0.y), metres($0.z))
         }
-
-        return (0..<count).compactMap { index in
-            let t0 = Float(index) / Float(count)
-            let t1 = Float(index + 1) / Float(count)
-            let fade = 1 - Float(index) / Float(count)
-            return threadSegment(
-                from: point(t0), to: point(t1), radius: metres(0.09) * (1 - 0.75 * t0),
-                opacity: peakOpacity * fade * fade
-            )
-        }
+        guard
+            let tube = StageMath.sweep(along: spine, radius: {
+                metres(threadRadius) * StageMath.threadTaper(at: $0)
+            }),
+            let mesh = try? tubeMesh(tube, name: "thread")
+        else { return nil }
+        threadMesh = mesh
+        return mesh
     }
 
     /// The light thread's own opacity where it leaves the receptacle, and
@@ -353,41 +337,77 @@ enum StageMesh {
     static let threadPeakOpacity: Float = 0.35
     static let threadRadius = 0.09
 
-    /// One straight run of thread between two points, in metres. Nil for a
-    /// run too short to aim.
+    /// The thread's fade, as the one texture its one material reads: white at
+    /// `threadPeakOpacity × StageMath.threadFade(at:)`, 256 samples across and
+    /// one high, addressed by the `u` the sweep writes along the tube's
+    /// length. Read as an opacity map, so the ink tone stays the palette's.
+    ///
+    /// No mipmaps: this is a 256-pixel ramp read along a thread a few points
+    /// wide on screen, and the first mip would flatten the whole fade into its
+    /// average. Generated once, in both appearances — the fade is a shape, not
+    /// a colour.
     @MainActor
-    static func threadSegment(
-        from a: SIMD3<Float>, to b: SIMD3<Float>, radius: Float, opacity: Float
-    ) -> ThreadSegment? {
-        let axis = b - a
-        let length = simd_length(axis)
-        guard length > 1e-6 else { return nil }
-        let mesh = MeshResource.generateCylinder(height: length, radius: max(radius, 0.0002))
-        // generateCylinder is built along +y; aim it along the segment.
-        // `simd_quatf(from:to:)` is undefined for antiparallel vectors, so
-        // a segment that happens to point straight down gets the half turn
-        // spelled out rather than a NaN transform.
-        let direction = axis / length
-        let rotation = direction.y < -0.9999
-            ? simd_quatf(angle: .pi, axis: SIMD3<Float>(1, 0, 0))
-            : simd_quatf(from: SIMD3<Float>(0, 1, 0), to: direction)
-        let transform = Transform(scale: .one, rotation: rotation, translation: (a + b) / 2)
-        return ThreadSegment(mesh: mesh, transform: transform, opacity: opacity)
+    static func threadFade() throws -> TextureResource {
+        if let threadFadeRamp { return threadFadeRamp }
+        let width = 256
+        guard
+            let space = CGColorSpace(name: CGColorSpace.sRGB),
+            let context = CGContext(
+                data: nil, width: width, height: 1, bitsPerComponent: 8,
+                bytesPerRow: 0, space: space,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else { throw StageMeshError.textureUnavailable }
+        context.clear(CGRect(x: 0, y: 0, width: width, height: 1))
+        for step in 0..<width {
+            let u = Float(step) / Float(width - 1)
+            let alpha = CGFloat(threadPeakOpacity * StageMath.threadFade(at: u))
+            // Premultiplied white: every channel carries the same number, so
+            // it reads the same whichever one the opacity semantic samples.
+            context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: alpha))
+            context.fill(CGRect(x: step, y: 0, width: 1, height: 1))
+        }
+        guard let image = context.makeImage() else { throw StageMeshError.textureUnavailable }
+        let ramp = try TextureResource(
+            image: image, withName: "thread.fade",
+            options: .init(
+                semantic: PhysicallyBasedMaterial.Opacity.textureSemantic,
+                mipmapsMode: .none
+            )
+        )
+        threadFadeRamp = ramp
+        return ramp
     }
 
-    /// UX_SPEC §6.2 R2: "a single light thread is drawn between them, arcing
-    /// across the chassis". The same light as ``thread()``, run end to end
-    /// along a path in centimetres in the chassis's own frame — the one the
-    /// ribbon walks, lifted further off the surface.
+    /// One tube of constant `radius`, swept end to end along `path` in
+    /// centimetres in the chassis's own frame. No taper and no fade: both
+    /// ends of this one are attached to something.
+    ///
+    /// Two lines in the app are drawn this way, and both are drawn as **one**
+    /// mesh for the same reason ``thread()`` is — §4.2's "one continuous tube
+    /// … never a chain of visible segments". §6.2 R2's loop between two ports
+    /// of this Mac (StageLoop) walks the ribbon's path lifted off the surface;
+    /// §S8's "single thin connecting line" to the ghost second Mac
+    /// (StageGhostNode) walks out of the near face, across and back in. A
+    /// cylinder per leg would put a flat cap and a visible joint at every turn
+    /// — exactly where a line between two machines is looked at.
     @MainActor
-    static func loopThread(along path: [SIMD3<Double>]) -> [ThreadSegment] {
-        zip(path, path.dropFirst()).compactMap { start, end in
-            threadSegment(
-                from: SIMD3(metres(start.x), metres(start.y), metres(start.z)),
-                to: SIMD3(metres(end.x), metres(end.y), metres(end.z)),
-                radius: metres(threadRadius), opacity: threadPeakOpacity
-            )
-        }
+    static func tube(along path: [SIMD3<Double>], radius: Double, name: String) -> MeshResource? {
+        let spine = path.map { SIMD3(metres($0.x), metres($0.y), metres($0.z)) }
+        guard
+            let swept = StageMath.sweep(along: spine, radius: { _ in metres(radius) })
+        else { return nil }
+        return try? tubeMesh(swept, name: name)
+    }
+
+    @MainActor
+    private static func tubeMesh(_ tube: StageMath.SweptTube, name: String) throws -> MeshResource {
+        var descriptor = MeshDescriptor(name: name)
+        descriptor.positions = MeshBuffers.Positions(tube.positions)
+        descriptor.normals = MeshBuffers.Normals(tube.normals)
+        descriptor.textureCoordinates = MeshBuffers.TextureCoordinates(tube.coordinates)
+        descriptor.primitives = .triangles(tube.indices)
+        return try MeshResource.generate(from: [descriptor])
     }
 
     // MARK: - The grille

@@ -3,8 +3,8 @@
 //
 //  Band 4 of the assistant column on the hub: §S1's link row under the port
 //  list, the reason the primary is unavailable when it is, and the button row
-//  itself — `Set Up a Port…` as the default, with `Restore…` beside it
-//  whenever a note exists (§S1, §2.3, §2.8).
+//  itself — `Quit` at the leading edge, then `Set Up a Port…` as the default
+//  with `Restore…` beside it whenever a note exists (§S1, §2.3, §2.8).
 //
 
 import SwiftUI
@@ -31,31 +31,37 @@ struct HubActionsFooter: View {
             // is here, so nobody has to find a row first — any note it can
             // put something back from, which leaves out a return record
             // (§7.5). With only those, there is nothing to offer. R31 is
-            // the one exception: on a Mac RDMALink does not recognize the
-            // footer "has no buttons at all", note or no note.
+            // the one exception: on a Mac RDMALink does not recognize, the
+            // footer holds `Quit` and nothing else, note or no note.
             let offersRestore = footer.offersRestore && hub.hasRestorableNote
-            // A separator rules off the button row; with no button under it
-            // (R31, or R23 with nothing to restore) it would rule off
-            // nothing, so it goes with the row.
-            if offersRestore || footer.primary != nil {
-                Divider()
-                    .padding(.top, 10)
-                HStack(spacing: 10) {
-                    Spacer(minLength: 0)
-                    if offersRestore {
-                        Button("Restore…") { hub.perform(hub.restoreAction) }
-                    }
-                    // R23 and R31 remove the primary rather than disabling it
-                    // (§6.1 rule 5: a disabled control is still an invitation).
-                    if let primary = footer.primary {
-                        Button(footer.primaryTitle) { hub.perform(primary) }
-                            .buttonStyle(.borderedProminent)
-                            .keyboardShortcut(.defaultAction)
-                            .disabled(!footer.isPrimaryEnabled)
-                    }
-                }
+            // The separator always rules off a row that always has `Quit` in
+            // it — §S1 keeps it "present in every hub state, R23 and R31
+            // included", so even the two read-only modes have a button under
+            // the rule.
+            Divider()
                 .padding(.top, 10)
+            HStack(spacing: 10) {
+                // §S1: "the hub is the place people arrive back at when the
+                // work is done", so the way out is here and not only in the
+                // menu. The app's one way out, shared with §6.2's refusals,
+                // so a change to what quitting means happens in one place.
+                // No second ⌘Q: the menu item already carries it, and this
+                // is the same `terminate` it sends.
+                QuitButton()
+                Spacer(minLength: 0)
+                if offersRestore {
+                    Button("Restore…") { hub.perform(hub.restoreAction) }
+                }
+                // R23 and R31 remove the primary rather than disabling it
+                // (§6.1 rule 5: a disabled control is still an invitation).
+                if let primary = footer.primary {
+                    Button(footer.primaryTitle) { hub.perform(primary) }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(!footer.isPrimaryEnabled)
+                }
             }
+            .padding(.top, 10)
         }
         .animation(.smooth(duration: 0.18), value: footer)
     }

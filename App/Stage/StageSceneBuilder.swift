@@ -666,13 +666,13 @@ enum StageSceneBuilder {
         node.layers[.bloom] = bloom
         node.fades[.bloom] = (0, 0)
 
+        // §4.2's thread is one tube and one material; the fade along its
+        // length is the material's texture, not a stack of opacities.
         let thread = Entity()
-        for segment in StageMesh.thread() {
-            var material = palette.inkMaterial
-            material.blending = .transparent(opacity: .init(scale: segment.opacity))
-            let entity = ModelEntity(mesh: segment.mesh, materials: [material])
-            entity.transform = segment.transform
-            thread.addChild(entity)
+        if let mesh = StageMesh.thread(), let fade = try? StageMesh.threadFade() {
+            thread.addChild(
+                ModelEntity(mesh: mesh, materials: [palette.threadMaterial(fade: fade)])
+            )
         }
         thread.components.set(OpacityComponent(opacity: 0))
         thread.isEnabled = false

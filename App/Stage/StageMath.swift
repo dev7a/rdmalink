@@ -494,6 +494,169 @@ enum StageMath {
         return min(max((position - front) / edge, 0), 1)
     }
 
+    // MARK: - The light thread
+
+    /// UX_SPEC §4.2's light thread, in centimetres in the receptacle's own
+    /// frame: `z` out of the face, `y` up, `x` across it.
+    ///
+    /// A cubic, because a cable does not leave a port at an angle. It comes
+    /// out along the receptacle's normal, carries that for a few centimetres
+    /// and only then droops under its own weight — "a smooth curve with the
+    /// sag of a real cable". The first control point is straight out in front
+    /// of the opening, which is what fixes the departure; the second is
+    /// already most of the way down, which is where the sag comes from. The
+    /// far end is where §4.2 has the thread "fade out 40 pt from the frame
+    /// edge".
+    static func threadPath(samples: Int = 48) -> [SIMD3<Double>] {
+        let samples = max(samples, 2)
+        let start = SIMD3<Double>(0, 0, 0.4)
+        let departure = SIMD3<Double>(0, -0.1, 5.0)
+        let droop = SIMD3<Double>(0.3, -3.4, 9.2)
+        let end = SIMD3<Double>(0.6, -7, 10)
+        return (0..<samples).map { step in
+            let t = Double(step) / Double(samples - 1)
+            let inverse = 1 - t
+            return inverse * inverse * inverse * start
+                + 3 * inverse * inverse * t * departure
+                + 3 * inverse * t * t * droop
+                + t * t * t * end
+        }
+    }
+
+    /// What is left of the thread's radius at the far end: §4.2's "tapering
+    /// gently" has to still be a tube there, not a point.
+    static let threadTipShare: Float = 0.25
+
+    /// The taper, as a share of the radius at the receptacle. Straight, so
+    /// the silhouette has no kink in it anywhere along the length.
+    static func threadTaper(at u: Float) -> Float {
+        1 - (1 - threadTipShare) * min(max(u, 0), 1)
+    }
+
+    /// The fade, as a share of the thread's opacity at the receptacle: §4.2's
+    /// "fading along its length", squared so most of the fall happens over
+    /// the second half and the thread reads as light leaving rather than as a
+    /// rod dimmed evenly.
+    static func threadFade(at u: Float) -> Float {
+        let left = 1 - min(max(u, 0), 1)
+        return left * left
+    }
+
+    /// A tube swept along a curve: positions, normals, texture coordinates and
+    /// the triangles between them, in whatever unit the spine is in.
+    struct SweptTube: Equatable, Sendable {
+        var positions: [SIMD3<Float>]
+        var normals: [SIMD3<Float>]
+        var coordinates: [SIMD2<Float>]
+        var indices: [UInt32]
+        /// How many rings were swept, and how many vertices each one carries.
+        var samples: Int
+        var sides: Int
+    }
+
+    /// Sweeps a ring of `sides` vertices along `path`, `radius` wide at each
+    /// point: **one** surface, which is what §4.2 means by "one continuous
+    /// tube … never a chain of visible segments". A chain of cylinders shows
+    /// every joint in the silhouette at exactly the bend a cable is for.
+    ///
+    /// The ring's frame is carried along the curve rather than rebuilt at
+    /// each point — each step rotates the previous frame by the rotation
+    /// between the two tangents, a parallel transport — so the tube never
+    /// twists about its own axis, which a frame built from a fixed up vector
+    /// does wherever the curve turns toward it.
+    ///
+    /// `u` runs 0 → 1 along the length, which is what the fade texture is
+    /// read by, and `v` runs round the ring. The seam is deliberately not
+    /// duplicated: nothing is ever mapped across the ring, so the one column
+    /// where `v` wraps costs nothing and the vertex count stays exactly
+    /// `samples × sides`.
+    ///
+    /// - Parameter radius: asked for at each `u`, so a taper is the caller's.
+    static func sweep(
+        along path: [SIMD3<Float>], sides: Int = 12, radius: (Float) -> Float
+    ) -> SweptTube? {
+        // A repeated point has no direction, and a spine that walks a
+        // chassis's outline can easily arrive at one twice.
+        var spine: [SIMD3<Float>] = []
+        for point in path where spine.last.map({ simd_distance($0, point) > 1e-7 }) ?? true {
+            spine.append(point)
+        }
+        guard spine.count >= 2, sides >= 3 else { return nil }
+
+        // The tangent at an interior point is the chord across it, so the
+        // ring lies square to the curve rather than to one of its two legs.
+        let tangents: [SIMD3<Float>] = spine.indices.map { index in
+            let run = switch index {
+            case 0: spine[1] - spine[0]
+            case spine.count - 1: spine[index] - spine[index - 1]
+            default: spine[index + 1] - spine[index - 1]
+            }
+            return simd_normalize(run)
+        }
+
+        // Any vector across the first tangent will do to start; the transport
+        // decides every one after it.
+        var across = simd_cross(tangents[0], SIMD3<Float>(0, 1, 0))
+        if simd_length(across) < 1e-4 {
+            across = simd_cross(tangents[0], SIMD3<Float>(1, 0, 0))
+        }
+        var normal = simd_normalize(across)
+
+        var positions: [SIMD3<Float>] = []
+        var normals: [SIMD3<Float>] = []
+        var coordinates: [SIMD2<Float>] = []
+        positions.reserveCapacity(spine.count * sides)
+        normals.reserveCapacity(spine.count * sides)
+        coordinates.reserveCapacity(spine.count * sides)
+
+        for (index, centre) in spine.enumerated() {
+            let tangent = tangents[index]
+            if index > 0 {
+                let turn = simd_cross(tangents[index - 1], tangent)
+                let sine = simd_length(turn)
+                if sine > 1e-7 {
+                    let angle = atan2(sine, simd_dot(tangents[index - 1], tangent))
+                    normal = simd_quatf(angle: angle, axis: turn / sine).act(normal)
+                }
+                // Rounding leaves the carried frame a hair off square; this
+                // puts it back, so 48 steps do not accumulate into a lean.
+                let leftover = normal - tangent * simd_dot(normal, tangent)
+                guard simd_length(leftover) > 1e-6 else { return nil }
+                normal = simd_normalize(leftover)
+            }
+            let binormal = simd_cross(tangent, normal)
+            let u = Float(index) / Float(spine.count - 1)
+            let width = max(radius(u), 1e-5)
+            for side in 0..<sides {
+                let angle = 2 * Float.pi * Float(side) / Float(sides)
+                let outward = normal * cos(angle) + binormal * sin(angle)
+                positions.append(centre + outward * width)
+                normals.append(outward)
+                coordinates.append(SIMD2(u, Float(side) / Float(sides)))
+            }
+        }
+
+        var indices: [UInt32] = []
+        indices.reserveCapacity((spine.count - 1) * sides * 6)
+        for ring in 0..<(spine.count - 1) {
+            let near = UInt32(ring * sides)
+            let far = UInt32((ring + 1) * sides)
+            for side in 0..<sides {
+                let next = UInt32((side + 1) % sides)
+                let a = near + UInt32(side), b = near + next
+                let c = far + next, d = far + UInt32(side)
+                // Counter-clockwise seen from outside the tube: `tangent ×
+                // ring direction` points inward, so this is the other winding.
+                indices.append(contentsOf: [a, c, d, a, b, c])
+            }
+        }
+
+        return SweptTube(
+            positions: positions, normals: normals, coordinates: coordinates,
+            indices: indices, samples: spine.count, sides: sides
+        )
+    }
+
     // MARK: - Rounded-rectangle outlines
 
     /// One point on a rounded-rectangle centreline, with the outward normal and

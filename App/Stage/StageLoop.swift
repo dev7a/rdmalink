@@ -6,9 +6,10 @@
 //  thread connects two ports of the same machine."
 //
 //  The rings are the receptacles' own attention rings (§S3). This is the
-//  thread: the same light as §4.2's, run from one receptacle to the other
-//  along the chassis's footprint the way §4.4's ribbon is, and lifted further
-//  off the surface so it reads as a cable's worth of light rather than a tie.
+//  thread: the same light as §4.2's — and the same one continuous tube, swept
+//  along the path in one piece — run from one receptacle to the other along
+//  the chassis's footprint the way §4.4's ribbon is, and lifted further off
+//  the surface so it reads as a cable's worth of light rather than a tie.
 //  While it is up the two receptacles' own outbound threads stand down
 //  (StageScene), because two threads leaving for the frame edge is the
 //  picture of two Macs, and R2 exists to correct exactly that reading.
@@ -32,8 +33,9 @@ final class StageLoopThread {
         self.root = root
     }
 
-    /// One thread about every 5 mm of curve: a bend between cylinders shows
-    /// at a thread's radius sooner than at a ribbon's width.
+    /// One sample of the swept tube about every 5 mm of curve: a bend shows
+    /// at a thread's radius sooner than at a ribbon's width, and the tube is
+    /// only as smooth as the spine it is swept along.
     private static let segmentLength = 0.5
     private static let minimumSegments = 8
     private static let maximumSegments = 48
@@ -58,18 +60,20 @@ final class StageLoopThread {
             lift: StageMath.loopLift(from: start, to: end),
             rise: StageMath.ribbonRise(span: span, room: room), samples: count
         )
-        let segments = StageMesh.loopThread(along: path)
-        guard !segments.isEmpty else { return nil }
+        guard
+            let mesh = StageMesh.tube(
+                along: path, radius: StageMesh.threadRadius, name: "loop"
+            )
+        else { return nil }
 
         let root = Entity()
         root.name = "loop.\(pair.a)-\(pair.b)"
-        for segment in segments {
-            var material = palette.inkMaterial
-            material.blending = .transparent(opacity: .init(scale: segment.opacity))
-            let entity = ModelEntity(mesh: segment.mesh, materials: [material])
-            entity.transform = segment.transform
-            root.addChild(entity)
-        }
+        // The same one tube §4.2's thread is, and the same light: this one
+        // carries its peak opacity from end to end, because both of its ends
+        // are attached to a receptacle and neither is fading into the frame.
+        var material = palette.inkMaterial
+        material.blending = .transparent(opacity: .init(scale: StageMesh.threadPeakOpacity))
+        root.addChild(ModelEntity(mesh: mesh, materials: [material]))
         root.components.set(OpacityComponent(opacity: 0))
         root.isEnabled = false
         return StageLoopThread(pair: pair, root: root)
