@@ -440,6 +440,12 @@ extension WizardRefusal {
         case .undoNoteMissing, .notBackInBridge, .originalBridgeGone,
             .createdServiceEdited, .noBridgeToReturnTo, .noteIsAReturnRecord:
             [.checkAgain, .copyDetails]
+        // §6.2 R31: "Buttons: none." It never reaches the assistant — an
+        // unrecognized Mac has no way into S3 (§S4) — and if one did, the
+        // only honest button is the way out §6.1 rule 10 leaves on every
+        // refusal. Not an empty row: that would print "I'll keep watching",
+        // and R31 never clears.
+        case .macNotRecognized: [.back]
         }
     }
 }

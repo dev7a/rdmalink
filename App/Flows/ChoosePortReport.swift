@@ -41,10 +41,6 @@ struct ChoosePortReport: Sendable, Equatable {
     /// assumed (§S4 "Pre-selection").
     var preSelection: Set<String>
     var preSelectionLine: LocalizedStringResource?
-    /// On an unrecognized model, `Identify a Port…` is promoted above the list
-    /// and the numbering is explained.
-    var promotesIdentify: Bool
-    var unrecognizedModelLine: LocalizedStringResource?
     /// The informational lines the current selection earns. Never blocking.
     var informationalLines: [ChooseInformationalLine]
     /// Shown once more than one port is chosen.
@@ -54,14 +50,15 @@ struct ChoosePortReport: Sendable, Equatable {
     /// R26 — a dead end handled kindly, with no buttons: it watches and clears.
     var everyPortOccupied: WizardRefusal?
 
+    /// - Parameter hardware: a Mac the catalogue recognizes. An unrecognized
+    ///   one never reaches this screen: R31 offers no set-up (§S4).
     init(
         ports: [PortSnapshot],
         hardware: HardwareModel?,
         selection: Set<String>
     ) {
-        let archetype = hardware?.archetype ?? .unknown
         self.body =
-            archetype == .notebook
+            hardware?.archetype == .notebook
             ? "Click a port on the model, or pick one from the list. Use the selector below the model to see the other side."
             : "Click a port on the model, or pick one from the list. If it's on the other side, I'll turn the Mac around."
 
@@ -82,12 +79,6 @@ struct ChoosePortReport: Sendable, Equatable {
             self.preSelection = []
             self.preSelectionLine = nil
         }
-
-        self.promotesIdentify = archetype == .unknown
-        self.unrecognizedModelLine =
-            archetype == .unknown
-            ? "The ports here are numbered the way macOS reports them. If you're not sure which is which, Identify will tell you."
-            : nil
 
         let chosen = ports.filter { selection.contains($0.id) }
         self.informationalLines = chosen.compactMap(ChooseInformationalLine.init)

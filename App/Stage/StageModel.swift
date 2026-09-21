@@ -95,8 +95,12 @@ struct StageBridge: Identifiable, Equatable, Sendable {
 extension StagePort {
     /// The seam with Core. The integrator calls this; nothing in App/Stage does.
     ///
-    /// A port whose `face` is nil is on an unrecognized Mac, where the generic
-    /// box has one face and the physical order is whatever macOS reported.
+    /// A port whose `face` is nil is one macOS gave no position (§4.7's
+    /// "positions unavailable" on a recognized Mac): it is filed under the
+    /// back, where the binder finds it a hole only if the chassis has one
+    /// there, and drops it otherwise rather than drawing it somewhere invented.
+    /// On an unrecognized Mac no chassis is built at all (R31), so the face
+    /// is never read.
     init(port: ThunderboltPort, physicalIndex: Int, configuration: Configuration) {
         self.init(
             id: port.id,
@@ -203,6 +207,22 @@ struct StageHandoff: Equatable, Sendable {
     var face: PortFace
 }
 
+/// What the stage has to draw for this Mac (UX_SPEC §3.4, §6.2 R31).
+///
+/// The one place the decision lives: the view draws a scene only for
+/// ``chassis(_:)``, and every camera intent, narration and selection on the
+/// model is refused for the other two, so nothing downstream has to ask
+/// whether there is a chassis to turn.
+enum StagePicture: Equatable, Sendable {
+    /// Nothing is known yet — S0 before this Mac's identity lands. Blank.
+    case pending
+    /// Neither rule in §4.7 recognizes this Mac. No chassis, no rings, no
+    /// chrome: R31's unavailable-content block stands where the model would.
+    case unrecognized
+    /// A Mac the catalogue can draw.
+    case chassis(Chassis)
+}
+
 /// A camera move the view has not performed yet.
 ///
 /// The token makes a repeat of the same move a new request: pressing ⌘0 twice
@@ -232,9 +252,16 @@ struct StageCameraRequest: Equatable, Sendable {
 @MainActor
 @Observable
 final class StageModel {
-    var archetype: Archetype = .unknown
+    /// The chassis to draw, or the reason there is none.
+    var picture: StagePicture = .pending
     /// The marketing name, for the accessibility container summary (§8.2).
     var machineName = ""
+
+    /// The chassis, while there is one to draw.
+    var chassis: Chassis? {
+        if case .chassis(let chassis) = picture { return chassis }
+        return nil
+    }
 
     /// Every receptacle, in physical order. The order is the list's order and
     /// the VoiceOver container's order; it never changes for a redraw (§2.3).
@@ -331,7 +358,11 @@ final class StageModel {
 
     /// USB-only receptacles are never selectable (§4.5): the model refuses
     /// before the panel has to explain. Clicking one is the panel's business.
+    ///
+    /// With no chassis there is nothing a selection could light, so on an
+    /// unrecognized Mac the rows take no selection either (§S1, R31).
     func select(_ id: StagePort.ID?) {
+        guard chassis != nil else { return }
         guard id == nil || ports.first(where: { $0.id == id })?.isThunderbolt == true else {
             return
         }
@@ -568,29 +599,34 @@ final class StageModel {
     }
 
     /// Called by `apply(_:)` when a re-read moved a port on a face that is not
-    /// in front. Never set for the face the user is already looking at.
+    /// in front. Never set for the face the user is already looking at — and
+    /// never on a Mac with no chassis, where there is no face to show (R31).
     func noteUnseenChange(on face: PortFace) {
-        guard face != currentFace else { return }
+        guard chassis != nil, face != currentFace else { return }
         unseenChange = face
     }
 
     // MARK: - Faces
 
     /// The faces the selector offers. Hidden entirely when one face is
-    /// relevant (§2.3), which the view decides from this being a single value.
+    /// relevant (§2.3), which the view decides from this being a single value
+    /// — and empty with no chassis, where there is no selector at all (R31).
     var relevantFaces: [PortFace] {
+        guard let chassis else { return [] }
         let present = ports.reduce(into: [PortFace]()) { faces, port in
             if !faces.contains(port.face) { faces.append(port.face) }
         }
-        guard !present.isEmpty else {
-            return ReceptacleCatalogue.chassis(for: archetype).faces
-        }
+        guard !present.isEmpty else { return chassis.faces }
         return present
     }
 
     // MARK: - Private
 
+    /// Every camera intent passes through here, and none is raised without a
+    /// chassis to move around (§6.2 R31: "no selector, legend, callout or
+    /// view buttons", and no "Let me turn it around" either).
     private func request(_ kind: StageCameraRequest.Kind) {
+        guard chassis != nil else { return }
         requestToken += 1
         cameraRequest = StageCameraRequest(kind: kind, token: requestToken)
     }
@@ -598,6 +634,7 @@ final class StageModel {
     /// The panel line and the VoiceOver announcement are posted together so a
     /// VoiceOver user is told exactly what a sighted user is shown (§8.2).
     private func say(_ line: LocalizedStringResource, showing face: PortFace) {
+        guard chassis != nil else { return }
         narration = line
         announcement = Self.announcement(for: face)
         narrationClear?.cancel()

@@ -57,6 +57,10 @@ public enum RefusalCode: String, Sendable, Equatable, CaseIterable {
     /// command line ever shows the adopted form: the app's Restore sheet
     /// sends an adopted note to Return to Bridge before it asks for a preview.
     case noteIsAReturnRecord = "R30"
+    /// Neither rule in UX_SPEC §4.7 recognizes this Mac. Read-only mode, not
+    /// an error: every operation refuses with it **first**, so nothing that
+    /// writes — notes included — runs on a Mac RDMALink does not know.
+    case macNotRecognized = "R31"
 }
 
 /// A refusal: a situation the app names, explains and will not step around.

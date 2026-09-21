@@ -25,7 +25,9 @@ public struct ObservedWorld: Sendable {
     /// `SCNetworkServiceCreate` refuses with `kSCStatusFailed`: configd will
     /// not put a service on an interface a stored bridge still claims.
     public var bridges: [BridgeSPI.Membership]
-    /// R1 and R5, which no single port can see.
+    /// R1, R5 and R31, which no single port can see. The hardware model rides
+    /// in it, so every operation's preview refuses on an unrecognized Mac
+    /// before it looks at anything else (UX_SPEC §6.2 R31).
     public var context: PreflightContext
     /// The RDMA switch, for S5's warning row. Not RDMALink's to change.
     public var rdma: RDMAStatus
@@ -59,7 +61,7 @@ public struct ObservedWorld: Sendable {
     /// No credential, no lock, no write.
     public static func read(
         ports: [OperationPort],
-        archetype: Archetype,
+        hardware: HardwareModel,
         notesDirectory: URL = BaselineStore.defaultDirectory,
         clientName: String = "RDMALink",
         runner: CommandRunner = CommandRunner()
@@ -76,7 +78,7 @@ public struct ObservedWorld: Sendable {
             services: NetworkServices.read(from: preferences),
             serviceOrder: NetworkServices.serviceOrder(in: preferences),
             bridges: stored.bridges,
-            context: try PreflightContext.read(archetype: archetype, runner: runner,
+            context: try PreflightContext.read(hardware: hardware, runner: runner,
                                                storedBridges: stored),
             rdma: RDMAStatus.read(runner: runner),
             mountedVolumes: (try? MountedVolumes.over(ports, runner: runner)) ?? [],
@@ -88,7 +90,7 @@ public struct ObservedWorld: Sendable {
     static func reread(
         ports: [OperationPort],
         writer: NetworkWriter,
-        archetype: Archetype,
+        hardware: HardwareModel,
         notesDirectory: URL,
         runner: CommandRunner
     ) throws -> ObservedWorld {
@@ -104,7 +106,7 @@ public struct ObservedWorld: Sendable {
             services: try writer.services(),
             serviceOrder: try writer.serviceOrder(),
             bridges: stored.bridges,
-            context: try PreflightContext.read(archetype: archetype, runner: runner,
+            context: try PreflightContext.read(hardware: hardware, runner: runner,
                                                storedBridges: stored),
             rdma: RDMAStatus.read(runner: runner),
             mountedVolumes: (try? MountedVolumes.over(ports, runner: runner)) ?? [],

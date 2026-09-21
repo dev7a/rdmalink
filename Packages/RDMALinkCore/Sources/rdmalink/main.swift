@@ -207,6 +207,9 @@ func runRefusals() throws {
         names[bridge.bsdName] = bridge.displayName
     }
 
+    // R31 first, as every operation asks it: on a Mac neither rule in UX_SPEC
+    // §4.7 recognizes nothing below is offered, whatever it measures.
+    report("R31", "This Mac is one RDMALink recognizes", Refusals.macRecognized(inventory.model))
     report("R2", "No cable comes back into this Mac", Refusals.loopedBackIntoThisMac(observed))
     report("R1", "Only one Mac is connected", Refusals.oneCableOnly(observed))
     report("R5", "Something other than Thunderbolt reaches this Mac", Refusals.managementPathExists(
@@ -275,7 +278,7 @@ func show(_ refusal: Refusal) {
 /// This Mac as the operations see it, with R14 measured against the notes
 /// folder the tool is using.
 func observe(_ ports: [OperationPort], _ inventory: Inventory) throws -> ObservedWorld {
-    try ObservedWorld.read(ports: ports, archetype: inventory.model.archetype,
+    try ObservedWorld.read(ports: ports, hardware: inventory.model,
                            notesDirectory: notesStore.directory)
 }
 
@@ -407,6 +410,13 @@ func runRestoreAll() throws {
     print(operation.headline)
     print(operation.body)
     for port in ports { print("  · \(port.positionName) (\(port.bsdName))") }
+    // Each port's restore would refuse with R31 before reading its note
+    // (§6.2 R31), so the run is said to be in the way here, once.
+    if let refusal = Refusals.macRecognized(inventory.model) {
+        print("")
+        print("In the way:")
+        show(refusal)
+    }
 }
 
 /// `return-to-bridge <bsd>` — UX_SPEC §7.5.
@@ -464,6 +474,11 @@ func runAdopt(_ bsdName: String?) throws {
     for finding in plan.findings { print("  \(finding.label) — \(finding.value)") }
     if let steps = plan.steps { print("  steps: \(steps)") }
     for note in plan.notes { print("  \(note)") }
+    if let refusal = plan.refusal {
+        print("")
+        print("In the way:")
+        show(refusal)
+    }
     print("buttons: \(list(plan.buttonTitles))")
 }
 
@@ -476,6 +491,13 @@ func runStopManaging(_ bsdName: String?) throws {
     let operation = StopManaging(port: port)
     print(operation.headline)
     print(operation.body)
+    // Forgetting a note is a write, and `perform` refuses it first with R31
+    // (§6.2 R31); the preview says so in the same words.
+    if let refusal = Refusals.macRecognized(inventory.model) {
+        print("")
+        print("In the way:")
+        show(refusal)
+    }
 }
 
 func printUsage() {

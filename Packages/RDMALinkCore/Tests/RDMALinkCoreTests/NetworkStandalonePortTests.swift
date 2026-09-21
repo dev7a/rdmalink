@@ -28,10 +28,11 @@ private let port = ObservedPort(bsdName: "en6", positionName: "Back, far left")
 /// One Thunderbolt port, one Mac on the end at most, and Ethernet as the way in.
 private func context(
     ports: [ObservedPort] = [port],
-    primary: [String] = ["en0"]
+    primary: [String] = ["en0"],
+    hardware: HardwareModel = Fixtures.studio
 ) -> PreflightContext {
-    PreflightContext(observedPorts: ports, thunderboltBSDNames: ports.map(\.bsdName),
-                     primaryInterfaces: primary)
+    PreflightContext(hardware: hardware, observedPorts: ports,
+                     thunderboltBSDNames: ports.map(\.bsdName), primaryInterfaces: primary)
 }
 
 private func snapshot(_ text: String) -> InterfaceSnapshot {
@@ -93,6 +94,18 @@ struct StandalonePortPlanTests {
         #expect(plan.refusal?.headline == "This port already has a setup RDMALink didn't make")
         #expect(plan.refusal?.body.contains(
             "a service on Back, far left with a fixed IPv4 address on it") == true)
+    }
+
+    @Test("An unrecognized Mac is refused before the bridge, and offered nothing")
+    func refusesAnUnrecognizedMacFirst() {
+        // §6.2 R31 goes ahead of R9: the port is in a bridge, and the answer
+        // is still that this Mac is not one RDMALink changes.
+        let plan = StandalonePortSetup(port: port).preview(
+            snapshot: snapshot(bridgedFixture), services: [],
+            context: context(hardware: Fixtures.unrecognized), storedBridges: stored(bridgedFixture))
+        #expect(plan.refusal?.code == .macNotRecognized)
+        #expect(plan.outcome == .refused)
+        #expect(!plan.canProceed)
     }
 
     @Test("Bridge membership is refused before anything else is looked at")

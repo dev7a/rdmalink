@@ -214,7 +214,7 @@ struct OperationsPartialRunTests {
         let spent = KernelWaitPolicy(window: .milliseconds(30), interval: .milliseconds(10),
                                      budget: .zero, pause: { _ in })
         let environment = OperationEnvironment(
-            archetype: .studioFour, store: store,
+            hardware: Fixtures.studio, store: store,
             log: ChangeLog(url: store.directory.appending(path: "changes.jsonl")),
             policy: spent)
 

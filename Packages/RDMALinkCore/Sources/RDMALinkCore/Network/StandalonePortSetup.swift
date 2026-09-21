@@ -162,7 +162,8 @@ public struct StandalonePortSetup: Sendable {
     /// R1, R2 and R5 are marked "blocks preflight and any apply" / "hard
     /// refusal at preflight and at review" (UX_SPEC §6.2), so they belong here
     /// and not only in the preflight screen — a cable that arrives while the
-    /// review is on screen has to be caught by the last gate.
+    /// review is on screen has to be caught by the last gate. R31 is about
+    /// the Mac itself and goes ahead of all of them.
     public func blockingRefusal(
         snapshot: InterfaceSnapshot,
         services: [NetworkServiceInfo],
@@ -170,7 +171,8 @@ public struct StandalonePortSetup: Sendable {
         storedBridges: [BridgeSPI.Membership],
         bridgeNames: [String: String] = [:]
     ) -> Refusal? {
-        // §6.2 R2 first: a cable looped back into two bridged ports would read
+        if let refusal = Refusals.macRecognized(context.hardware) { return refusal }
+        // §6.2 R2 next: a cable looped back into two bridged ports would read
         // as two Macs otherwise, and the sentence for it is R2's.
         if let refusal = Refusals.loopedBackIntoThisMac(context.observedPorts) { return refusal }
         if let refusal = Refusals.oneCableOnly(context.observedPorts) { return refusal }

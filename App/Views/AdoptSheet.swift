@@ -187,9 +187,8 @@ struct AdoptSheet: View {
     /// §7.3: adopting changes nothing and needs no password — it writes a note
     /// and a log entry, which is why there is no checklist here.
     private func adopt(_ port: PortSnapshot) {
-        guard let world = hub.world else { return }
+        guard let world = hub.world, let environment = hub.environment else { return }
         let operationPort = OperationPort(port.port)
-        let environment = hub.environment
         hub.start(steps: []) { _ in
             let confirmation = try await OperationHost.withoutACredential {
                 try AdoptPort(port: operationPort).perform(

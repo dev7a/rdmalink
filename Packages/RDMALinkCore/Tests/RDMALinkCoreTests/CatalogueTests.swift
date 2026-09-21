@@ -18,8 +18,8 @@ struct CatalogueTests {
             (.mini, ["Back, left", "Back, middle", "Back, right", "Front, left", "Front, right"]),
             (.notebook, ["Left side, rear", "Left side, front", "Right side"]),
           ])
-    func namesReceptaclesInPhysicalOrder(archetype: Archetype, names: [String]) {
-        let chassis = ReceptacleCatalogue.chassis(for: archetype)
+    func namesReceptaclesInPhysicalOrder(archetype: Archetype, names: [String]) throws {
+        let chassis = try #require(ReceptacleCatalogue.chassis(for: archetype))
         #expect(chassis.receptacles.compactMap(\.positionName) == names)
     }
 
@@ -30,8 +30,8 @@ struct CatalogueTests {
             (.mini, 3, 2),
             (.notebook, 3, 0),
           ])
-    func countsReceptaclesByKind(archetype: Archetype, thunderbolt: Int, usb: Int) {
-        let receptacles = ReceptacleCatalogue.chassis(for: archetype).receptacles
+    func countsReceptaclesByKind(archetype: Archetype, thunderbolt: Int, usb: Int) throws {
+        let receptacles = try #require(ReceptacleCatalogue.chassis(for: archetype)).receptacles
         #expect(receptacles.count { $0.kind == .thunderbolt } == thunderbolt)
         #expect(receptacles.count { $0.kind == .usbC } == usb)
         #expect(receptacles.count == thunderbolt + usb)
@@ -40,7 +40,7 @@ struct CatalogueTests {
     @Test("Every feature on every chassis, counted",
           arguments: [(Archetype.studioFour, 15), (.studioSix, 15), (.mini, 10), (.notebook, 7)])
     func countsEveryFeature(archetype: Archetype, features: Int) {
-        #expect(ReceptacleCatalogue.chassis(for: archetype).features.count == features)
+        #expect(ReceptacleCatalogue.chassis(for: archetype)?.features.count == features)
     }
 
     @Test("The two Mac Studios are one box that differs only at the front")
@@ -59,9 +59,9 @@ struct CatalogueTests {
 
     // MARK: The invariants every chassis holds
 
-    @Test("No two features share a place on a face", arguments: Archetype.allCases)
-    func placesEveryFeatureOnceOnItsFace(archetype: Archetype) {
-        let chassis = ReceptacleCatalogue.chassis(for: archetype, reportedFaces: Self.sixOnTheBack)
+    @Test("No two features share a place on a face", arguments: drawn)
+    func placesEveryFeatureOnceOnItsFace(archetype: Archetype) throws {
+        let chassis = try #require(ReceptacleCatalogue.chassis(for: archetype))
         for face in chassis.faces {
             let coordinates = chassis.features(on: face).map(\.u)
             #expect(Set(coordinates).count == coordinates.count)
@@ -72,9 +72,9 @@ struct CatalogueTests {
     }
 
     @Test("Every Thunderbolt and USB receptacle is named and numbered, and nothing else is",
-          arguments: Archetype.allCases)
-    func namesAndNumbersReceptaclesOnly(archetype: Archetype) {
-        let chassis = ReceptacleCatalogue.chassis(for: archetype, reportedFaces: Self.sixOnTheBack)
+          arguments: drawn)
+    func namesAndNumbersReceptaclesOnly(archetype: Archetype) throws {
+        let chassis = try #require(ReceptacleCatalogue.chassis(for: archetype))
         for feature in chassis.features {
             if feature.kind.isReceptacle {
                 #expect(feature.positionName?.isEmpty == false)
@@ -92,9 +92,9 @@ struct CatalogueTests {
     }
 
     @Test("The index is the rank along the face, and finds the receptacle again",
-          arguments: Archetype.allCases)
-    func looksUpByFaceAndIndex(archetype: Archetype) {
-        let chassis = ReceptacleCatalogue.chassis(for: archetype, reportedFaces: Self.sixOnTheBack)
+          arguments: drawn)
+    func looksUpByFaceAndIndex(archetype: Archetype) throws {
+        let chassis = try #require(ReceptacleCatalogue.chassis(for: archetype))
         for face in chassis.faces {
             let onFace = chassis.features(on: face).filter(\.kind.isReceptacle)
             #expect(onFace.map(\.index) == (0..<onFace.count).map { $0 })
@@ -159,7 +159,6 @@ struct CatalogueTests {
         #expect(ReceptacleCatalogue.studioFour.grille == grille)
         #expect(ReceptacleCatalogue.mini.grille == nil)
         #expect(ReceptacleCatalogue.notebook.grille == nil)
-        #expect(ReceptacleCatalogue.generic(reportedFaces: Self.sixOnTheBack).grille == nil)
     }
 
     @Test("The grille is a surface, not a feature: it adds no row to the face")
@@ -172,9 +171,9 @@ struct CatalogueTests {
     }
 
     @Test("The grille sits on its face and never reaches into an opening",
-          arguments: Archetype.allCases)
+          arguments: drawn)
     func grilleClearsEveryOpening(archetype: Archetype) throws {
-        let chassis = ReceptacleCatalogue.chassis(for: archetype, reportedFaces: Self.sixOnTheBack)
+        let chassis = try #require(ReceptacleCatalogue.chassis(for: archetype))
         guard let grille = chassis.grille else { return }
         #expect(grille.u0 > 0 && grille.u0 < grille.u1 && grille.u1 < 1)
         #expect(grille.v0 > 0 && grille.v0 < grille.v1 && grille.v1 < 1)
@@ -238,89 +237,23 @@ struct CatalogueTests {
         #expect(FeatureKind.allCases.filter(\.isReceptacle) == [.thunderbolt, .usbC])
     }
 
-    // MARK: The stand-in
+    // MARK: Dispatch
 
-    /// What a Mac Studio-shaped unknown reports: every port on the back.
-    static let sixOnTheBack = [PortFace](repeating: .back, count: 6)
+    /// The archetypes the catalogue can draw. ``Archetype/unknown`` has no
+    /// chassis at all (UX_SPEC §3.4, §6.2 R31), and every test that walks the
+    /// catalogue walks these.
+    static let drawn = Archetype.allCases.filter { $0 != .unknown }
 
-    @Test("An unrecognized Mac gets a plain box with numbered receptacles",
-          arguments: [1, 2, 3, 6, 8])
-    func buildsTheStandIn(count: Int) {
-        let chassis = ReceptacleCatalogue.generic(
-            reportedFaces: [PortFace](repeating: .back, count: count)
-        )
-        #expect(chassis.archetype == .unknown)
-        #expect(chassis.lid == nil)
-        #expect(chassis.faces == [.back])
-        #expect(chassis.receptacles.count == count)
-        #expect(chassis.receptacles.allSatisfy { $0.kind == .thunderbolt })
-        #expect(chassis.receptacles.compactMap(\.positionName)
-            == (1...count).map { "Thunderbolt port \($0)" })
-        // Centred, in order, and on the face.
-        let coordinates = chassis.receptacles.map(\.u)
-        #expect(coordinates == coordinates.sorted())
-        #expect(coordinates.allSatisfy { $0 > 0 && $0 < 1 })
-        #expect(abs((coordinates.reduce(0, +) / Double(count)) - 0.5) < 1e-9)
-    }
-
-    /// UX_SPEC §3.4: "each on the face macOS reports it on". A MacBook's
-    /// two-left-one-right layout, reported by a Mac the catalogue does not
-    /// list, has to come out on the sides — the stage's binder matches by
-    /// face, and a row on the back would leave every port without a hole.
-    @Test("The stand-in puts each receptacle on the face it was reported on")
-    func buildsTheStandInOnTheReportedFaces() throws {
-        let chassis = ReceptacleCatalogue.generic(reportedFaces: [.left, .left, .right])
-        #expect(chassis.faces == [.left, .right])
-        #expect(chassis.receptacles.count == 3)
-        #expect(chassis.receptacles.allSatisfy { $0.kind == .thunderbolt })
-        #expect(chassis.receptacles.map(\.face) == [.left, .left, .right])
-        #expect(chassis.receptacles.map(\.index) == [0, 1, 0])
-        // Numbered in the reported order across the whole machine, not per
-        // face: the numbers are placeholders the binder never reads.
-        #expect(chassis.receptacles.compactMap(\.positionName)
-            == ["Thunderbolt port 1", "Thunderbolt port 2", "Thunderbolt port 3"])
-        let left = chassis.features(on: .left).map(\.u)
-        #expect(left == left.sorted())
-        #expect(left.count == 2 && left[0] < left[1])
-        // A side row runs along the depth, at the same 1.6 cm pitch.
-        #expect(abs((left[1] - left[0]) * chassis.depth - 1.6) < 1e-9)
-        let right = try #require(chassis.features(on: .right).first)
-        #expect(abs(right.u - 0.5) < 1e-9)
-        #expect(chassis.features(on: .back).isEmpty)
-    }
-
-    @Test("A port with no reported face goes on the back, and the box grows both ways")
-    func buildsTheStandInAcrossFaces() {
-        let chassis = ReceptacleCatalogue.generic(
-            reportedFaces: [.back, .left, .left, .left, .left, .left, .left, .front, .back]
-        )
-        #expect(chassis.faces == [.back, .front, .left])
-        #expect(chassis.features(on: .back).count == 2)
-        #expect(chassis.features(on: .front).count == 1)
-        #expect(chassis.features(on: .left).count == 6)
-        // Width follows the wider of back and front, depth the wider side.
-        #expect(chassis.width == 16.0)
-        #expect(abs(chassis.depth - 19.2) < 1e-9)
-    }
-
-    @Test("A stand-in for a Mac with nothing on it is a box with nothing on it")
-    func buildsAnEmptyStandIn() {
-        #expect(ReceptacleCatalogue.generic(reportedFaces: []).features.isEmpty)
-        #expect(ReceptacleCatalogue.generic(reportedFaces: []).faces.isEmpty)
-        #expect(ReceptacleCatalogue.generic(reportedFaces: []).width == 16.0)
-        #expect(ReceptacleCatalogue.generic(reportedFaces: []).depth == 16.0)
-    }
-
-    @Test("The unknown archetype is the stand-in, and the others ignore the faces")
+    @Test("Each archetype dispatches to its own chassis, and the unknown one to none")
     func dispatchesOnArchetype() {
-        #expect(ReceptacleCatalogue.chassis(for: .unknown, reportedFaces: [.left, .left, .right])
-            == ReceptacleCatalogue.generic(reportedFaces: [.left, .left, .right]))
-        #expect(ReceptacleCatalogue.chassis(for: .unknown) == ReceptacleCatalogue.generic(reportedFaces: []))
-        #expect(ReceptacleCatalogue.chassis(for: .studioSix, reportedFaces: [.left, .left, .right])
-            == ReceptacleCatalogue.studioSix)
+        #expect(ReceptacleCatalogue.chassis(for: .studioSix) == ReceptacleCatalogue.studioSix)
         #expect(ReceptacleCatalogue.chassis(for: .mini) == ReceptacleCatalogue.mini)
         #expect(ReceptacleCatalogue.chassis(for: .notebook) == ReceptacleCatalogue.notebook)
         #expect(ReceptacleCatalogue.chassis(for: .studioFour) == ReceptacleCatalogue.studioFour)
+        #expect(ReceptacleCatalogue.chassis(for: .unknown) == nil)
+        for archetype in Self.drawn {
+            #expect(ReceptacleCatalogue.chassis(for: archetype)?.archetype == archetype)
+        }
     }
 
     @Test("Every chassis knows where the camera rests")
@@ -334,36 +267,6 @@ struct CatalogueTests {
             == RestingPose(yaw: -.pi / 2 + 0.75, pitch: 0.32, radiusScale: 1.05))
     }
 
-    @Test("The stand-in rests facing the first of its faces that carries a port")
-    func standInRestsOnItsFirstFace() {
-        // §3.4: a Mac whose ports are all on its sides must not open on a
-        // blank back. Yaw 0 looks at the front, π at the back; the sides take
-        // the notebook's pose and its mirror.
-        #expect(ReceptacleCatalogue.generic(reportedFaces: [.left, .left, .right]).resting.yaw == -.pi / 2 + 0.75)
-        #expect(ReceptacleCatalogue.generic(reportedFaces: [.right]).resting.yaw == .pi / 2 - 0.75)
-        #expect(ReceptacleCatalogue.generic(reportedFaces: [.front, .front]).resting.yaw == 0.55)
-        #expect(ReceptacleCatalogue.generic(reportedFaces: [.left, .back]).resting.yaw == .pi - 0.55)
-        #expect(ReceptacleCatalogue.generic(reportedFaces: []).resting.yaw == .pi - 0.55)
-        #expect(ReceptacleCatalogue.generic(reportedFaces: [.left]).resting.pitch == 0.30)
-    }
-
-    @Test("The stand-in box grows with the row rather than crowding it")
-    func growsTheStandIn() {
-        func backRow(_ count: Int) -> Chassis {
-            ReceptacleCatalogue.generic(reportedFaces: [PortFace](repeating: .back, count: count))
-        }
-        #expect(backRow(0).width == 16.0)
-        #expect(backRow(2).width == 16.0)
-        #expect(backRow(4).width == 16.0)
-        #expect(backRow(8).width == 23.6)
-        // A back row leaves the depth alone.
-        #expect(backRow(8).depth == 16.0)
-        let wide = backRow(8)
-        let pitches = zip(wide.receptacles.dropFirst(), wide.receptacles)
-            .map { ($0.u - $1.u) * wide.width }
-        #expect(pitches.allSatisfy { abs($0 - 1.6) < 1e-9 })
-    }
-
     // MARK: The names the rest of the app uses
 
     @Test("Every name in the catalogue is one PortPosition would produce")
@@ -371,7 +274,7 @@ struct CatalogueTests {
         // The two halves of UX_SPEC §4.7 have to meet: the hardware read names
         // a receptacle from `port-location`, the catalogue names the same one
         // from this table, and the port list joins them on that string.
-        for archetype in [Archetype.studioFour, .studioSix, .mini, .notebook] {
+        for archetype in Self.drawn {
             let fromPositions = Set(
                 PortFace.allCases.flatMap { face in
                     [PortSlot.left, .leftMiddle, .middle, .rightMiddle, .right,
@@ -381,7 +284,7 @@ struct CatalogueTests {
                 }
             )
             let fromCatalogue = Set(
-                ReceptacleCatalogue.chassis(for: archetype).receptacles.compactMap(\.positionName)
+                ReceptacleCatalogue.chassis(for: archetype)?.receptacles.compactMap(\.positionName) ?? []
             )
             #expect(fromCatalogue.isSubset(of: fromPositions))
         }

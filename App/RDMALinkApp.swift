@@ -111,7 +111,9 @@ struct RDMALinkApp: App {
 /// The stage itself is reached through the focused scene value, so these items
 /// act on whichever window is front and do nothing at all when none is. A face
 /// this Mac has no ports on is offered and unavailable rather than missing, so
-/// the menu is the same shape on every machine.
+/// the menu is the same shape on every machine. On an unrecognized Mac there
+/// is no chassis and so no camera (§6.2 R31: "No selector, legend, callout or
+/// view buttons"), and every item here is unavailable the same way.
 private struct StageViewCommands: View {
     @FocusedValue(\.stageModel) private var stage: StageModel?
 
@@ -121,9 +123,11 @@ private struct StageViewCommands: View {
         face("Left", .left, "3")
         face("Right", .right, "4")
         Divider()
+        // Both camera items follow the face items: unavailable, not missing,
+        // when there is no chassis to move the camera around (§6.2 R31, §2.7).
         Button("Fit") { stage?.fit() }
             .keyboardShortcut("0", modifiers: .command)
-            .disabled(stage == nil)
+            .disabled(stage?.chassis == nil)
         // §2.3: "Reset View returns the split to 58/42 and the camera to its
         // resting pose." §2.7 gives it ⇧⌘0 and gives ⌘0 to Fit, which is the
         // pairing followed here.
@@ -132,7 +136,7 @@ private struct StageViewCommands: View {
             stage?.reset()
         }
         .keyboardShortcut("0", modifiers: [.shift, .command])
-        .disabled(stage == nil)
+        .disabled(stage?.chassis == nil)
     }
 
     private func face(

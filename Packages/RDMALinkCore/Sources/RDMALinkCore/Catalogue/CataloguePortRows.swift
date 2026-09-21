@@ -31,14 +31,15 @@ extension ReceptacleCatalogue {
         archetype: Archetype,
         cabledPositions: Set<PortPosition> = []
     ) -> [ThunderboltPort] {
-        // An unrecognized Mac gets no stand-in rows. Its ports are the ones
-        // macOS reported, numbered the way macOS reports them (§S1).
-        guard archetype != .unknown else { return realPorts }
+        // An unrecognized Mac has no chassis and gets no catalogue rows. Its
+        // ports are the ones macOS reported, numbered the way macOS reports
+        // them (§4.7, §6.2 R31).
+        guard let chassis = chassis(for: archetype) else { return realPorts }
         let cabledNames = Set(cabledPositions.compactMap { $0.name(archetype: archetype) })
         var remaining = realPorts
         var rows: [ThunderboltPort] = []
         var placedSomething = false
-        for receptacle in chassis(for: archetype).receptacles {
+        for receptacle in chassis.receptacles {
             guard let name = receptacle.positionName else { continue }
             if let match = remaining.firstIndex(where: { $0.positionName == name }) {
                 rows.append(remaining.remove(at: match))

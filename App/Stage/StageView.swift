@@ -63,7 +63,7 @@ struct StageView: View {
     private var buildKey: StageBuildKey {
         StageBuildKey(
             geometry: StageBuildKey.Geometry(
-                archetype: model.archetype,
+                archetype: model.chassis?.archetype,
                 shape: model.ports.map { "\($0.id)|\($0.face.rawValue)|\($0.kind.rawValue)" }
             ),
             colorScheme: colorScheme,
@@ -72,6 +72,23 @@ struct StageView: View {
     }
 
     var body: some View {
+        switch model.picture {
+        case .chassis:
+            chassisStage
+        case .unrecognized:
+            // §6.2 R31: no model, and none of the chrome that goes with one —
+            // no selector, legend, callout or view buttons. The block stands
+            // where the chassis would, in the system's own style.
+            StageUnrecognizedView()
+        case .pending:
+            // S0, before this Mac's identity has landed: nothing to draw yet,
+            // and nothing to say about it either.
+            Rectangle().fill(.windowBackground)
+        }
+    }
+
+    /// The stage proper, for a Mac the catalogue can draw.
+    private var chassisStage: some View {
         // §8.2's container is the render surface alone. Wrapping the overlays
         // in it too would put `Back`, `Front`, `Fit` and `Reset View` under an
         // `.accessibilityChildren`, which *replaces* what it covers — and §8.7
@@ -191,9 +208,10 @@ struct StageView: View {
             let frame = scene.frameInWindow
             guard frame.width > 1, frame.height > 1 else { return nil }
             guard
+                let chassis = model.chassis,
                 let image = await StageSnapshot.image(
                     moment: model.moment(focused: scene.focusedID),
-                    archetype: model.archetype,
+                    chassis: chassis,
                     palette: StagePalette(appearance: scene.appearance),
                     appearance: scene.appearance,
                     pose: scene.pose,
@@ -260,6 +278,10 @@ struct StageView: View {
     }
 
     private func install(into content: inout RealityViewCameraContent) {
+        // Only ever reached from `chassisStage`, which exists for a chassis alone;
+        // read fresh rather than captured, so a rebuild draws the Mac the
+        // model holds now.
+        guard let chassis = model.chassis else { return }
         let palette = StagePalette(appearance: appearance)
         if let environment = try? StageMesh.environment(
             background: palette.background.cgColor, lift: palette.backgroundLift.cgColor
@@ -275,7 +297,7 @@ struct StageView: View {
         let key = buildKey
         scene.install(
             StageSceneBuilder.build(
-                ports: model.ports, archetype: model.archetype, palette: palette,
+                ports: model.ports, chassis: chassis, palette: palette,
                 appearance: appearance
             ),
             into: &content,
@@ -668,7 +690,9 @@ private struct StageCalloutOverlay: View {
 /// neither half: they change no geometry and no material at all.
 struct StageBuildKey: Equatable {
     struct Geometry: Equatable {
-        var archetype: Archetype
+        /// The chassis being drawn. `nil` never reaches the builder: the stage
+        /// draws no scene without one (R31).
+        var archetype: Archetype?
         var shape: [String]
     }
 
@@ -678,9 +702,25 @@ struct StageBuildKey: Equatable {
     var increaseContrast: Bool
 }
 
+/// UX_SPEC §6.2 R31's stage: "In its place, centred, an unavailable-content
+/// block in the system's own style." Verbatim, symbol included, and nothing
+/// floating over it.
+struct StageUnrecognizedView: View {
+    var body: some View {
+        ZStack {
+            Rectangle().fill(.windowBackground)
+            ContentUnavailableView(
+                "No picture for this Mac",
+                systemImage: "desktopcomputer.trianglebadge.exclamationmark",
+                description: Text("RDMALink doesn't recognize it, so it won't draw one.")
+            )
+        }
+    }
+}
+
 #Preview("Stage") {
     let model = StageModel()
-    model.archetype = .studioSix
+    model.picture = ReceptacleCatalogue.chassis(for: .studioSix).map(StagePicture.chassis) ?? .pending
     model.machineName = "Mac Studio"
     model.currentFace = .back
     model.ports = [

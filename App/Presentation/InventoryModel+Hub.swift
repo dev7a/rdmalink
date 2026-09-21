@@ -22,7 +22,7 @@ extension InventoryModel {
 
     /// The situation rows, in §S1's order.
     var situations: [Situation] {
-        HubPresentation.situations(hardware: hardware, switchState: switchState, ports: ports)
+        HubPresentation.situations(switchState: switchState, ports: ports)
     }
 
     /// The three `This Mac` rows, top to bottom. The RDMA row is absent while

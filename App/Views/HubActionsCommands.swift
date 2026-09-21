@@ -8,7 +8,11 @@
 //
 //  Every item is present on every Mac and disabled when it has nothing to act
 //  on. A missing menu item is a thing the user hunts for; an unavailable one
-//  is an answer.
+//  is an answer. The one exception is a Mac RDMALink does not recognize
+//  (§6.2 R31): there nothing that writes is offered at all — absent, not
+//  disabled — and `Identify a Port…` is absent too, "because there is no
+//  model for it to point at" (§S1). The menu is left empty rather than
+//  filled with invitations to things the app will not do.
 //
 
 import SwiftUI
@@ -34,15 +38,17 @@ struct PortCommands: View {
     @FocusedValue(\.hubActions) private var hub: HubActionsModel?
 
     var body: some View {
-        item(.setUpAPort(portID: nil), key: "n")
-        item(.identifyAPort(portID: nil), key: "i")
-        Divider()
-        item(.adopt(portID: selectedID))
-        restoreItem
-        item(.restoreAll)
-        Divider()
-        item(.returnToBridge(portID: selectedID))
-        item(.stopManaging(portID: selectedID))
+        if hub?.isUnrecognized != true {
+            item(.setUpAPort(portID: nil), key: "n")
+            item(.identifyAPort(portID: nil), key: "i")
+            Divider()
+            item(.adopt(portID: selectedID))
+            restoreItem
+            item(.restoreAll)
+            Divider()
+            item(.returnToBridge(portID: selectedID))
+            item(.stopManaging(portID: selectedID))
+        }
     }
 
     /// §2.8: "the Port menu's `Restore…` … [is] enabled" whenever any note

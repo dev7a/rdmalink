@@ -86,7 +86,10 @@ struct ChangeLogEntryRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if let action = row.action {
+            // §6.2 R31: "the change log still work[s]" — as a record. Its
+            // way back for each entry writes, so on a Mac RDMALink does not
+            // recognize the entries are read and the buttons are absent.
+            if let action = row.action, !hub.isUnrecognized {
                 Button(action.title) { hub.perform(action) }
                     .buttonStyle(.borderless)
                     .controlSize(.small)

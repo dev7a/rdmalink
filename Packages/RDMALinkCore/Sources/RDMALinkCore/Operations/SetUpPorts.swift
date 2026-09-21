@@ -1,10 +1,11 @@
 import Foundation
 
 /// What every operation needs that is not the world and not the port: where
-/// the notes live, how long the kernel is given, and which archetype this Mac
-/// is so a re-read can name its ports.
+/// the notes live, how long the kernel is given, and what this Mac is — so a
+/// re-read can name its ports, and so the one operation that never reads the
+/// world (``StopManaging``) can still refuse on an unrecognized Mac (R31).
 public struct OperationEnvironment: Sendable {
-    public var archetype: Archetype
+    public var hardware: HardwareModel
     public var store: BaselineStore
     public var log: ChangeLog
     public var policy: KernelWaitPolicy
@@ -24,7 +25,7 @@ public struct OperationEnvironment: Sendable {
     public var startedAt: ContinuousClock.Instant
 
     public init(
-        archetype: Archetype,
+        hardware: HardwareModel,
         store: BaselineStore = BaselineStore(),
         log: ChangeLog = ChangeLog(),
         policy: KernelWaitPolicy = .standard,
@@ -32,7 +33,7 @@ public struct OperationEnvironment: Sendable {
         burstBudget: Duration = .seconds(20),
         startedAt: ContinuousClock.Instant = ContinuousClock().now
     ) {
-        self.archetype = archetype
+        self.hardware = hardware
         self.store = store
         self.log = log
         self.policy = policy
@@ -215,6 +216,10 @@ public struct SetUpPorts: Sendable {
     /// The refusals that are about this Mac rather than one port, in the order
     /// the spec raises them.
     func wholeMacRefusal(world: ObservedWorld) -> Refusal? {
+        // UX_SPEC §6.2 R31 before everything: on a Mac neither rule in §4.7
+        // recognizes, RDMALink writes nothing at all, so no other refusal —
+        // or plan — is worth stating.
+        if let refusal = Refusals.macRecognized(world.context.hardware) { return refusal }
         // UX_SPEC §6.2 R2 "blocks preflight and any apply", the same scope as
         // R1, and it comes first: a cable looped back into two bridged ports
         // would read as two Macs otherwise, and the sentence for it is R2's.
@@ -415,7 +420,7 @@ public struct SetUpPorts: Sendable {
     ) throws -> SetUpPortsResult {
         try writer.lock()
         let world = try ObservedWorld.reread(
-            ports: ports, writer: writer, archetype: environment.archetype,
+            ports: ports, writer: writer, hardware: environment.hardware,
             notesDirectory: environment.store.directory, runner: environment.runner)
         return try perform(writer: writer, world: world,
                            environment: environment, progress: progress)

@@ -133,6 +133,14 @@ public struct RestorePort: Sendable {
             returnedToBridge: nil,
             refusal: nil)
 
+        // UX_SPEC §6.2 R31 before everything, the note included: on a Mac
+        // neither rule in §4.7 recognizes there is nothing to put back,
+        // because RDMALink writes nothing there — and R19's button row would
+        // otherwise offer to delete a note on a Mac it must not touch.
+        if let refusal = Refusals.macRecognized(world.context.hardware) {
+            plan.refusal = refusal
+            return plan
+        }
         guard let note else {
             plan.refusal = Refusals.undoNoteMissing(port: port.observed)
             return plan
@@ -240,7 +248,7 @@ public struct RestorePort: Sendable {
     ) throws -> RestorePortResult {
         try writer.lock()
         let world = try ObservedWorld.reread(
-            ports: [port], writer: writer, archetype: environment.archetype,
+            ports: [port], writer: writer, hardware: environment.hardware,
             notesDirectory: environment.store.directory, runner: environment.runner)
         return try perform(writer: writer, world: world,
                            environment: environment, progress: progress)
@@ -269,6 +277,9 @@ public struct RestorePort: Sendable {
         let clock = ContinuousClock()
         let started = clock.now
         try writer.lock()
+        // R31 first, before the note is even read: `preview` asks the same
+        // question, but a missing note would otherwise answer R19 ahead of it.
+        if let refusal = Refusals.macRecognized(world.context.hardware) { throw refusal }
         // §6.2 R19 covers "missing **or unreadable**", and nothing else: a
         // failure that is neither is not turned into a refusal whose button
         // row would delete a note that is sitting there intact.

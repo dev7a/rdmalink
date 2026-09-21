@@ -103,7 +103,7 @@ struct RootView: View {
         ) { previous, input in
             stage.apply(input)
             actions.ports = input.ports
-            actions.archetype = input.hardware?.archetype ?? .unknown
+            actions.hardware = input.hardware
             actions.footer = HubPresentation.footer(
                 hardware: input.hardware, ports: input.ports)
             updateUSBTip(previous: previous.ports, current: input.ports)
@@ -243,6 +243,9 @@ struct RootView: View {
         case .hub:
             break
         case .preflight, .choose, .review:
+            // §S4: "An unrecognized Mac never reaches this screen: R31 offers
+            // no set-up." The hook stops at the hub, as a person would.
+            guard !actions.isUnrecognized else { return }
             startSetUp(portID: thunderbolt?.id)
             switch route {
             case .choose: flow?.route(to: .choose)
@@ -285,10 +288,12 @@ struct RootView: View {
     /// Builds the flow and hands it the reading it already has, so S3 is drawn
     /// with findings rather than with five spinners.
     private func startSetUp(portID: String?) {
-        let archetype = model.hardware?.archetype ?? .unknown
+        // Reached from the hub alone, where this Mac is known and — on an
+        // unrecognized one — every way in is absent (§S4, R31).
+        guard let hardware = model.hardware, hardware.isRecognized else { return }
         let flow = SetUpFlow(
-            planner: Self.planner(archetype: archetype),
-            runner: Self.runner(archetype: archetype),
+            planner: Self.planner(hardware: hardware),
+            runner: Self.runner(hardware: hardware),
             finish: {
                 self.flow = nil
                 self.stage.clearAllProgress()
@@ -338,13 +343,12 @@ struct RootView: View {
             return
         }
         let ports = model.ports.map { OperationPort($0.port) }
-        guard !ports.isEmpty else { return }
-        let archetype = model.hardware?.archetype ?? .unknown
+        guard !ports.isEmpty, let hardware = model.hardware else { return }
         // R14 is measured against the folder the notes really go to.
         let notesDirectory = NotesLocation.store.directory
         let read = await Task.detached(priority: .userInitiated) { () -> PreflightFindings? in
             guard let world = try? ObservedWorld.read(
-                ports: ports, archetype: archetype, notesDirectory: notesDirectory)
+                ports: ports, hardware: hardware, notesDirectory: notesDirectory)
             else {
                 return nil
             }
@@ -360,7 +364,7 @@ struct RootView: View {
     }
 
     /// S5's plan. `SetUpPorts.preview` writes nothing and takes no credential.
-    private static func planner(archetype: Archetype) -> SetUpFlow.Planner {
+    private static func planner(hardware: HardwareModel) -> SetUpFlow.Planner {
         let notesDirectory = NotesLocation.store.directory
         return { ports in
             // Off the main actor, because the read spawns `ifconfig` and
@@ -369,7 +373,7 @@ struct RootView: View {
             // refusal about a screen nobody is on any more.
             let task = Task.detached(priority: .userInitiated) {
                 let world = try ObservedWorld.read(
-                    ports: ports, archetype: archetype, notesDirectory: notesDirectory)
+                    ports: ports, hardware: hardware, notesDirectory: notesDirectory)
                 return SetUpPorts(ports: ports).preview(world: world)
             }
             let plan = try await withTaskCancellationHandler {
@@ -385,7 +389,7 @@ struct RootView: View {
     /// S6's burst — **the app's one write path**. The credential is taken here
     /// and nowhere else in the set-up flow, and every write follows it without
     /// pausing, because it lasts about thirty seconds.
-    private static func runner(archetype: Archetype) -> ApplyRun.Runner {
+    private static func runner(hardware: HardwareModel) -> ApplyRun.Runner {
         { plan in
             AsyncThrowingStream { continuation in
                 let task = Task.detached(priority: .userInitiated) {
@@ -394,7 +398,7 @@ struct RootView: View {
                             try SetUpPorts(ports: plan.ports.map(\.port), reviewed: plan)
                                 .perform(
                                     session: session,
-                                    environment: NotesLocation.environment(archetype: archetype),
+                                    environment: NotesLocation.environment(hardware: hardware),
                                     progress: { step, state in
                                         continuation.yield(.step(step, state))
                                     })

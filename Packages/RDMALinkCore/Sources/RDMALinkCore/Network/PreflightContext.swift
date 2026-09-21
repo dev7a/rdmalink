@@ -3,12 +3,16 @@ import Foundation
 /// Everything the refusals need that one port cannot see.
 ///
 /// ``StandalonePortSetup`` carries a single ``ObservedPort``, but R1 is about
-/// *every* receptacle and R5 is about every route — so the two refusals the
-/// spec marks "blocks preflight and any apply" (UX_SPEC §6.2) are unreachable
-/// from a single port. This value carries them, and is re-read inside the
-/// authorized burst so a cable that arrives between the review screen and the
-/// password cannot slip through.
+/// *every* receptacle, R5 is about every route and R31 is about the Mac
+/// itself — so the refusals the spec marks "blocks preflight and any apply"
+/// (UX_SPEC §6.2) are unreachable from a single port. This value carries
+/// them, and is re-read inside the authorized burst so a cable that arrives
+/// between the review screen and the password cannot slip through.
 public struct PreflightContext: Sendable, Equatable {
+    /// What this Mac is, and whether either rule in UX_SPEC §4.7 recognized
+    /// it — R31, which every operation asks first. ``Inventory`` already reads
+    /// the model, so it rides here rather than being read a second time.
+    public var hardware: HardwareModel
     /// Every receptacle on this Mac, as the refusals see it — R1.
     public var observedPorts: [ObservedPort]
     /// The BSD names of this Mac's Thunderbolt ports, so R5 can exclude them
@@ -22,11 +26,13 @@ public struct PreflightContext: Sendable, Equatable {
     public var primaryKinds: [NetworkGlobals.RouteKind]
 
     public init(
+        hardware: HardwareModel,
         observedPorts: [ObservedPort],
         thunderboltBSDNames: [String],
         primaryInterfaces: [String] = [],
         primaryKinds: [NetworkGlobals.RouteKind] = []
     ) {
+        self.hardware = hardware
         self.observedPorts = observedPorts
         self.thunderboltBSDNames = thunderboltBSDNames
         self.primaryInterfaces = primaryInterfaces
@@ -49,14 +55,15 @@ public struct PreflightContext: Sendable, Equatable {
     ///   so everything measured inside one burst — the refusals, the plan and
     ///   the port rows — is measured against the same stored snapshot.
     public static func read(
-        archetype: Archetype,
+        hardware: HardwareModel,
         runner: CommandRunner = CommandRunner(),
         storedBridges: StoredBridgeReading? = nil
     ) throws -> PreflightContext {
-        let ports = try Inventory.readPorts(archetype: archetype, runner: runner,
+        let ports = try Inventory.readPorts(archetype: hardware.archetype, runner: runner,
                                             storedBridges: storedBridges)
         let primary = NetworkGlobals.primaryInterfaces()
         return PreflightContext(
+            hardware: hardware,
             observedPorts: ports.map(\.observed),
             thunderboltBSDNames: ports.filter(\.isThunderbolt).map(\.bsdName),
             primaryInterfaces: primary,
@@ -73,6 +80,7 @@ extension Inventory {
     ///   pure aggregate of one hardware read.
     public func preflightContext(primaryInterfaces: [String] = []) -> PreflightContext {
         PreflightContext(
+            hardware: model,
             observedPorts: observedPorts,
             thunderboltBSDNames: thunderboltBSDNames,
             primaryInterfaces: primaryInterfaces,

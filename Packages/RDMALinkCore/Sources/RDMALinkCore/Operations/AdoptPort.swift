@@ -35,8 +35,11 @@ public struct AdoptPortPlan: Sendable, Equatable {
     public var steps: String?
     public var notes: [String]
     public var buttonTitles: [String]
+    /// R31, when this Mac is not one RDMALink recognizes: the findings are
+    /// still what was found, but nothing is offered and no note is written.
+    public var refusal: Refusal?
 
-    public var canAdopt: Bool { match == .full }
+    public var canAdopt: Bool { refusal == nil && match == .full }
 }
 
 /// Recognizes a port someone configured by hand and takes responsibility for
@@ -67,7 +70,21 @@ public struct AdoptPort: Sendable {
 
     /// What RDMALink found, and what it will offer. Pure: no writes, and no
     /// password anywhere in this path.
+    ///
+    /// UX_SPEC §6.2 R31 comes first, as it does in every operation: on a Mac
+    /// neither rule in §4.7 recognizes the findings are reported as they are,
+    /// with no button row, because a note is a write too.
     public func preview(world: ObservedWorld) -> AdoptPortPlan {
+        var plan = found(world: world)
+        if let refusal = Refusals.macRecognized(world.context.hardware) {
+            plan.refusal = refusal
+            plan.buttonTitles = []
+        }
+        return plan
+    }
+
+    /// Which of §S9's three states the port is in, on a Mac RDMALink knows.
+    private func found(world: ObservedWorld) -> AdoptPortPlan {
         let bridges = world.bridges(containing: port.bsdName)
         let services = NetworkServices.services(for: port.bsdName, in: world.services)
         let configuration = NetworkServices.classify(services: services, bridges: bridges)
@@ -171,6 +188,7 @@ public struct AdoptPort: Sendable {
     @discardableResult
     public func perform(world: ObservedWorld, environment: OperationEnvironment) throws -> String {
         let plan = preview(world: world)
+        if let refusal = plan.refusal { throw refusal }
         guard plan.canAdopt else {
             // A near match is never adjusted and never adopted; the app keeps
             // watching instead.
@@ -203,9 +221,13 @@ public struct StopManaging: Sendable {
 
     /// Deletes the note. Nothing else, anywhere.
     ///
+    /// Reads no world, so R31 is asked of the environment: a note is a write,
+    /// and RDMALink writes nothing on a Mac it does not recognize (§6.2 R31).
+    ///
     /// - Returns: the confirmation line, which says exactly that.
     @discardableResult
     public func perform(environment: OperationEnvironment, now: Date = Date()) throws -> String {
+        if let refusal = Refusals.macRecognized(environment.hardware) { throw refusal }
         try environment.store.delete(port: port.bsdName)
         try? environment.log.append(ChangeEntry(
             date: now, port: port.bsdName, positionName: port.positionName,

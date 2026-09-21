@@ -283,7 +283,7 @@ struct RestoreSheet: View {
     /// macOS authorization dialog is the one sheet this app does not draw).
     /// The checklist advances from the operation's own progress reports.
     private func run(_ plan: RestorePlan) {
-        let environment = hub.environment
+        guard let environment = hub.environment else { return }
         switch plan.kind {
         case .restore:
             guard let port = plan.port else { return }
@@ -356,9 +356,8 @@ struct RestoreSheet: View {
     /// "that part is squarely its own" — and keeps the note, because the
     /// bridge it came from is somebody else's to rebuild.
     private func runServiceOnly(_ plan: RestorePlan) {
-        guard let port = plan.port else { return }
+        guard let port = plan.port, let environment = hub.environment else { return }
         let operationPort = OperationPort(port.port)
-        let environment = hub.environment
         let steps = plan.steps.filter {
             if case .deleteCreatedService = $0 { return true }
             return false

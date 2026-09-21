@@ -52,14 +52,16 @@ struct InventoryHardwareTests {
         #expect(HardwareModel.chipName(fromBrandString: "") == "")
     }
 
-    @Test("An unrecognized Mac is still a working Mac")
-    func unrecognizedModelIsFunctional() {
+    @Test("An unrecognized Mac is named plainly, has no chassis, and is refused (R31)")
+    func unrecognizedModelIsReadOnly() {
         let model = HardwareModel(
             identifier: "Mac99,99", marketingName: "Mac", chip: "M9", archetype: .unknown
         )
         #expect(!model.isRecognized)
         #expect(model.marketingName == "Mac")
         #expect(model.recognition == .none)
+        #expect(ReceptacleCatalogue.chassis(for: model.archetype) == nil)
+        #expect(Refusals.macRecognized(model)?.code == .macNotRecognized)
     }
 
     @Test("A fixture built without saying how it was recognized means by identifier")

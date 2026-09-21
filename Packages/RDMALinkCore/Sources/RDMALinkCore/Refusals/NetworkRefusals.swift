@@ -24,6 +24,31 @@ public enum Refusals {
     /// route like any other — it is the membership that decides.
     private static let virtualMemberPrefixes = ["vmenet", "feth", "vlan", "utun", "gif", "stf"]
 
+    // MARK: - R31
+
+    /// **R31 — I don't recognize this Mac.** Read-only mode, not an error
+    /// (UX_SPEC §6.2 R31): fires when neither rule in §4.7 recognizes the
+    /// Mac, and never on one the identifier catalogue lists.
+    ///
+    /// Every operation evaluates it **before any other refusal**, in preview
+    /// and in perform, so the command-line tool's previews and `refusals`
+    /// say the same thing the app does — "the app hiding the buttons is not
+    /// the only guard." RDMALink writes nothing on a Mac it does not
+    /// recognize, notes included.
+    public static func macRecognized(_ model: HardwareModel) -> Refusal? {
+        guard !model.isRecognized else { return nil }
+        return Refusal(
+            code: .macNotRecognized,
+            headline: "I don't recognize this Mac",
+            body: """
+            RDMALink only draws, and only changes, Macs it knows — and this \
+            isn't one of them. So there's no picture, and nothing here will be \
+            changed. The ports below are listed the way macOS reports them, and \
+            everything you see is real.
+            """
+        )
+    }
+
     // MARK: - R1
 
     /// **R1 — Two Macs are connected (loop risk).** Blocks preflight and any apply.

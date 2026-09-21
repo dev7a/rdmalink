@@ -35,7 +35,8 @@ final class HubActionsModel {
         primary: nil,
         primaryTitle: "Set Up a Port…",
         isPrimaryEnabled: false,
-        disabledReason: nil
+        disabledReason: nil,
+        offersRestore: true
     )
 
     /// The set-up flow's inbox (S3–S7). Written here, taken by the flow.
@@ -55,9 +56,18 @@ final class HubActionsModel {
     /// cannot be read stays here, so R19 can say so.
     private(set) var restorable: Set<String> = []
 
-    /// This Mac's shape, mirrored from `InventoryModel`, so a sheet can
-    /// re-read the world without reaching back into the window.
-    var archetype: Archetype = .unknown
+    /// What this Mac is, mirrored from `InventoryModel`, so a sheet can
+    /// re-read the world without reaching back into the window — and so the
+    /// hub knows whether it is in R31's read-only mode.
+    var hardware: HardwareModel?
+
+    /// UX_SPEC §6.2 R31: neither rule in §4.7 recognizes this Mac. Nothing
+    /// that writes is offered anywhere — set-up, Restore, Adopt, Return to
+    /// Bridge, Stop Managing, Forget, notes included — and Identify is not
+    /// offered either, because there is no model for it to point at. The
+    /// buttons are absent, not disabled; Core refuses too, so the hiding is
+    /// not the only guard.
+    var isUnrecognized: Bool { hardware?.isRecognized == false }
 
     /// What a sheet is reading right now: the kernel's bridge membership, the
     /// services, the volumes mounted over these links, and whether a note can
@@ -147,6 +157,9 @@ final class HubActionsModel {
     /// buttons, the footer and the Port menu (§2.7: the menu is the same shape
     /// on every machine, and unavailable rather than missing).
     func canPerform(_ action: HubAction) -> Bool {
+        // R31 first, as Core asks it first: the change log is the one thing
+        // §6.2 R31 leaves working, and it only reads.
+        if isUnrecognized { return action == .changeLog }
         switch action {
         case .setUpAPort, .setItUpAgain:
             return footer.primary != nil && footer.isPrimaryEnabled
@@ -223,6 +236,9 @@ final class HubActionsModel {
     // MARK: - Raising an action
 
     func perform(_ action: HubAction) {
+        // Every surface that raises an action is absent on an unrecognized
+        // Mac; this is the one door they all go through, so it is shut too.
+        guard !isUnrecognized || action == .changeLog else { return }
         switch action {
         case .setUpAPort(let portID):
             pendingSetUp = SetUpRequest(portID: portID ?? stage?.selectedID)
@@ -330,14 +346,13 @@ final class HubActionsModel {
     /// against is acting on a world that moved.
     func readWorld() async {
         let operationPorts = ports.map { OperationPort($0.port) }
-        guard !operationPorts.isEmpty else { return }
-        let archetype = archetype
+        guard !operationPorts.isEmpty, let hardware else { return }
         // R14 is measured against the folder the notes really go to.
         let notesDirectory = store.directory
         let result = await Task.detached(priority: .userInitiated) { () -> Result<ObservedWorld, any Error> in
             do {
                 return .success(try ObservedWorld.read(
-                    ports: operationPorts, archetype: archetype, notesDirectory: notesDirectory))
+                    ports: operationPorts, hardware: hardware, notesDirectory: notesDirectory))
             } catch {
                 return .failure(error)
             }

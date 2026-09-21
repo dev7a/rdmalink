@@ -38,14 +38,9 @@ struct WizardChoosePort: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if let line = report.unrecognizedModelLine {
-                Text(line)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            // §3.3: Identify is `hand.point.up.left`. Promoted above the list
-            // on a model whose port names are only macOS's numbering.
+            // §3.3: Identify is `hand.point.up.left`, offered above the list —
+            // which is also where §4.7 promotes it on a recognized Mac whose
+            // port names are only macOS's numbering.
             Button {
                 perform(.identifyAPort)
             } label: {

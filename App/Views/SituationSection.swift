@@ -41,7 +41,11 @@ struct SituationRow: View {
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if let hub {
+                // §6.2 R31: the row still states the situation on a Mac
+                // RDMALink does not recognize, but its way out — `Show Me`,
+                // `Set It Up Again`, `Forget This Port` — is absent, because
+                // there is no model to show and nothing is written.
+                if let hub, !hub.isUnrecognized {
                     ForEach(situation.actions) { action in
                         Button(action.title) { hub.perform(action) }
                             .buttonStyle(.borderless)

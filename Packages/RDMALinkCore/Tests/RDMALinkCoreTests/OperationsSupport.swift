@@ -241,6 +241,16 @@ enum Fixtures {
                                     positionName: "Back, far left", link: .macLinked,
                                     linkLocalAddresses: ["fe80::6"])
 
+    /// The Mac these fixtures describe: one the identifier catalogue lists,
+    /// so R31 stays out of every test that is not about it.
+    static let studio = HardwareModel(
+        identifier: "Mac16,9", marketingName: "Mac Studio", chip: "M4 Max",
+        archetype: .studioFour)
+
+    /// A Mac neither rule in UX_SPEC §4.7 recognizes — R31's input.
+    static let unrecognized = HardwareModel(
+        identifier: "Mac99,99", marketingName: "Mac", chip: "M9 Max", archetype: .unknown)
+
     static let bridge0 = BridgeSPI.Membership(bsdName: "bridge0",
                                               displayName: "Thunderbolt Bridge",
                                               members: ["en5", "en6"])
@@ -267,14 +277,16 @@ enum Fixtures {
         primary: [String] = ["en0"],
         mounted: [MountedVolume] = [],
         notesAreWritable: Refusal? = nil,
-        rdma: RDMAStatus = .off
+        rdma: RDMAStatus = .off,
+        hardware: HardwareModel = studio
     ) -> ObservedWorld {
         var world = ObservedWorld(
             snapshot: snapshot(ifconfig),
             services: services,
             serviceOrder: services.map(\.serviceID),
             bridges: bridges ?? FakeWriter.mirror(snapshot(ifconfig)),
-            context: PreflightContext(observedPorts: [],
+            context: PreflightContext(hardware: hardware,
+                                      observedPorts: [],
                                       thunderboltBSDNames: ports.map(\.bsdName),
                                       primaryInterfaces: primary),
             rdma: rdma,
@@ -299,10 +311,11 @@ enum Fixtures {
 
     static func environment(
         store: BaselineStore,
-        policy: KernelWaitPolicy = quickPolicy
+        policy: KernelWaitPolicy = quickPolicy,
+        hardware: HardwareModel = studio
     ) -> OperationEnvironment {
         OperationEnvironment(
-            archetype: .studioFour,
+            hardware: hardware,
             store: store,
             log: ChangeLog(url: store.directory.appending(path: "changes.jsonl")),
             policy: policy)

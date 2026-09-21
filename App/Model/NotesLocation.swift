@@ -29,7 +29,7 @@ enum NotesLocation {
 
     /// What every operation needs that is not the world and not the port,
     /// with its note and log in this folder.
-    static func environment(archetype: Archetype) -> OperationEnvironment {
-        OperationEnvironment(archetype: archetype, store: store, log: changeLog)
+    static func environment(hardware: HardwareModel) -> OperationEnvironment {
+        OperationEnvironment(hardware: hardware, store: store, log: changeLog)
     }
 }

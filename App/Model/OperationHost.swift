@@ -58,8 +58,9 @@ enum OperationHost {
 }
 
 extension HubActionsModel {
-    /// What every operation needs that is not the world and not the port.
-    var environment: OperationEnvironment {
-        NotesLocation.environment(archetype: archetype)
+    /// What every operation needs that is not the world and not the port —
+    /// once this Mac is known, which every sheet that asks already is.
+    var environment: OperationEnvironment? {
+        hardware.map(NotesLocation.environment(hardware:))
     }
 }

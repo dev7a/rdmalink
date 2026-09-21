@@ -82,6 +82,12 @@ public struct ReturnToBridge: Sendable {
         plan.serviceName = service?.name
         plan.serviceID = service?.serviceID
 
+        // UX_SPEC §6.2 R31 before everything: no bridge is chosen and no row
+        // is written for a Mac neither rule in §4.7 recognizes.
+        if let refusal = Refusals.macRecognized(world.context.hardware) {
+            plan.refusal = refusal
+            return plan
+        }
         guard let bridge = Self.chooseBridge(world: world) else {
             // RDMALink never creates one, so there is nothing to offer but the
             // hand-off. Nothing is written.
@@ -167,7 +173,7 @@ public struct ReturnToBridge: Sendable {
     ) throws -> ReturnToBridgeResult {
         try writer.lock()
         let world = try ObservedWorld.reread(
-            ports: [port], writer: writer, archetype: environment.archetype,
+            ports: [port], writer: writer, hardware: environment.hardware,
             notesDirectory: environment.store.directory, runner: environment.runner)
         return try perform(writer: writer, world: world,
                            environment: environment, progress: progress)

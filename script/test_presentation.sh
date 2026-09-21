@@ -9,7 +9,10 @@
 # rows for R19, R20, R21, R28 and R30 are written down — and §4.8's two aids:
 # the legend's rows from the stage's own ring decision (App/Stage/StageLegend,
 # with App/Stage/StageModel and StageMath under it) and the callout's words
-# from the row's presentation.
+# from the row's presentation — and §6.2 R31's read-only hub: its headline
+# and body over R23's, a footer with no buttons, and a stage with nothing to
+# turn or select (App/Presentation/HubPresentation, with
+# App/Presentation/ThunderboltGeneration under it for R23).
 #
 # The app target has no test bundle, and these files import nothing but
 # Foundation, Observation, AppKit and RDMALinkCore, so — like script/test_stage_math.sh —
@@ -345,6 +348,59 @@ check(stagePort.callout(showsTechnicalNames: true) == StageCalloutText(
         title: "Front, left", detail: "Nothing plugged in · In the Thunderbolt Bridge", technical: "en3 · bridge0"),
       "the stage's callout is the row's presentation, word for word")
 
+// MARK: §6.2 R31 — an unrecognized Mac is read-only: the copy, the footer, the stage.
+
+let unrecognized = HardwareModel(identifier: "Mac99,99", marketingName: "Mac", chip: "M9 Max",
+                                 archetype: .unknown)
+let studio = HardwareModel(identifier: "Mac15,14", marketingName: "Mac Studio", chip: "M3 Ultra",
+                           archetype: .studioSix)
+let r31 = HubPresentation.copy(hardware: unrecognized, ports: [managed, outside])
+check(text(r31.headline) == "I don't recognize this Mac", "R31 headline is §6.2's")
+check(text(r31.body)
+      == "RDMALink only draws, and only changes, Macs it knows — and this isn't one of them. So there's no picture, and nothing here will be changed. The ports below are listed the way macOS reports them, and everything you see is real.",
+      "R31 body is §6.2's, verbatim")
+check(text(HubPresentation.copy(hardware: studio, ports: [managed]).headline) == "One port is ready for RDMA",
+      "S1's own copy stands on a recognized Mac")
+// R31 wins over R23: the generation table is keyed on the identifier, so a
+// Thunderbolt 4 identifier can be listed there while the chassis is not.
+let tb4Unrecognized = HardwareModel(identifier: "Mac16,1", marketingName: "MacBook Pro", chip: "M4",
+                                    archetype: .unknown)
+check(tb4Unrecognized.isThunderbolt4, "the fixture is Thunderbolt 4 by the table")
+check(text(HubPresentation.copy(hardware: tb4Unrecognized, ports: []).headline) == "I don't recognize this Mac",
+      "R31 wins over R23")
+let tb4 = HardwareModel(identifier: "Mac16,1", marketingName: "MacBook Pro", chip: "M4", archetype: .notebook)
+check(text(HubPresentation.copy(hardware: tb4, ports: []).headline) == "Nothing to configure here",
+      "R23 stands on a recognized Thunderbolt 4 Mac")
+let r31Footer = HubPresentation.footer(hardware: unrecognized, ports: [managed])
+check(r31Footer.primary == nil && !r31Footer.offersRestore, "R31: the footer has no buttons at all")
+let tb4Footer = HubPresentation.footer(hardware: tb4, ports: [managed])
+check(tb4Footer.primary == nil && tb4Footer.offersRestore, "R23: no primary, and Restore… stays")
+let hubFooter = HubPresentation.footer(hardware: studio, ports: [managed])
+check(hubFooter.primary == .setUpAPort(portID: nil) && hubFooter.offersRestore
+      && text(hubFooter.primaryTitle) == "Set Up Another Port…", "S1's footer on a recognized Mac")
+
+// The stage: no chassis, so nothing to turn, select or light.
+let stage = StageModel()
+check(stage.picture == .pending && stage.chassis == nil && stage.relevantFaces.isEmpty,
+      "before the identity lands there is nothing to draw")
+stage.picture = .unrecognized
+stage.ports = [StagePort(port: plain.port, physicalIndex: 1, configuration: cfg(plain))]
+stage.select("en3")
+check(stage.selectedID == nil, "R31: the rows take no selection")
+check(stage.relevantFaces.isEmpty, "R31: no face selector")
+stage.turnTo(.front)
+stage.fit()
+check(stage.narration == nil && stage.cameraRequest == nil,
+      "R31: no camera move, and no \"Let me turn it around\"")
+stage.noteUnseenChange(on: .front)
+check(stage.unseenChange == nil, "R31: no \"Something changed\" line for a face nobody can look at")
+check(ReceptacleCatalogue.chassis(for: .unknown) == nil, "the catalogue has no chassis for an unrecognized Mac")
+if let chassis = ReceptacleCatalogue.chassis(for: .studioSix) { stage.picture = .chassis(chassis) }
+check(stage.chassis?.archetype == .studioSix, "a recognized Mac has its chassis")
+stage.select("en3")
+check(stage.selectedID == "en3", "and its rows select again")
+check(stage.relevantFaces == [.back], "and the selector shows the faces that carry ports")
+
 if failures > 0 {
     FileHandle.standardError.write(Data("test_presentation: \(failures) failed\n".utf8))
     exit(1)
@@ -362,6 +418,8 @@ xcrun swiftc -swift-version 6 -warnings-as-errors \
   "$ROOT_DIR/App/Model/NotesLocation.swift" \
   "$ROOT_DIR/App/Presentation/PortPresentation.swift" \
   "$ROOT_DIR/App/Presentation/ThisMacPresentation.swift" \
+  "$ROOT_DIR/App/Presentation/ThunderboltGeneration.swift" \
+  "$ROOT_DIR/App/Presentation/HubPresentation.swift" \
   "$ROOT_DIR/App/Presentation/OtherMacPresentation.swift" \
   "$ROOT_DIR/App/Flows/PreflightReport.swift" \
   "$ROOT_DIR/App/Flows/WizardRefusal.swift" \

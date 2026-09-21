@@ -73,7 +73,9 @@ from `StageMath.project`.
   could not join to a `port-location` node counts as a hole and refuses,
   so a partial probe can never shrink a six-port Studio into the four-port
   table. Undocumented, so enrichment under rule 5: absent, the Mac is
-  called `Mac` and drawn as the stand-in. Verified on the rig's MacBook Pro
+  called `Mac` and the app is in UX_SPEC §6.2 R31's read-only mode — no
+  chassis is drawn (there is no stand-in), the ports are numbered, and
+  every operation refuses. Verified on the rig's MacBook Pro
   (Mac17,7, 2026-09-20): `product-name` is `MacBook Pro (14-inch, M5 Max)`
   and the `port-location` spellings are `right`, `left-back` and
   `left-front`; the read-only tool built before that identifier was in the
@@ -266,6 +268,15 @@ Mutations go through one type per operation, each with `preview()` (what would
 change, no writes), `perform(session:)` (all writes in one authorized burst,
 baseline written first) and read-back verification. No mutation exists without
 its inverse.
+
+Every operation's preview and perform ask `Refusals.macRecognized(_:)` — R31,
+`RefusalCode.macNotRecognized` — before any other refusal, and refuse on a Mac
+neither rule in UX_SPEC §4.7 recognized; notes included, so `AdoptPort` and
+`StopManaging` refuse too. The model rides in `PreflightContext.hardware`,
+which `ObservedWorld` carries and re-reads inside the burst, and in
+`OperationEnvironment.hardware` for the one operation that reads no world.
+`ReceptacleCatalogue.chassis(for:)` is `nil` for `Archetype.unknown`: there is
+no stand-in chassis, and the stage draws R31's block in its place.
 
 ## Rules the code must keep
 

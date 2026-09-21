@@ -33,11 +33,12 @@
 //  in a state that only exists while something is happening.
 //
 //  `RDMALINK_SNAPSHOT_FIXTURE` stands a Mac this machine is not in for the
-//  live inventory — `standin-notebook`, an unrecognized Mac whose three ports
-//  macOS places two on the left side and one on the right — so §3.4's
-//  stand-in can be reviewed on a Mac the catalogue knows. It replaces every
-//  read of this Mac's identity and ports for the run and nothing else; the
-//  services, notes and stored bridges are still this Mac's.
+//  live inventory — `unrecognized`, a Mac neither rule in §4.7 recognizes,
+//  whose three ports macOS places two on the left side and one on the right
+//  — so §6.2 R31's read-only hub can be reviewed on a Mac the catalogue
+//  knows. It replaces every read of this Mac's identity and ports for the
+//  run and nothing else; the services, notes and stored bridges are still
+//  this Mac's.
 //
 //  `RDMALINK_SNAPSHOT_ROUTE` opens one of the app's own routes on the live
 //  inventory first: `hub`, `preflight`, `choose`, `review`, `restore-sheet`,
@@ -111,16 +112,16 @@ enum SnapshotHook {
 
     /// A Mac to draw instead of this one. `RDMALINK_SNAPSHOT_FIXTURE`.
     enum Fixture: String, Sendable {
-        /// An unrecognized Mac shaped like a notebook: no catalogue row, no
+        /// A Mac neither rule in §4.7 recognizes: no catalogue row, no
         /// product family, and three Thunderbolt ports reported on the left,
         /// left and right faces in that order — the MacBook Pro M5 Max as it
-        /// looked before family-and-layout recognition existed.
-        case standInNotebook = "standin-notebook"
+        /// looked before family-and-layout recognition existed. R31's state.
+        case unrecognized
 
         /// What `Inventory.read()` would have returned on that Mac.
         var inventory: Inventory {
             switch self {
-            case .standInNotebook:
+            case .unrecognized:
                 let bridge = ThunderboltPort.BridgeMembership(
                     name: "bridge0", displayName: "Thunderbolt Bridge", isUp: false,
                     source: .stored

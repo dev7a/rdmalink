@@ -6,9 +6,9 @@ import Foundation
 /// An archetype is about *geometry*, not about the chip: it decides which
 /// receptacles exist, which of them are USB-only, and which position names from
 /// UX_SPEC §4.7 apply. A Mac that neither the identifier catalogue nor the
-/// family-and-layout rule of §4.7 recognizes is ``Archetype/unknown`` and still
-/// works — the picture is a stand-in and the ports are numbered the way macOS
-/// reports them.
+/// family-and-layout rule of §4.7 recognizes is ``Archetype/unknown``, and the
+/// app is read-only there (UX_SPEC §6.2 R31): no chassis is drawn, the ports
+/// are numbered the way macOS reports them, and every operation refuses.
 public enum Archetype: String, Sendable, CaseIterable {
     /// Mac Studio with four Thunderbolt receptacles on the back and two
     /// USB-only receptacles on the front.
@@ -21,7 +21,9 @@ public enum Archetype: String, Sendable, CaseIterable {
     case mini
     /// MacBook Pro 14/16: two receptacles on the left side, one on the right.
     case notebook
-    /// Not recognized. Everything still works; nothing is guessed.
+    /// Not recognized. Nothing is guessed and nothing is written: the app
+    /// is in R31's read-only mode, and ``ReceptacleCatalogue`` has no chassis
+    /// for it.
     case unknown
 }
 
@@ -228,10 +230,12 @@ extension HardwareModel {
     }
 
     /// Every Thunderbolt receptacle name in `archetype`'s table — the
-    /// catalogue's own rows, so the two halves of §4.7 meet on one list.
+    /// catalogue's own rows, so the two halves of §4.7 meet on one list. The
+    /// candidates come from ``familyArchetypes`` and always have a chassis;
+    /// an empty set is what a layout can never match.
     private static func tableNames(_ archetype: Archetype) -> Set<String> {
         Set(
-            ReceptacleCatalogue.chassis(for: archetype).receptacles
+            (ReceptacleCatalogue.chassis(for: archetype)?.receptacles ?? [])
                 .filter { $0.kind == .thunderbolt }
                 .compactMap(\.positionName)
         )

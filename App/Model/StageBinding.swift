@@ -32,7 +32,15 @@ extension StageModel {
     /// is physical order across the whole machine — the same number the wake
     /// beat staggers on and the same order VoiceOver walks (§2.3, §9.2).
     func apply(_ input: StageInput) {
-        archetype = input.hardware?.archetype ?? .unknown
+        // §3.4 and §6.2 R31: a Mac the catalogue cannot draw gets no stand-in.
+        // `chassis(for:)` is nil exactly when neither rule in §4.7 recognized
+        // it, and that is the whole of the stage's read-only mode.
+        picture = switch input.hardware {
+        case nil: .pending
+        case let hardware?:
+            ReceptacleCatalogue.chassis(for: hardware.archetype).map(StagePicture.chassis)
+                ?? .unrecognized
+        }
         machineName = input.hardware?.marketingName ?? ""
 
         let selected = selectedID

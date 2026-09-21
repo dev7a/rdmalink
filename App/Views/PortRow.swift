@@ -63,7 +63,9 @@ struct PortRow: View {
             .accessibilityLabel(Text(presentation.accessibilityLabel))
             .accessibilityValue(Text(verbatim: presentation.accessibilityValue ?? ""))
             .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-            if density == .full, let actions {
+            // §6.2 R31: on a Mac RDMALink does not recognize no row carries a
+            // button — absent, not disabled — because every one of them writes.
+            if density == .full, let actions, !actions.isUnrecognized {
                 PortRowActions(actions: presentation.actions, hub: actions)
             }
         }

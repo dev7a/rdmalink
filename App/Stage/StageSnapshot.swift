@@ -46,7 +46,7 @@ enum StageSnapshot {
     ///   lands at the same resolution as the rest of the bitmap.
     static func image(
         moment: StageMoment,
-        archetype: Archetype,
+        chassis: Chassis,
         palette: StagePalette,
         appearance: StageAppearance,
         pose: StageCameraPose,
@@ -73,7 +73,7 @@ enum StageSnapshot {
         else { return nil }
 
         let graph = StageSceneBuilder.build(
-            ports: moment.ports, archetype: archetype, palette: palette,
+            ports: moment.ports, chassis: chassis, palette: palette,
             appearance: appearance
         )
         // The builder leaves every ring, ribbon, stub, bloom and thread

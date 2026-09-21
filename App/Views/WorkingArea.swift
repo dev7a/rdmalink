@@ -63,7 +63,10 @@ struct ProbingWorkingArea: View {
 
 /// S1 — Overview. Also R23's read-only mode, which changes the headline and
 /// the body and nothing else: the model, the port list and the change log all
-/// still work, so the app stays a useful map.
+/// still work, so the app stays a useful map. And R31's, which changes the
+/// headline and the body the same way and takes every button with it — the
+/// stage shows its block in place of a model, and the port list and the
+/// change log are what is left working (§6.2 R31).
 struct HubWorkingArea: View {
     let model: InventoryModel
     let stage: StageModel

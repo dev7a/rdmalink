@@ -129,20 +129,15 @@ enum StageSceneBuilder {
 
     private static func m(_ centimetres: Double) -> Float { Float(centimetres * unit) }
 
+    /// - Parameter chassis: the catalogue's chassis for this Mac. There is no
+    ///   stand-in: an unrecognized Mac never reaches the builder, because the
+    ///   stage draws R31's block in place of a scene (§3.4, §6.2 R31).
     static func build(
-        ports: [StagePort], archetype: Archetype, palette: StagePalette,
+        ports: [StagePort], chassis: Chassis, palette: StagePalette,
         appearance: StageAppearance
     ) -> StageSceneGraph {
         StagePortIdentity.registerComponent()
 
-        // Only ``Archetype/unknown`` uses the faces, and only Thunderbolt
-        // receptacles are ever numbered onto the stand-in box: catalogue
-        // USB-only rows belong to a chassis the catalogue already knows. The
-        // faces go in the ports' own order, which is the order `bind` walks
-        // them in, so the k-th port on a face lands in the k-th hole (§3.4).
-        let chassis = ReceptacleCatalogue.chassis(
-            for: archetype, reportedFaces: ports.filter(\.isThunderbolt).map(\.face)
-        )
         let root = Entity()
         root.name = "stage.root"
 
