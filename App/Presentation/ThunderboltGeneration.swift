@@ -40,25 +40,35 @@ extension HardwareModel {
     /// a guess.
     var isThunderbolt4: Bool { thunderboltGeneration == .four }
 
-    /// Keyed on the same identifiers `HardwareModel.catalog` lists, and on no
-    /// others. Every row here is a machine whose published port spec is
-    /// unambiguous; anything else is left out rather than guessed at.
+    /// Keyed on identifiers `HardwareModel.catalog` lists, and on no others.
+    /// Every row is transcribed from the port sentence of Apple's "Identify
+    /// your … model" page for that identifier (the URLs are on the catalogue),
+    /// which names the generation per Model Identifier — "three Thunderbolt 5
+    /// ports". A machine whose page does not say is left out rather than
+    /// guessed at: the Mac mini (2024) page lists `Mac16,10` and `Mac16,11`
+    /// together and never says which is the Thunderbolt 4 M4 and which the
+    /// Thunderbolt 5 M4 Pro, so neither is here until one is read on hardware.
     private static let thunderboltGenerations: [String: ThunderboltGeneration] = [
-        // Mac Studio — both configurations ship Thunderbolt 5.
+        // Mac Studio (2025) — "Front ports: Two Thunderbolt 5 ports" on the
+        // M3 Ultra, and the M4 Max carries the same back four.
         "Mac15,14": .five,   // M3 Ultra, verified on this hardware
         "Mac16,9": .five,    // M4 Max
-        // Mac mini — the base M4 is Thunderbolt 4, the M4 Pro is Thunderbolt 5.
-        "Mac16,10": .four,   // M4
-        "Mac16,11": .five,   // M4 Pro
-        // MacBook Pro 14" — the base M4 is Thunderbolt 4.
-        "Mac16,1": .four,    // M4
-        // MacBook Pro 14"/16" — M4 Pro and M4 Max are Thunderbolt 5.
-        "Mac16,5": .five,
+        // MacBook Pro (14-inch, 2024) M4 — "three Thunderbolt 4 ports".
+        "Mac16,1": .four,
+        // MacBook Pro (14-inch and 16-inch, 2024) M4 Pro / M4 Max — "three
+        // Thunderbolt 5 ports".
         "Mac16,6": .five,
-        "Mac16,7": .five,
         "Mac16,8": .five,
-        // MacBook Pro 14" M5 Max — verified on the rig 2026-09-20:
+        "Mac16,5": .five,
+        "Mac16,7": .five,
+        // MacBook Pro (14-inch, M5), 2025 — "three Thunderbolt 4 ports".
+        "Mac17,2": .four,
+        // MacBook Pro (14-inch and 16-inch, M5 Pro or M5 Max), 2026 — "three
+        // Thunderbolt 5 ports". `Mac17,7` verified on the rig 2026-09-20:
         // `system_profiler SPThunderboltDataType` reports 80 Gb/s buses.
         "Mac17,7": .five,
+        "Mac17,9": .five,
+        "Mac17,6": .five,
+        "Mac17,8": .five,
     ]
 }

@@ -14,9 +14,14 @@ struct InventoryHardwareTests {
             == HardwareModel.KnownMac(marketingName: "Mac mini", archetype: .mini))
         #expect(HardwareModel.catalog["Mac16,6"]
             == HardwareModel.KnownMac(marketingName: "MacBook Pro", archetype: .notebook))
-        #expect(HardwareModel.catalog["Mac17,1"]?.archetype == .notebook)
         #expect(HardwareModel.catalog["Mac17,7"]
             == HardwareModel.KnownMac(marketingName: "MacBook Pro", archetype: .notebook))
+        // Apple's "Identify your MacBook Pro model" page, read 2026-09-20.
+        for identifier in ["Mac17,2", "Mac17,6", "Mac17,8", "Mac17,9"] {
+            #expect(HardwareModel.catalog[identifier]?.archetype == .notebook, "\(identifier)")
+        }
+        // Not on that page: it was never a MacBook Pro identifier.
+        #expect(HardwareModel.catalog["Mac17,1"] == nil)
     }
 
     @Test("The rig's MacBook Pro spellings parse to the notebook's three names")

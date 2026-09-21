@@ -120,9 +120,15 @@ extension HardwareModel {
     /// rule below, and a Mac that fails that too degrades to a numbered,
     /// generic presentation rather than to a wrong picture.
     ///
-    /// `Mac15,14` is verified on this hardware and `Mac17,7` on the rig's
-    /// MacBook Pro. The rest are the published identifiers for the machines
-    /// UX_SPEC §4.7 names.
+    /// Every identifier is transcribed from Apple's own "Identify your … model"
+    /// pages, which list the Model Identifier per machine:
+    /// MacBook Pro <https://support.apple.com/en-us/108052>,
+    /// Mac Studio <https://support.apple.com/en-us/102231>,
+    /// Mac mini <https://support.apple.com/en-us/102852> (read 2026-09-20).
+    /// `Mac15,14` is also verified on this hardware and `Mac17,7` on the rig's
+    /// MacBook Pro. A new Mac needs no row to be recognized — the
+    /// family-and-layout rule covers it — so a row is only ever added from
+    /// those pages, never from a third-party listing.
     static let catalog: [String: KnownMac] = [
         // Mac Studio (2025).
         "Mac15,14": KnownMac(marketingName: "Mac Studio", archetype: .studioSix),   // M3 Ultra
@@ -130,17 +136,24 @@ extension HardwareModel {
         // Mac mini (2024) — both share one chassis and one port layout.
         "Mac16,10": KnownMac(marketingName: "Mac mini", archetype: .mini),          // M4
         "Mac16,11": KnownMac(marketingName: "Mac mini", archetype: .mini),          // M4 Pro
-        // MacBook Pro 14/16.
+        // MacBook Pro (14-inch, 2024) M4; (14-inch, 2024) M4 Pro / M4 Max;
+        // (16-inch, 2024) M4 Pro / M4 Max.
         "Mac16,1": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
-        "Mac16,5": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
         "Mac16,6": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
-        "Mac16,7": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
         "Mac16,8": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
-        "Mac17,1": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
-        // Verified 2026-09-20: `product-name` "MacBook Pro (14-inch, M5 Max)",
-        // `port-location` right, left-back, left-front — recognized by family
-        // and layout before this row existed.
-        "Mac17,7": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),  // M5 Max
+        "Mac16,5": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
+        "Mac16,7": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
+        // MacBook Pro (14-inch, M5), 2025.
+        "Mac17,2": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
+        // MacBook Pro (14-inch, M5 Pro or M5 Max) and (16-inch, M5 Pro or
+        // M5 Max), 2026. `Mac17,7` verified on the rig 2026-09-20:
+        // `product-name` "MacBook Pro (14-inch, M5 Max)", `port-location`
+        // right, left-back, left-front — recognized by family and layout
+        // before this row existed.
+        "Mac17,7": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
+        "Mac17,9": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
+        "Mac17,6": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
+        "Mac17,8": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
     ]
 
     /// `Apple M3 Ultra` → `M3 Ultra`. Anything else is passed through trimmed,
