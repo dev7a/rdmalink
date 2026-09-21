@@ -235,7 +235,7 @@ Only three tones are ever used on the model: `.secondary`, `accent`, and the unl
 - Panel: `bolt.horizontal.circle` · **"Another Mac is here. The link is still coming up."**
 
 **4. A Mac is linked**
-- Model: plug stub plus a **steady** `.secondary` inner ring at full opacity, plus a short **light thread** that leaves the receptacle along the cable direction and fades out 40 pt from the frame edge. The thread is the only ornament in the entire scene, and it exists only when a real Mac is really linked, which is what keeps it honest.
+- Model: plug stub plus a **steady** `.secondary` inner ring at full opacity, plus a short **light thread** that leaves the receptacle along the cable direction and fades out 40 pt from the frame edge. It is one continuous tube — a smooth curve with the sag of a real cable, tapering gently and fading along its length — never a chain of visible segments. The thread is the only ornament in the entire scene, and it exists only when a real Mac is really linked, which is what keeps it honest.
 - Panel: `bolt.horizontal.circle.fill` · **"Linked to another Mac"**
 
 ### 4.3 Outer track — what the configuration says (five states)
@@ -338,7 +338,7 @@ The rings say what the words say; two small aids make sure nobody has to guess w
 
 **Purpose.** What this Mac is, whether RDMA is on, which ports exist and what each is doing, what has already been set up, and what — if anything — is unfinished.
 
-**Layout.** Stage live. Working area: headline, one body line, then a grouped inset **This Mac** section of three read-only rows, plus any situation rows. Port list in **full** density below it. Footer: `Set Up a Port…` as the default button, with `Restore…` as a plain button beside it whenever any baseline exists. A `.caption` secondary link row under the list: `Change Log` · `What This All Means`.
+**Layout.** Stage live. Working area: headline, one body line, then a grouped inset **This Mac** section of three read-only rows, plus any situation rows. Port list in **full** density below it. Footer: `Quit` as a plain button at the leading edge — the hub is the place people arrive back at when the work is done, and "Set Up Another Port…" is an offer, not a demand, so the way out is beside it and not only in the menu — then, trailing, `Set Up a Port…` as the default button with `Restore…` as a plain button beside it whenever any baseline exists. `Quit` quits the app exactly as ⌘Q does, asks nothing, and is present in every hub state, R23 and R31 included; it appears on no other screen. A `.caption` secondary link row under the list: `Change Log` · `What This All Means`.
 
 **Primary action.** `Set Up a Port…` (first run) / `Set Up Another Port…` (once at least one port is ready).
 
@@ -386,7 +386,7 @@ The rings say what the words say; two small aids make sure nobody has to guess w
 - Adopted or set up elsewhere (any port that is out of the bridge and that RDMALink did not set up): the row carries **Return to Bridge…**, so putting a port back never depends on how it was removed. A port RDMALink set up carries **Restore…** instead, which returns it exactly.
 
 **Copy — buttons**
-- **Set Up a Port…** · **Set Up Another Port…** · **Restore…** · **Check Again** · **Change Log** · **What This All Means** · **Turn It On…** · **Show Me** · **Forget This Port**
+- **Quit** · **Set Up a Port…** · **Set Up Another Port…** · **Restore…** · **Check Again** · **Change Log** · **What This All Means** · **Turn It On…** · **Show Me** · **Forget This Port**
 
 **Copy — Thunderbolt 4 mode**
 - Headline: **Nothing to configure here**
@@ -396,7 +396,7 @@ The rings say what the words say; two small aids make sure nobody has to guess w
 **Copy — Unrecognized Mac (R31)**
 - Headline: **I don't recognize this Mac**
 - Body: **RDMALink only draws, and only changes, Macs it knows — and this isn't one of them. So there's no picture, and nothing here will be changed. The ports below are listed the way macOS reports them, and everything you see is real.**
-- The footer has no buttons at all, and neither does any row: nothing that writes — set-up, Restore, Adopt, Return to Bridge, Stop Managing — is offered, and `Identify a Port…` is absent from the Port menu because there is no model for it to point at. The stage shows R31's block (§6.2) in place of a model.
+- The footer holds `Quit` and nothing else, and no row has a button: nothing that writes — set-up, Restore, Adopt, Return to Bridge, Stop Managing — is offered, and `Identify a Port…` is absent from the Port menu because there is no model for it to point at. The stage shows R31's block (§6.2) in place of a model.
 
 **States.** First run with RDMA on · First run with RDMA off · Restart pending · One or more ready · An adoptable port present · A drifted port present · A port needing a hand · Cable in a USB-only port · Two Macs connected (the tip row appears and `Set Up a Port…` is **disabled** with the reason printed above the footer separator) · Thunderbolt 4 read-only (R23) · Unrecognized Mac read-only (R31) · Live update arrives.
 
@@ -986,7 +986,7 @@ Documented once so they all read the same.
 **R23 — This Mac's Thunderbolt is version 4.** *Read-only mode, not an error.*
 - Headline: **Nothing to configure here**
 - Body: **This Mac has Thunderbolt 4 ports. RDMA over Thunderbolt needs Thunderbolt 5, so there's nothing for RDMALink to set up. You're welcome to look around — everything you see is real.**
-- Buttons: **none.** The set-up button is **absent**, not disabled.
+- Buttons: **Quit** only. The set-up button is **absent**, not disabled.
 - **Recovery:** the model, the port list, Identify and the change log all still work, so the app remains useful as a map.
 
 ---
@@ -1047,7 +1047,7 @@ Documented once so they all read the same.
 - Headline: **I don't recognize this Mac**
 - Body: **RDMALink only draws, and only changes, Macs it knows — and this isn't one of them. So there's no picture, and nothing here will be changed. The ports below are listed the way macOS reports them, and everything you see is real.**
 - Stage: no model. In its place, centred, an unavailable-content block in the system's own style: symbol `desktopcomputer.trianglebadge.exclamationmark`, title **No picture for this Mac**, description **RDMALink doesn't recognize it, so it won't draw one.** No selector, legend, callout or view buttons.
-- Buttons: **none.** Set-up, Restore, Adopt, Return to Bridge and Stop Managing are all **absent**, not disabled — RDMALink writes nothing on a Mac it does not recognize, notes included. Identify is not offered.
+- Buttons: **Quit** only. Set-up, Restore, Adopt, Return to Bridge and Stop Managing are all **absent**, not disabled — RDMALink writes nothing on a Mac it does not recognize, notes included. Identify is not offered.
 - Every operation refuses with this code as well, so the command-line tool's previews and `refusals` say the same thing; the app hiding the buttons is not the only guard.
 - **Recovery:** the port list (numbered, §4.7) and the change log still work. A newer RDMALink may know this Mac.
 
