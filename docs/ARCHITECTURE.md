@@ -281,7 +281,9 @@ listed in `.github/actionlint.yaml` so `actionlint` recognizes it.
 `.github/workflows/ci.yml` runs on pushes to `main`, on pull requests and on
 demand, one job, `contents: read`: `script/test.sh` (the same gate a
 developer runs), then `bash -n` and `shellcheck` over `script/*.sh` and
-`script/release/*.sh`, then the three release-script tests. The app builds
+`script/release/*.sh` (shellcheck is installed from Homebrew on the runner —
+the one network fetch in CI, a linter in a job that holds no credential),
+then the three release-script tests. The app builds
 Debug, which is ad-hoc signed, so CI needs no identity and no secret.
 
 `.github/workflows/release.yml` is the tag-driven release. The event flow:

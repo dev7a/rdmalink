@@ -47,11 +47,17 @@ jobs:
           set -euo pipefail
           script/test.sh
       - name: Check the shell the release runs on
+        # shellcheck is not on the xcode-27 image (the first run proved it);
+        # Homebrew is. This is the one network fetch in CI: a linter, in a
+        # read-only job that holds no credential, so a bad bottle could fail
+        # this job and touch nothing else. bash -n needs nothing installed.
         run: |
           set -euo pipefail
           for script in script/*.sh script/release/*.sh; do
             bash -n "$script"
           done
+          command -v shellcheck >/dev/null || brew install --quiet shellcheck
+          shellcheck --version
           shellcheck script/*.sh script/release/*.sh
       - name: Run the release-script tests
         # Also run inside script/test.sh; kept here so a reader of the CI log
