@@ -4,7 +4,7 @@
 **Job:** Prepare one or more Thunderbolt 5 ports **on the Mac it is running on** so they can carry RDMA over Thunderbolt, and be able to put everything back.
 **Audience for this document:** designers building high-fidelity mockups, then engineers implementing. Every quoted string is final copy and may be pasted verbatim.
 
-**Build milestones referenced in this document are `ML0`, `ML1`, `ML2`, `ML3`. They are internal labels for the build plan only. They never appear in the interface, in copy, in window titles, in a progress rail, or in a status bar. The shipped app's only progress indicator is a text label of the form "Step 3 of 5".**
+**Build milestones referenced in this document are `ML0`, `ML1`, `ML2`, `ML3`. They are internal labels for the build plan only. They never appear in the interface, in copy, in window titles, in a progress rail, or in a status bar. The shipped app's only progress indicator is a text label of the form "Step 2 of 3".**
 
 Copy is US English. Every string is a separate localizable resource; no sentence is assembled by concatenation. Position names and locator phrases are separate strings so they can be re-worded per language.
 
@@ -70,7 +70,7 @@ A horizontal split: **STAGE** on the left, **ASSISTANT COLUMN** on the right.
 
 **ASSISTANT COLUMN** — a `VStack` on `.windowBackground` with 24 pt margins, in four fixed bands, top to bottom:
 
-1. **Header row.** Step title leading, `Step 3 of 5` in `.caption` secondary trailing. It is a **label, never a progress bar**, and it is absent on the hub, the change log, and settings.
+1. **Header row.** Step title leading, `Step 2 of 3` in `.caption` secondary trailing. It is a **label, never a progress bar**, and it is absent on the hub, the change log, and settings. It counts the screens of the current run: a set-up that opens on the picker has three steps (Choose, Review, Ready); one whose port was already chosen on the hub, or picked for the user because exactly one port has a Mac on the end, opens on Review and has two. Setting up (S6) keeps Review's label while it runs.
 2. **Working area.** `.title2` semibold headline, `.body` secondary explanatory text, then the step's controls (grouped inset lists, `Form` rows, value blocks). This is the only band that changes between steps.
 3. **The port list.** A permanent, grouped inset list of **every receptacle on this Mac** — Thunderbolt and USB-only alike — in physical order, grouped by face (`Back`, `Front`, or `Left side`, `Right side`). It is present on every screen of the main window, in every step. **It never reorders and never resizes a row; only badges, subtitles, and trailing controls change**, cross-fading in 180 ms. It has two densities:
    - **Full** (hub, Choose a port, Identify): symbol, title, `.callout` secondary subtitle carrying state and bridge membership, optional trailing borderless button.
@@ -439,15 +439,15 @@ The camera **holds** the resting three-quarter pose and never moves on its own h
 
 ---
 
-### S3 — Before we change anything *(ML1 — preflight)*
+### S3 — The four checks *(ML1 — evaluated on S5, not a screen of their own)*
 
-**Purpose.** Check every hard rule the app can measure, so the user is never asked to promise something. **Nothing on this screen is a checkbox, and nothing here can be waved through.**
+**Purpose.** Check every hard rule the app can measure, so the user is never asked to promise something. **Nothing here is a checkbox, and nothing here can be waved through.** The checks are not a screen: a page of four green ticks with a Continue button asks nothing of anyone, so they live at the top of S5 as its **Checked** group, collapsed when every one is satisfied and expanded when one is not.
 
-**Layout.** Stage live at full strength; any port a check refers to takes a soft attention ring. Working area: headline, one body line, then a grouped inset list of four check rows. Each row: symbol (`checkmark.circle.fill` accent when satisfied, `exclamationmark.circle` `.orange` when not, `circle.dotted` while checking), a title, a `.callout` secondary line carrying the **actual finding**, and a trailing borderless action button only where one helps. Port list compact below. Footer: `Back` and `Continue` as the default, disabled whenever a row is unsatisfied, with the reason printed in `.callout` `.orange` directly above the footer separator.
+**Rows.** Each row: symbol (`checkmark.circle.fill` accent when satisfied, `exclamationmark.circle` `.orange` when not, `circle.dotted` while checking), a title, a `.callout` secondary line carrying the **actual finding**, and a trailing borderless action button only where one helps. Any port a check refers to takes a soft attention ring on the stage.
 
 **Copy.**
-- Headline: **Before we change anything**
-- Body: **Four things worth knowing. RDMALink checks them itself — nothing here is a promise you have to make.**
+- Group label, all satisfied (the collapsed disclosure's one line): **Checked: one cable, nothing mounted, another way in, room for the undo note.**
+- Group label, something unsatisfied: **Checked — one thing to sort out first** / **Checked — two things to sort out first**
 
 | # | Title | Satisfied | Unsatisfied | Button |
 |---|---|---|---|---|
@@ -456,10 +456,10 @@ The camera **holds** the resting three-quarter pose and never moves on its own h
 | 3 | **Another way to reach this Mac** | **Wi-Fi is connected, so changing a Thunderbolt port won't cut you off.** | **Right now, Thunderbolt is the only way this Mac is reachable. Changing a port can briefly interrupt the whole bridge — not just that one port — so connect Wi-Fi or Ethernet before we touch it.** | **Open Network Settings** |
 | 4 | **Room to save an undo note** | **RDMALink can save its notes, so anything it changes can be put back.** | **RDMALink can't write its notes folder, so it couldn't put things back afterwards. It won't change anything it can't undo.** | **Show the Notes Folder** |
 
-- Disabled-`Continue` reasons: **Unplug one of the two cables to continue.** · **Unplug one end of that cable to continue.** · **Eject Vault to continue.** · **Connect Wi-Fi or Ethernet to continue.** · **RDMALink needs somewhere to save its notes before it can continue.**
-- Buttons: **Continue** · **Back** · **Check Again**
+- Reasons printed above S5's footer separator while a check is unsatisfied (the default button is disabled, not removed, because these clear by themselves): **Unplug one of the two cables to continue.** · **Unplug one end of that cable to continue.** · **Eject Vault to continue.** · **Connect Wi-Fi or Ethernet to continue.** · **RDMALink needs somewhere to save its notes before it can continue.**
+- Button, in the group's header while something is unsatisfied: **Check Again**
 
-**States.** All four satisfied · Two Macs connected (R1) · Cable looped back into this Mac (R2) · No Mac connected (satisfied, with the gentle note) · A volume mounted over Thunderbolt (R4) · Only reachable over Thunderbolt (R5, **hard refusal**) · Baseline folder unwritable (R14, **hard refusal**) · Managed by a configuration profile (R13, hard refusal, replaces the whole list) · Re-checking (rows animate individually, `Continue` greys for the duration).
+**States.** All four satisfied (collapsed) · Two Macs connected (R1) · Cable looped back into this Mac (R2) · No Mac connected (satisfied, with the gentle note) · A volume mounted over Thunderbolt (R4) · Only reachable over Thunderbolt (R5, **hard refusal**) · Baseline folder unwritable (R14, **hard refusal**) · Managed by a configuration profile (R13, hard refusal, replaces the whole of S5's working area) · Re-checking (rows animate individually, the default button greys for the duration) · A check flips live (unplugging the second cable satisfies row 1 in the same beat, with no click).
 
 **3D behavior.** When a check names a port, that receptacle takes a 1.5 pt attention ring in `.secondary` and a single 1.6 s breath, and the camera turns to the face it is on if it isn't already visible — with the working area printing **"Let me turn it around"** for the duration of the move. With two Macs connected, both receptacles ring simultaneously and a faint light thread leaves each one, **making the loop visible rather than described**; when the user unplugs one, its ring and thread fade and the check flips to satisfied in the same beat, with no click.
 
@@ -471,13 +471,15 @@ The camera **holds** the resting three-quarter pose and never moves on its own h
 
 **Layout.** Stage is the subject: full strength, face selector visible, hover states live. Working area: headline, body, the pre-selection rationale line if there is one, then a borderless `Identify a Port…` button, left-aligned. The port list is in **full** density and every row is a selection target; non-selectable rows are dimmed with an explanatory subtitle. Footer: `Back`, `Continue` as the default (disabled until a selectable port is chosen), and `2 ports selected` in `.caption` secondary on the leading side when more than one is chosen.
 
-**Pre-selection.** If exactly one port has a Mac linked, it is **pre-selected**, and the reason is stated in words rather than assumed.
+**When this screen appears.** The choice is made at the beginning, and only once. A port clicked on the hub before `Set Up a Port…`, a double-clicked receptacle, or a row's own set-up action skips this screen: the run opens on S5 with that port. So does **pre-selection**: if nothing was chosen and exactly one port has a Mac linked, it is picked, the run opens on S5, and the reason is stated there in words rather than assumed — `Back` from S5 is this screen, for anyone who'd rather choose. Otherwise the run opens here.
+
+**After this screen the choice is frozen.** On S5, S6 and S7 no row and no receptacle is a selection target: clicking one does nothing, the chosen port alone carries the accent ring and its badge, and the others are dimmed — the list and the model are status there, not a picker.
 
 **Copy.**
 - Headline: **Which port should carry RDMA?**
 - Body (desktop): **Click a port on the model, or pick one from the list. If it's on the other side, I'll turn the Mac around.**
 - Body (notebook): **Click a port on the model, or pick one from the list. Use the selector below the model to see the other side.**
-- Pre-selection line: **I've picked Back, middle left for you, because that's the port with another Mac on the end of it. Choose a different one if you'd rather.**
+- Pre-selection line (shown on S5 when the pick was made for the user): **I've picked Back, middle left for you, because that's the port with another Mac on the end of it. Choose a different one if you'd rather.**
 - Pre-selection line (two candidates): **Two ports have a Mac on the end. I haven't picked for you — choose the one with the cable you mean.**
 - Selectable subtitles: **Linked to another Mac · In the Thunderbolt Bridge** · **Nothing plugged in · In the Thunderbolt Bridge** · **Another Mac is here. The link is still coming up.** · **A device is connected — not a Mac · Not in any bridge**
 - Dimmed subtitles: **USB only — this one isn't Thunderbolt** · **Already ready for RDMA** · **Set up outside RDMALink**
@@ -533,11 +535,11 @@ Identify is **read-only, needs no password, and is always available** — includ
 
 **Purpose.** The promise screen. Everything the app is about to do, in plain words, with the technical truth one disclosure away, and the last chance to back out before any password is asked for.
 
-**Layout.** Stage holds the selected receptacle(s) lit and centered, camera square on the face. Working area: headline, one body line, then **one grouped inset section per selected port**, headed by the position name. Each section has four rows; each row is a symbol, a title, a `.callout` secondary sentence, and a **before → after pair of chips**. Below the sections: a footnote, a collapsed `What I Won't Touch` disclosure, and a `Show technical names` disclosure bound to the same preference as Settings. Port list compact, with the target port(s) marked **About to change**. Footer: `Back`, and a default button naming exactly what it will do.
+**Layout.** Stage holds the selected receptacle(s) lit and centered, camera square on the face. Working area: headline, one body line, the pre-selection line when the pick was made for the user (S4), then the **Checked** group (S3: one collapsed disclosure line when all four are satisfied, the four rows when one is not), then **one grouped inset section per selected port**, headed by the position name. Each section has four rows; each row is a symbol, a title, a `.callout` secondary sentence, and a **before → after pair of chips**. Below the sections: a footnote, a collapsed `What I Won't Touch` disclosure, and a `Show technical names` disclosure bound to the same preference as Settings. Port list compact, frozen (S4), with the target port(s) marked **About to change**. Footer: `Back` (to S4), and a default button naming exactly what it will do; pressing it asks macOS for the password straight away — there is no screen between this one and the work.
 
 **Copy.**
 - Headline: **Here's what will change**
-- Body: **Nothing has happened yet. Read this, then RDMALink will ask for a password once and make every change in one go.**
+- Body: **Nothing has happened yet. When you're ready, macOS will ask for an administrator's name and password once — it doesn't have to be yours, and RDMALink never sees or stores it — and every change is made in one go.**
 - Section header: **Back, far left**
 
 | Row | Title | Body | Chips |
@@ -567,7 +569,7 @@ Identify is **read-only, needs no password, and is always available** — includ
 
 You can watch each sentence mean something before you agree to it.
 
-**States.** Single port, one bridge · Single port, an active and an inactive bridge · Single port, no bridge · Several ports · Technical names expanded · A warning present (never blocking) · A refusal present (R5, R13, R14, R15, R16 — the section is **replaced** by the refusal and **the default button is removed entirely**, not disabled) · Topology changed since S4 → R17.
+**States.** Single port, one bridge · Single port, an active and an inactive bridge · Single port, no bridge · Several ports · Pre-selected for the user · Technical names expanded · A warning present (never blocking) · A check unsatisfied (R1, R2, R4 — the Checked group expands, the default button is **disabled** with the reason above the separator, and it clears live) · A refusal present (R5, R13, R14, R15, R16 — the section is **replaced** by the refusal and **the default button is removed entirely**, not disabled) · Topology changed since S4 → R17 · OS password dialog up (the working area dims 20 % and says nothing over it) · Permission refused or cancelled → R6 / R7, back here with the selection intact.
 
 **3D behavior.** The camera moves square on to the face carrying the selection and frames it; unselected receptacles fade to 25 %, so the scene shows the subject and its context and nothing else. The selected port's outer ring is drawn as the **open segmented ring** — four arcs with four gaps — because the port is still a bridge member, and the gaps are exactly what will close during apply. This is the one piece of visual foreshadowing in the app, and it costs nothing to read.
 
@@ -575,19 +577,11 @@ You can watch each sentence mean something before you agree to it.
 
 ### S6 — Setting up *(ML1 — apply)*
 
-**Purpose.** Ask for the password once, then perform every write in a single burst inside the 30-second credential window, showing real progress and never offering a cancel the app cannot honor.
+**Purpose.** Perform every write in a single burst inside the 30-second credential window, showing real progress and never offering a cancel the app cannot honor. The password was asked for by S5's default button; this screen begins the moment macOS hands back the permission.
 
-**Layout, phase A.** Headline, body, a single illustrative row about the password. Footer: `Back` and `Continue` as the default.
+**Layout.** The step label stays S5's. The footer's buttons **disappear entirely** — there is no control the app cannot honor. The working area shows a headline, a body, and a live checklist in a grouped inset list, one row per write, each `circle.dotted` while pending, a small `ProgressView` while running, `checkmark.circle.fill` when done, with a status line beneath.
 
-**Layout, phase B** (after the OS dialog returns a credential). The footer's buttons **disappear entirely** — there is no control the app cannot honor. The body is replaced by a live checklist in a grouped inset list, one row per write, each `circle.dotted` while pending, a small `ProgressView` while running, `checkmark.circle.fill` when done, with a status line beneath.
-
-**Copy — phase A.**
-- Headline: **One password, one moment**
-- Body: **macOS will ask for an administrator's name and password — it doesn't have to be yours. RDMALink then makes every change in a single burst, because that permission only lasts about thirty seconds.**
-- Row: **RDMALink never sees or stores the password. macOS handles it and hands back a short-lived permission.**
-- Button: **Continue**
-
-**Copy — phase B.**
+**Copy.**
 - Headline: **Setting up Back, far left** / **Setting up two ports**
 - Body: **A few seconds. Your other network connections stay up the whole time.**
 
@@ -605,7 +599,7 @@ You can watch each sentence mean something before you agree to it.
 
 **The undo note is step 1, not step 5.** If it cannot be written, nothing is changed at all (R14). The gate that protects every other promise goes first, and the screen says so.
 
-**States.** Phase A · OS dialog up (the app dims its own content 20 % and says nothing over it) · Authorization cancelled → R7 · Not an administrator → R6 · Phase B running · Phase B, second port of two · A step failed → automatic rollback, checklist reverses with a returning symbol → R10 · Credential expired mid-burst → rollback → R8 · Rollback succeeded → R10's screen · Rollback failed → R11 · Another app holds the network lock → R12 · All steps done → advances to S7 about 400 ms after the last checkmark settles.
+**States.** Running · Second port of two · A step failed → automatic rollback, checklist reverses with a returning symbol → R10 · Credential expired mid-burst → rollback → R8 · Rollback succeeded → R10's screen · Rollback failed → R11 · Another app holds the network lock → R12 · All steps done → advances to S7 about 400 ms after the last checkmark settles.
 
 **3D behavior.** The selected receptacle's segmented ring **closes its gaps one by one** as each real step completes, ending as a solid accent ring; in the same beat as the first gap closes, the bridge ribbon detaches from this receptacle and retracts into the remaining members. Nothing else in the scene moves; the camera is locked for the duration so the eye has one place to be. If rollback runs, **the ring re-opens its gaps in reverse at the same pace and the ribbon springs back** — an honest and oddly calming thing to watch. Under Reduce Motion the ring steps between five static states.
 
@@ -864,7 +858,7 @@ Documented once so they all read the same.
 - Headline: **No changes were made**
 - Body: **Without an administrator's permission RDMALink can't touch the bridge — and it didn't. Everything is exactly as it was. Try again whenever you're ready; the name and password don't have to be yours.**
 - Buttons: **Try Again** (default) · **Back**
-- **Recovery:** returns to phase A of the apply screen with the selection intact.
+- **Recovery:** returns to S5 with the selection intact; the default button asks again.
 
 ---
 
@@ -872,7 +866,7 @@ Documented once so they all read the same.
 - Headline: **That took a moment too long**
 - Body: **The permission macOS gives RDMALink lasts about thirty seconds, and it ran out before every change went through — so RDMALink put the port back exactly as it was. Let's go again; it usually flies through.**
 - Buttons: **Try Again** (default) · **Done** · **Copy Details**
-- **Recovery:** the reversed checklist stays on screen as proof of the rollback, then the flow re-runs from phase A after re-verifying the world.
+- **Recovery:** the reversed checklist stays on screen as proof of the rollback, then the flow returns to S5 after re-verifying the world.
 
 ---
 
