@@ -57,5 +57,8 @@ extension HardwareModel {
         "Mac16,6": .five,
         "Mac16,7": .five,
         "Mac16,8": .five,
+        // MacBook Pro 14" M5 Max — verified on the rig 2026-09-20:
+        // `system_profiler SPThunderboltDataType` reports 80 Gb/s buses.
+        "Mac17,7": .five,
     ]
 }

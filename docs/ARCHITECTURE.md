@@ -73,9 +73,11 @@ from `StageMath.project`.
   could not join to a `port-location` node counts as a hole and refuses,
   so a partial probe can never shrink a six-port Studio into the four-port
   table. Undocumented, so enrichment under rule 5: absent, the Mac is
-  called `Mac` and drawn as the stand-in. The MacBook Pro's `port-location`
-  spellings are not yet recorded; `PortPosition.parse` accepts `left-rear`,
-  `left-front` and `right`.
+  called `Mac` and drawn as the stand-in. Verified on the rig's MacBook Pro
+  (Mac17,7, 2026-09-20): `product-name` is `MacBook Pro (14-inch, M5 Max)`
+  and the `port-location` spellings are `right`, `left-back` and
+  `left-front`; the read-only tool built before that identifier was in the
+  catalogue reported `notebook`, recognized by product family and layout.
 - The only public live event is `SCDynamicStore`
   `State:/Network/Interface/<bsd>/Link` (and `/IPv6`), which fires on
   Thunderbolt-IP link transitions only. Dock plug/unplug may not fire

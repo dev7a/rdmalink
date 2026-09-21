@@ -15,6 +15,18 @@ struct InventoryHardwareTests {
         #expect(HardwareModel.catalog["Mac16,6"]
             == HardwareModel.KnownMac(marketingName: "MacBook Pro", archetype: .notebook))
         #expect(HardwareModel.catalog["Mac17,1"]?.archetype == .notebook)
+        #expect(HardwareModel.catalog["Mac17,7"]
+            == HardwareModel.KnownMac(marketingName: "MacBook Pro", archetype: .notebook))
+    }
+
+    @Test("The rig's MacBook Pro spellings parse to the notebook's three names")
+    func macBookProSpellingsParse() {
+        // Verified on Mac17,7 (2026-09-20): `right`, `left-back`, `left-front`.
+        let names = ["left-back", "left-front", "right"].map {
+            PortPosition.parse($0)?.name(archetype: .notebook)
+        }
+        #expect(names == ["Left side, rear", "Left side, front", "Right side"])
+        #expect(HardwareModel.productFamily(fromProductName: "MacBook Pro (14-inch, M5 Max)") == "MacBook Pro")
     }
 
     @Test("An identifier nobody has checked is unknown, not guessed")

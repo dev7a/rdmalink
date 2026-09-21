@@ -120,8 +120,9 @@ extension HardwareModel {
     /// rule below, and a Mac that fails that too degrades to a numbered,
     /// generic presentation rather than to a wrong picture.
     ///
-    /// `Mac15,14` is verified on this hardware. The rest are the published
-    /// identifiers for the machines UX_SPEC §4.7 names.
+    /// `Mac15,14` is verified on this hardware and `Mac17,7` on the rig's
+    /// MacBook Pro. The rest are the published identifiers for the machines
+    /// UX_SPEC §4.7 names.
     static let catalog: [String: KnownMac] = [
         // Mac Studio (2025).
         "Mac15,14": KnownMac(marketingName: "Mac Studio", archetype: .studioSix),   // M3 Ultra
@@ -136,6 +137,10 @@ extension HardwareModel {
         "Mac16,7": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
         "Mac16,8": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
         "Mac17,1": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
+        // Verified 2026-09-20: `product-name` "MacBook Pro (14-inch, M5 Max)",
+        // `port-location` right, left-back, left-front — recognized by family
+        // and layout before this row existed.
+        "Mac17,7": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),  // M5 Max
     ]
 
     /// `Apple M3 Ultra` → `M3 Ultra`. Anything else is passed through trimmed,

@@ -19,7 +19,9 @@ struct PortPosition: Sendable, Hashable {
     /// Parses a `port-location` value such as `back-left-middle`.
     ///
     /// Verified on Mac15,14, which publishes `back-left`, `back-left-middle`,
-    /// `back-right-middle`, `back-right`, `front-left` and `front-right`.
+    /// `back-right-middle`, `back-right`, `front-left` and `front-right`, and
+    /// on Mac17,7 (MacBook Pro 14" M5 Max), which publishes `left-back`,
+    /// `left-front` and `right` — the side qualifier is `back`, not `rear`.
     /// Other spellings are accepted where they are unambiguous; everything else
     /// is nil.
     static func parse(_ location: String) -> PortPosition? {
