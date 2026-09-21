@@ -65,7 +65,7 @@ A horizontal split: **STAGE** on the left, **ASSISTANT COLUMN** on the right.
 
 **STAGE** — the `RealityView`, edge-to-edge, with two floating controls and nothing else:
 
-- **Bottom-center:** the face selector — a segmented control inside a `Capsule` of `.regularMaterial`, Maps-style. `Back / Front` on Mac Studio and Mac mini; `Left / Right` on notebooks (`Back` is offered only if that face carries ports; on current notebooks it does not, so it is absent rather than empty). Hidden entirely when the model has one relevant face (Mac mini with no cable in front; a stand-in whose reported ports all sit on one face).
+- **Bottom-center:** the face selector — a segmented control inside a `Capsule` of `.regularMaterial`, Maps-style. `Back / Front` on Mac Studio and Mac mini; `Left / Right` on notebooks (`Back` is offered only if that face carries ports; on current notebooks it does not, so it is absent rather than empty). Hidden entirely when the model has one relevant face (Mac mini with no cable in front). On an unrecognized Mac (R31) the stage has no chrome at all: no selector, no Fit or Reset View, no legend, no callout.
 - **Bottom-trailing:** two small borderless buttons, `Fit` (`arrow.up.left.and.arrow.down.right`) and `Reset View`.
 
 **ASSISTANT COLUMN** — a `VStack` on `.windowBackground` with 24 pt margins, in four fixed bands, top to bottom:
@@ -176,7 +176,7 @@ No custom glyphs. **No Thunderbolt trade-dress mark anywhere**, in the UI or on 
 ### 3.4 3D materials and lighting
 
 - **One generic rounded-box chassis per archetype.** Correct proportions and correct receptacle placement. No logo, no engraved text, no trade dress of any kind, and no vent pattern beyond a soft inset — except the Mac Studio's perforated back grille, drawn as a hole field in the recess tone above the port row, which carries no logo and no trade dress.
-- **The stand-in is a plain box.** On an unrecognized Mac it carries every Thunderbolt receptacle macOS reports, each on the face macOS reports it on — the back when no face is reported — in the order macOS reports them. It never draws a receptacle on a face other than the reported one, and never draws a USB-only receptacle, because it does not know where one would be. It comes to rest facing the first of its faces that carries a port, in the port list's order, so the first frame always shows one.
+- **No stand-in.** An unrecognized Mac gets no chassis at all: the stage shows R31's block (§6.2) where the model would be. A plain box would still be a picture of a Mac the app does not know, and every hole on it a claim.
 - `PhysicallyBasedMaterial`, roughness 0.38, metallic 0.85, base color the aluminium's own silver (0.78 luminance) in **both** appearances. There is no dark Mac Studio or Mac mini, and macOS does not report a MacBook Pro's finish, so silver is the honest default everywhere: **dark mode changes the light, never the metal.**
 - **Receptacles are true geometry** — a 3 mm-scale inset slot with a darker interior — so an unlit port reads as a hole and not a sticker. USB-only receptacles use their correct, slightly different geometry with a matte, non-reflective interior, so they look different before anyone explains why.
 - **Lighting:** one neutral studio IBL (≈900 lux equivalent) plus a single key `DirectionalLight` from upper-left for a defined top edge; a soft contact shadow on an invisible ground plane. No mirror reflection, no floor grid, no diorama.
@@ -294,9 +294,9 @@ Always physical, never numeric unless nothing better exists.
 | Mac Studio, 6 TB5 (M3 Ultra / M5 Ultra) | the same back four, plus `Front, left` · `Front, right` (both Thunderbolt) |
 | Mac mini (M4 Pro) | `Back, left` · `Back, middle` · `Back, right` · `Front, left` (USB only) · `Front, right` (USB only) |
 | MacBook Pro 14/16 | `Left side, rear` · `Left side, front` · `Right side` |
-| Unknown / positions unavailable | `Thunderbolt port 1` … `Thunderbolt port N`, and **Identify is promoted** to compensate |
+| Unrecognized Mac (R31), or a recognized Mac whose positions are unavailable | `Thunderbolt port 1` … `Thunderbolt port N`; on a recognized Mac **Identify is promoted** to compensate |
 
-**Recognition.** A Mac is recognized by its model identifier when the catalogue lists it. Otherwise it is recognized by two facts it states itself: the product family macOS publishes for it (`Mac Studio`, `Mac mini`, `MacBook Pro`) together with a Thunderbolt receptacle layout that matches that family's table exactly, receptacle for receptacle — every reported position has a name in the table, no two share one, and no table position is missing. Both must agree. When either is absent or differs, the Mac is unrecognized: its ports are numbered, the picture is the stand-in (§3.4), and the S1 note says so. Nothing is ever inferred from the chip or from the port count alone.
+**Recognition.** A Mac is recognized by its model identifier when the catalogue lists it. Otherwise it is recognized by two facts it states itself: the product family macOS publishes for it (`Mac Studio`, `Mac mini`, `MacBook Pro`) together with a Thunderbolt receptacle layout that matches that family's table exactly, receptacle for receptacle — every reported position has a name in the table, no two share one, and no table position is missing. Both must agree. When either is absent or differs, the Mac is unrecognized and the app is in R31's read-only mode: no model, numbered ports, and nothing changed. Nothing is ever inferred from the chip or from the port count alone.
 
 With **Show technical names** on, a `.caption` tertiary suffix is appended to the row's detail line only — `en6` — and nowhere else. **No text is ever drawn on the 3D model, regardless of this toggle.**
 
@@ -308,7 +308,7 @@ The rings say what the words say; two small aids make sure nobody has to guess w
 
 **Legend.** A `.caption` `.secondary` list in the stage's top-leading corner, one line per outer-ring shape **present on this Mac right now**, glyph first: the ring geometries themselves at small scale. Labels are the panel's own words — **In a bridge** · **Standalone** · **Set up outside RDMALink** · **Ready for RDMA** · **Needs a look**. Nothing about the inner track, nothing about selection, no title. It is shown whenever the rings are live, hidden with View › **Hide Legend** ⌘K (which then reads **Show Legend**), and the choice is remembered. It never overlaps a receptacle: it yields to the model by moving to the top-trailing corner when the chassis reaches under it.
 
-**Callout.** Resting on a receptacle (300 ms, as a tooltip) or moving keyboard focus to it shows a small callout beside it with **the row's title and detail line, verbatim** — "Back, far left" over "Nothing plugged in · In the Thunderbolt Bridge" — and, when technical names are on, the row's technical line too. A USB-only receptacle's callout is its own subtitle, **USB only — this one isn't Thunderbolt**. The callout fades with the hover, says nothing the list does not say, and is never the only place a fact lives.
+**Callout.** Resting on a receptacle (300 ms, as a tooltip) or moving keyboard focus to it shows a small callout beside it with **the row's title and detail line, verbatim** — "Back, far left" over "Nothing plugged in · In the Thunderbolt Bridge" — and, when technical names are on, the row's technical line too. A USB-only receptacle's callout is its own subtitle, **USB only — this one isn't Thunderbolt**. The callout fades with the hover, says nothing the list does not say, and is never the only place a fact lives. Neither the legend nor the callout exists on an unrecognized Mac (R31), which has no rings.
 
 ## 5. Screen-by-screen specification
 
@@ -371,7 +371,6 @@ The rings say what the words say; two small aids make sure nobody has to guess w
 - Restart owed: **RDMA is switched on and waiting for a restart. Restart whenever it suits you.**
 - USB tip: **There's a cable in a front port. Those carry USB, not Thunderbolt. Move it to one of the four ports on the back and I'll follow along.**
 - Two Macs tip: **Two Macs are connected. Leave just one cable in place while we work — two can send Ethernet traffic around in a loop.** Shown only when R1 would fire — two ports with a Mac on the end share a bridge — and never for cables on standalone ports.
-- Unrecognized model note: **I don't recognize this Mac, so the picture is a stand-in and the ports are numbered the way macOS reports them. Everything else works normally.**
 
 **Copy — port list section and rows**
 - Section headers: **Thunderbolt ports** · **Back** · **Front** · **Left side** · **Right side**
@@ -394,9 +393,14 @@ The rings say what the words say; two small aids make sure nobody has to guess w
 - Body: **This Mac has Thunderbolt 4 ports. RDMA over Thunderbolt needs Thunderbolt 5, so there's nothing for RDMALink to set up. You're welcome to look around — everything you see is real.**
 - The footer's primary button is **absent**, not disabled. `Identify a Port…` remains available in the Port menu, because it changes nothing and the app is still a useful map.
 
-**States.** First run with RDMA on · First run with RDMA off · Restart pending · One or more ready · An adoptable port present · A drifted port present · A port needing a hand · Cable in a USB-only port · Two Macs connected (the tip row appears and `Set Up a Port…` is **disabled** with the reason printed above the footer separator) · Thunderbolt 4 read-only · Unrecognized model · Live update arrives.
+**Copy — Unrecognized Mac (R31)**
+- Headline: **I don't recognize this Mac**
+- Body: **RDMALink only draws, and only changes, Macs it knows — and this isn't one of them. So there's no picture, and nothing here will be changed. The ports below are listed the way macOS reports them, and everything you see is real.**
+- The footer has no buttons at all, and neither does any row: nothing that writes — set-up, Restore, Adopt, Return to Bridge, Stop Managing — is offered, and `Identify a Port…` is absent from the Port menu because there is no model for it to point at. The stage shows R31's block (§6.2) in place of a model.
 
-**3D behavior.** Fully live. Every receptacle carries its tracks. Hovering a row lifts the matching receptacle's glow to 40 %; hovering a receptacle highlights the row; hovering a bridge-membership subtitle draws the ribbon. Clicking a receptacle selects its row; double-clicking a configurable one starts set-up for it.
+**States.** First run with RDMA on · First run with RDMA off · Restart pending · One or more ready · An adoptable port present · A drifted port present · A port needing a hand · Cable in a USB-only port · Two Macs connected (the tip row appears and `Set Up a Port…` is **disabled** with the reason printed above the footer separator) · Thunderbolt 4 read-only (R23) · Unrecognized Mac read-only (R31) · Live update arrives.
+
+**3D behavior.** Fully live. On an unrecognized Mac (R31) there is no model and the rows have nothing to light. Every receptacle carries its tracks. Hovering a row lifts the matching receptacle's glow to 40 %; hovering a receptacle highlights the row; hovering a bridge-membership subtitle draws the ribbon. Clicking a receptacle selects its row; double-clicking a configurable one starts set-up for it.
 
 The camera **holds** the resting three-quarter pose and never moves on its own here, with exactly one exception: if a port on a face you are not looking at changes state, the other face-selector segment takes a small accent dot and the working area offers a single inline line — **"Something changed on the back."** *[Show Me]* — which is the only camera move the app ever makes unasked, and it is asked.
 
@@ -482,11 +486,10 @@ The camera **holds** the resting three-quarter pose and never moves on its own h
 - Informational line, nothing attached: **Nothing is plugged in here yet. That's fine — the address appears when a Mac arrives.**
 - Multi-select note: **RDMALink will prepare both, one after the other, from the same password.**
 - Live-change line while selected: **Something changed on Back, middle left while you were choosing. It's still selected — have a look before you continue.**
-- Unrecognized-model promotion line: **The ports here are numbered the way macOS reports them. If you're not sure which is which, Identify will tell you.**
 - Buttons: **Identify a Port…** · **Continue** · **Back** · **Turn the Mac Around**
 - Selection counter: **2 ports selected**
 
-**States.** Nothing selected · Pre-selected with reason · One selected · Several selected (⌘-click / ⇧-click) · USB receptacle clicked (R3) · Already-ready port clicked (row reads **Already ready for RDMA** and offers `Restore…`) · Hand-configured port clicked (routes to Adopt, S9 — **never to set-up**) · Port with a foreign static-IPv4 service (R16) · Port in an unreadable bridge (R15) · Dock or display attached (allowed, informational) · Identify active (S4b) · Unrecognized model (Identify promoted above the list) · Live event mid-selection.
+**States.** Nothing selected · Pre-selected with reason · One selected · Several selected (⌘-click / ⇧-click) · USB receptacle clicked (R3) · Already-ready port clicked (row reads **Already ready for RDMA** and offers `Restore…`) · Hand-configured port clicked (routes to Adopt, S9 — **never to set-up**) · Port with a foreign static-IPv4 service (R16) · Port in an unreadable bridge (R15) · Dock or display attached (allowed, informational) · Identify active (S4b) · Live event mid-selection. (An unrecognized Mac never reaches this screen: R31 offers no set-up.)
 
 **3D behavior.** Hovering a Thunderbolt receptacle fades in a 1.5 pt accent ring at 45 % over 150 ms and highlights the row; the bridge ribbon appears for its bridge. Hovering a **USB-only** receptacle produces no ring ever; instead the receptacle dims 15 % and the cursor takes `.operationNotAllowed`. Clicking selects: the ring goes to full accent, 2 pt, with a soft bloom, and stays. Multi-select shows several full rings.
 
@@ -522,7 +525,7 @@ Choosing a port on a hidden face triggers the narrated camera arc. The face sele
 
 The instant an unplug lands, **every other shimmer stops dead** and the changed receptacle takes a steady `.secondary` ring — the silence around the answer is the feedback. On replug it blooms to full accent over 250 ms with a single 8 % scale pulse **on the ring only**, the camera arcs square on, and the list row selects itself. Under Reduce Motion the shimmer is a static dim ring and the bloom is a cross-fade.
 
-Identify is **read-only, needs no password, and is always available** — including on Thunderbolt 4 Macs and in the middle of an unrecognized-model session. It also defuses the identical-Macs trap directly: it answers about **this** Mac only, using **this** Mac's hardware events, so it cannot be confused by the twin on the shelf.
+Identify is **read-only, needs no password, and is always available** — including on Thunderbolt 4 Macs. It is not offered on an unrecognized Mac (R31): with no model there is nothing for it to point at, and the numbered rows already say what macOS says. It also defuses the identical-Macs trap directly: it answers about **this** Mac only, using **this** Mac's hardware events, so it cannot be confused by the twin on the shelf.
 
 ---
 
@@ -1046,6 +1049,16 @@ Documented once so they all read the same.
 
 ---
 
+**R31 — I don't recognize this Mac.** *Read-only mode, not an error. Fires when neither rule in §4.7 recognizes the Mac; never on a Mac the identifier catalogue lists.*
+- Headline: **I don't recognize this Mac**
+- Body: **RDMALink only draws, and only changes, Macs it knows — and this isn't one of them. So there's no picture, and nothing here will be changed. The ports below are listed the way macOS reports them, and everything you see is real.**
+- Stage: no model. In its place, centred, an unavailable-content block in the system's own style: symbol `desktopcomputer.trianglebadge.exclamationmark`, title **No picture for this Mac**, description **RDMALink doesn't recognize it, so it won't draw one.** No selector, legend, callout or view buttons.
+- Buttons: **none.** Set-up, Restore, Adopt, Return to Bridge and Stop Managing are all **absent**, not disabled — RDMALink writes nothing on a Mac it does not recognize, notes included. Identify is not offered.
+- Every operation refuses with this code as well, so the command-line tool's previews and `refusals` say the same thing; the app hiding the buttons is not the only guard.
+- **Recovery:** the port list (numbered, §4.7) and the change log still work. A newer RDMALink may know this Mac.
+
+---
+
 ## 7. Adopt, Undo, steady-state status
 
 ### 7.1 The baseline (undo note)
@@ -1213,7 +1226,7 @@ All copy is localizable with no concatenated sentences. Position names and locat
 13. **The change log lights the ports.** Scroll the log and hover an entry, and the receptacle it refers to lights up on the model. History becomes spatial — you can watch the last three weeks of your desk replay in order.
 14. **"Copied."** The button swaps to a checkmark and the word for two seconds, then quietly goes back. No toast, no banner, no sound.
 15. **"Everything is back."** Restore ends with the segmented ring settling to ordinary bridge grey, the ribbon reattached, the camera easing to the resting pose it opened with, and four words that mean the app kept its promise.
-16. **The generic box gets the same care.** On an unrecognized Mac, the plain rounded box still turns, still glows, still selects, and still gets "Let me turn it around". Treating the fallback with full seriousness is what stops it feeling like a failure state.
+16. **An unrecognized Mac gets a clear answer, not a guess.** When neither rule in §4.7 recognizes the Mac there is no stand-in and no set-up: the stage says so in place of a model, the port list stays live and numbered, and RDMALink changes nothing — read-only, exactly as R23 (§6.2 R31). A picture of a Mac the app does not know, or a change made on one, would be a guess presented as knowledge.
 
 ---
 
