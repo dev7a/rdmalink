@@ -769,6 +769,8 @@ You can watch each sentence mean something before you agree to it.
 
 **Layout.** Sheet, 560 pt wide, four short sections, one flat 2D illustration of two Macs and one cable (**not** the 3D model — the sheet is reading material, and mixing the live model in would imply the drawings are about this particular Mac). `Done`.
 
+**The illustration.** Two plain rounded slabs — no logo, no trade dress, no product likeness — each with four small Thunderbolt receptacles along its facing edge. On each Mac the three receptacles still in the bridge are tied together by a soft translucent ribbon labelled **Thunderbolt Bridge** in `.caption` secondary; the fourth stands apart, ringed in the accent. One accent cable, a smooth curve with a gentle sag, runs between the two ringed receptacles, with **fe80::** set in `.caption` monospaced secondary above its middle. Those are the only words on it. Hairline strokes and control-background fills; the accent is used for the ring, the cable and, optionally, one small dot that travels slowly along the cable — stilled under Reduce Motion, and the picture is complete without it. It says what the four sections say, in one glance: the bridge stays, one port leaves it, one cable, one address.
+
 **Copy.**
 - Headline: **What this all means**
 - **RDMA over Thunderbolt** — **RDMA lets two Macs move data between them without troubling either one's processor very much. Over a Thunderbolt 5 cable that's quick enough to feel like a local disk. Tools like RotorFS, exo and MLX clusters use it.**
