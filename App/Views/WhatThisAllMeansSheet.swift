@@ -27,8 +27,16 @@ struct WhatThisAllMeansSheet: View {
                 )
                 ExplainerSection(
                     title: "Why only one cable between two Macs?",
-                    detail: "Two cables between the same pair of bridged Macs can make the network hand the same traffic back and forth in a loop. One cable, no loop."
+                    detail: "The bridge works like a hub: whatever arrives on one Thunderbolt port is sent out of all the others. So a second Thunderbolt connection between the same two Macs — or a ring of Macs — with those ports still in the bridge gives traffic a way to go round and round for ever, eating processor time and dragging the network down. Apple says so in its technote on RDMA over Thunderbolt. One cable, no loop."
                 )
+                // §S13: the one link on the sheet — the claim above is Apple's
+                // (TN3205), so the sheet points at it rather than asking to
+                // be believed.
+                Link(
+                    "Apple's technote on RDMA over Thunderbolt",
+                    destination: URL(string: "https://developer.apple.com/documentation/technotes/tn3205-low-latency-communication-with-rdma-over-thunderbolt")!
+                )
+                .font(.caption)
                 ExplainerSection(
                     title: "That fe80:: address",
                     detail: "It's a link-local IPv6 address. It only means anything down that one cable, which is exactly what we want — the port is now its own small private network. That's also why IPv4 can be off entirely."
