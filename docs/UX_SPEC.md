@@ -173,6 +173,8 @@ No display face, no letterspacing, no all-caps, no custom fonts. All text uses s
 
 No custom glyphs. **No Thunderbolt trade-dress mark anywhere**, in the UI or on the model.
 
+**The app icon.** One drawing, in the stage's own language: on a full-bleed graphite gradient (the stage's dark background, a little lighter at the top), a single Thunderbolt receptacle slot centred at about a third of the icon's width, drawn as the model draws it — a rounded slot with a darker interior — wearing the solid accent ring of a port that is ready, with one light thread leaving it toward the lower right and fading before the edge. Nothing else: no bolt, no Thunderbolt mark, no text, no Mac silhouette. The artwork is a plain square; the system applies the icon's shape and finish, so nothing is pre-rounded. It has to read at 16 pt as a ring around a slot, which is why the slot is large and alone.
+
 ### 3.4 3D materials and lighting
 
 - **One generic rounded-box chassis per archetype.** Correct proportions and correct receptacle placement. No logo, no engraved text, no trade dress of any kind, and no vent pattern beyond a soft inset — except the Mac Studio's perforated back grille, drawn as a hole field in the recess tone above the port row, which carries no logo and no trade dress.
