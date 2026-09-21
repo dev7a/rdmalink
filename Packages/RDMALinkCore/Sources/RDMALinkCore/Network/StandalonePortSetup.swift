@@ -161,7 +161,7 @@ public struct StandalonePortSetup: Sendable {
     ///
     /// R1, R2 and R5 are marked "blocks preflight and any apply" / "hard
     /// refusal at preflight and at review" (UX_SPEC §6.2), so they belong here
-    /// and not only in the preflight screen — a cable that arrives while the
+    /// and not only in S5's Checked group — a cable that arrives while the
     /// review is on screen has to be caught by the last gate. R31 is about
     /// the Mac itself and goes ahead of all of them.
     public func blockingRefusal(

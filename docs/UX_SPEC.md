@@ -447,7 +447,7 @@ The camera **holds** the resting three-quarter pose and never moves on its own h
 
 **Copy.**
 - Group label, all satisfied (the collapsed disclosure's one line): **Checked: one cable, nothing mounted, another way in, room for the undo note.**
-- Group label, something unsatisfied: **Checked — one thing to sort out first** / **Checked — two things to sort out first**
+- Group label, something unsatisfied: **Checked — one thing to sort out first** / **Checked — two things to sort out first** / **Checked — three things to sort out first** / **Checked — four things to sort out first**
 
 | # | Title | Satisfied | Unsatisfied | Button |
 |---|---|---|---|---|

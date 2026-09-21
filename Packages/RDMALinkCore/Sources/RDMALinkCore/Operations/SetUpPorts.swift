@@ -94,7 +94,7 @@ public struct SetUpPortPlan: Sendable, Equatable {
 public struct SetUpPortsPlan: Sendable, Equatable {
     public static let headline = "Here's what will change"
     public static let body =
-        "Nothing has happened yet. Read this, then RDMALink will ask for a password once and make every change in one go."
+        "Nothing has happened yet. When you're ready, macOS will ask for an administrator's name and password once — it doesn't have to be yours, and RDMALink never sees or stores it — and every change is made in one go."
     public static let footnote =
         "Your Wi-Fi, your Ethernet, and every other network service are untouched."
     public static let whatIWontTouchLabel = "What I Won't Touch"
@@ -123,7 +123,14 @@ public struct SetUpPortsPlan: Sendable, Equatable {
     /// is nothing to press — §6.1 rule 6.
     public var defaultButtonTitle: String? {
         guard canProceed else { return nil }
-        return ports.count == 1 ? "Set Up Port" : "Set Up \(ports.count) Ports"
+        return buttonTitle
+    }
+
+    /// The button's name whatever is in the way. S5 keeps the button and
+    /// *disables* it while one of §S3's checks (R1, R2, R4) says no, because
+    /// those clear by themselves; a refusal removes it (UX_SPEC §S5).
+    public var buttonTitle: String {
+        ports.count == 1 ? "Set Up Port" : "Set Up \(ports.count) Ports"
     }
 }
 

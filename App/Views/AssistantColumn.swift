@@ -16,8 +16,8 @@ struct AssistantColumn: View {
     /// §S1's footer and §S11's change log, which takes the working area's
     /// place rather than opening a sheet.
     let actions: HubActionsModel
-    /// S3–S7. While it is up it owns bands 2 and 4; bands 1 and 3 do not move,
-    /// which is what makes five screens feel like one place (§2.5).
+    /// S4–S7. While it is up it owns bands 2 and 4; bands 1 and 3 do not move,
+    /// which is what makes four screens feel like one place (§2.5).
     let flow: SetUpFlow?
     let showsTechnicalNames: Bool
     /// The USB-only receptacle that raised R3, from either side of the
@@ -26,7 +26,8 @@ struct AssistantColumn: View {
     var onUSBClick: (String) -> Void
     var dismissUSBTip: () -> Void
     var turnAndBreathe: () -> Void
-    /// `Check Again` and ⌘R, which re-run S3's own reads as well as the probe.
+    /// `Check Again` and ⌘R, which re-run the checks' own reads as well as
+    /// the probe.
     var recheck: () -> Void = {}
     /// §S5's hover-to-preview, which only the window can wire: the stage is
     /// its own.
@@ -36,8 +37,7 @@ struct AssistantColumn: View {
     var showOtherMac: (() -> Void)?
 
     /// §2.3 band 3: **full** on the hub, Choose a port and Identify; compact
-    /// on the RDMA screen, preflight, review, apply, done, other Mac and the
-    /// change log.
+    /// on the RDMA screen, review, apply, done, other Mac and the change log.
     private var density: PortListDensity {
         if actions.showsChangeLog || router.showsOtherMac { return .compact }
         guard let flow else { return .full }
@@ -46,9 +46,10 @@ struct AssistantColumn: View {
     }
 
     /// §S5: "Port list compact, with the target port(s) marked **About to
-    /// change**."
+    /// change**." S6 keeps the badge: the change is under way, and the row
+    /// reads **Ready** once S7 has the re-read to say so.
     private var aboutToChange: Set<String> {
-        guard let flow, flow.step == .review else { return [] }
+        guard let flow, flow.step == .review || flow.step == .apply else { return [] }
         return flow.selection
     }
 
@@ -68,8 +69,8 @@ struct AssistantColumn: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Absent on the hub by design (§2.3 band 1); the wizard steps in
-            // ML2 pass a title and a `Step n of 5` caption.
+            // Absent on the hub by design (§2.3 band 1); the assistant draws
+            // its `Step n of m` caption above its own working area.
             AssistantHeaderRow(title: nil, stepCaption: nil)
             // §S8 and §S11 each take the working area's place — "The port
             // list stays in place beside it." — and neither interrupts the

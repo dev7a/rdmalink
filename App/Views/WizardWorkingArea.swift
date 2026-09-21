@@ -25,8 +25,9 @@ struct WizardWorkingArea: View {
     /// §6.2 R3's recovery, which only the window can run: it owns the port
     /// list the eligible receptacles come from.
     var turnAndBreathe: () -> Void = {}
-    /// `Check Again` and ⌘R: re-run the full probe **and** S3's own reads, so
-    /// a check that is not about a cable can clear (§S3, §6.2 R4, R5, R14).
+    /// `Check Again` and ⌘R: re-run the full probe **and** the checks' own
+    /// reads, so a check that is not about a cable can clear (§S3, §6.2 R4,
+    /// R5, R14).
     var recheck: () -> Void = {}
     /// S7's `What to Do on the Other Mac`, which closes the assistant and
     /// opens §S8's screen in its place — the window's to do, since it owns
@@ -39,17 +40,21 @@ struct WizardWorkingArea: View {
         VStack(alignment: .leading, spacing: 14) {
             // §2.3 band 1: a label, never a progress bar. The step's own
             // headline lives in the screen below it, so nothing is said twice.
-            Text(flow.step.caption)
+            Text(flow.stepCaption)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             screen
                 .id(flow.step)
                 .transition(push)
+                // §S5: "OS password dialog up (the working area dims 20 % and
+                // says nothing over it)".
+                .opacity(flow.isAuthorizing ? 0.8 : 1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.smooth(duration: 0.25), value: flow.step)
         .animation(.smooth(duration: 0.2), value: flow.identify == nil)
+        .animation(.smooth(duration: 0.18), value: flow.isAuthorizing)
         .onChange(of: flow.attentionPortIDs, initial: true) { _, ids in
             stage.attention(ids: ids)
             // §S3: "the camera turns to the face it is on if it isn't already
@@ -63,9 +68,19 @@ struct WizardWorkingArea: View {
             // one time a thread connects two ports of the same machine.
             stage.loopedBack(ids)
         }
+        // §S4 "After this screen the choice is frozen": from S5 on, the stage
+        // holds the chosen receptacles and takes no click, on the model or in
+        // the list, until the user is choosing again. The whole selection
+        // goes across: the list dims by it, and the stage lights the first.
+        .onChange(of: flow.frozenSelection, initial: true) { _, frozen in
+            if let frozen {
+                stage.freezeSelection(on: frozen)
+            } else {
+                stage.thawSelection()
+            }
+        }
         .onChange(of: flow.selection) { _, selection in
-            // One receptacle can be lit at a time on the model today, so the
-            // first of a multi-selection is the one it shows.
+            guard !flow.isSelectionFrozen else { return }
             stage.select(orderedFirst(of: selection))
         }
         .onChange(of: stage.selectedID) { _, id in
@@ -131,6 +146,7 @@ struct WizardWorkingArea: View {
             stage.stopIdentify()
             stage.clearAllProgress()
             stage.clearPreview()
+            stage.thawSelection()
             stage.ribbons = .automatic
         }
     }
@@ -138,8 +154,6 @@ struct WizardWorkingArea: View {
     @ViewBuilder
     private var screen: some View {
         switch flow.step {
-        case .preflight:
-            WizardPreflight(flow: flow, model: model, perform: perform)
         case .choose:
             WizardChoosePort(flow: flow, model: model, perform: perform)
         case .review:
@@ -191,7 +205,7 @@ struct WizardWorkingArea: View {
         case .showInFinder:
             guard let volume = flow.findings.mountedThunderboltVolumes?.first else { return }
             WizardFinder.showVolume(named: volume)
-        case .tryAgain: flow.apply?.returnToPassword()
+        case .tryAgain: flow.tryAgain()
         case .takeAnotherLook, .pickADifferentPort: flow.goBack()
         case .identifyAPort: flow.beginIdentify()
         case .identifyAgain: flow.identify?.restart()

@@ -3,12 +3,15 @@
 //
 //  S5 — Here's what will change (UX_SPEC §S5). The promise screen: everything
 //  the app is about to do, in plain words, with the technical truth one
-//  disclosure away, and the last chance to back out before any password.
+//  disclosure away, and the last chance to back out before any password —
+//  which its default button asks for straight away.
 //
-//  Every string is Core's `SetUpPortsPlan`, which holds §S5's table verbatim.
-//  A refusal **replaces** the sections and the footer's primary button is
-//  removed entirely rather than disabled (§6.1 rule 6) — which
-//  `SetUpFlow.primary` does by returning `nil`.
+//  Every string in the sections is Core's `SetUpPortsPlan`, which holds §S5's
+//  table verbatim. Above them: the pre-selection line when the pick was made
+//  for the user (§S4), and §S3's four checks as the Checked group. A refusal
+//  **replaces** the sections and the footer's primary button is removed
+//  entirely rather than disabled (§6.1 rule 6) — which `SetUpFlow.primary`
+//  does by returning `nil` — while a check that said no only disables it.
 //
 
 import SwiftUI
@@ -50,6 +53,13 @@ struct WizardReview: View {
             WizardHeadline(
                 headline: LocalizedStringResource(core: SetUpPortsPlan.headline),
                 message: LocalizedStringResource(core: SetUpPortsPlan.body))
+            if let line = flow.reviewPreSelectionLine {
+                Text(line)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            WizardChecksGroup(report: flow.checks, perform: perform)
             ForEach(plan.ports, id: \.port.bsdName) { port in
                 WizardReviewSection(plan: port) { change, isHovering in
                     preview(isHovering ? ReviewPreview(change) : nil, port.port.bsdName)

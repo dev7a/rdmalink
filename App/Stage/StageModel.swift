@@ -317,9 +317,23 @@ final class StageModel {
     /// §S8: the ghost second Mac, while "Now the other Mac" is up.
     private(set) var handoff: StageHandoff?
 
-    /// §6.2 R2: the cable that comes back into this Mac, while preflight is
-    /// naming it.
+    /// §6.2 R2: the cable that comes back into this Mac, while S5's checks
+    /// are naming it.
     private(set) var loopedPair: StageLoopedPair?
+
+    /// §S4 "After this screen the choice is frozen": on S5, S6 and S7 "no row
+    /// and no receptacle is a selection target: clicking one does nothing".
+    /// While set, ``select(_:)`` and ``hover(_:)`` refuse every caller — the
+    /// model, the list, the keyboard and the menu alike — and the chosen
+    /// receptacle alone stays lit. The assistant sets it from its step, so
+    /// there is one gate rather than one per surface.
+    private(set) var isSelectionFrozen = false
+    /// The receptacles the freeze holds: every one the user chose, because
+    /// §S4's multi-selection is two chosen ports, not one chosen and one
+    /// "other". The model lights one of them; the list dims by this set, so
+    /// the second chosen row is never drawn as context under its own
+    /// **About to change** badge (§S5).
+    private(set) var frozenSelection: Set<StagePort.ID> = []
 
     private var requestToken = 0
     private var narrationClear: Task<Void, Never>?
@@ -362,6 +376,35 @@ final class StageModel {
     /// With no chassis there is nothing a selection could light, so on an
     /// unrecognized Mac the rows take no selection either (§S1, R31).
     func select(_ id: StagePort.ID?) {
+        guard !isSelectionFrozen else { return }
+        light(id)
+    }
+
+    func hover(_ id: StagePort.ID?) {
+        guard !isSelectionFrozen else { return }
+        guard hoveredID != id else { return }
+        for index in ports.indices { ports[index].hovered = ports[index].id == id }
+    }
+
+    /// Holds the chosen receptacles and closes the selection to every click
+    /// until ``thawSelection()``. The hover glow goes with it: a row that
+    /// cannot be picked does not light up under the pointer either (§S4).
+    /// One receptacle can be lit at a time, so the first in physical order
+    /// — the order S5's sections and S6's writes run in — is the one shown.
+    func freezeSelection(on ids: Set<StagePort.ID>) {
+        for index in ports.indices { ports[index].hovered = false }
+        frozenSelection = ids
+        light(ports.first { ids.contains($0.id) }?.id)
+        isSelectionFrozen = true
+    }
+
+    /// The user is choosing again (S4), or the assistant is gone.
+    func thawSelection() {
+        isSelectionFrozen = false
+        frozenSelection = []
+    }
+
+    private func light(_ id: StagePort.ID?) {
         guard chassis != nil else { return }
         guard id == nil || ports.first(where: { $0.id == id })?.isThunderbolt == true else {
             return
@@ -375,11 +418,6 @@ final class StageModel {
         }
         guard selectedID != id else { return }
         for index in ports.indices { ports[index].selected = ports[index].id == id }
-    }
-
-    func hover(_ id: StagePort.ID?) {
-        guard hoveredID != id else { return }
-        for index in ports.indices { ports[index].hovered = ports[index].id == id }
     }
 
     // MARK: - §S3's attention rings

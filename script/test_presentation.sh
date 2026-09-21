@@ -2,9 +2,13 @@
 # Exercises the hub's pure presentation on its own: UX_SPEC §S1's ready row,
 # the port rows, and what an undo note makes of a port (App/Model/PortSnapshot,
 # App/Presentation/PortPresentation, App/Presentation/ThisMacPresentation) —
-# §S3's first row, where R2 has to win over R1 (App/Flows/PreflightReport,
-# with the two files its button row and refusal card reach into), and §S8's
-# subject (App/Presentation/OtherMacPresentation) — and the Restore sheet's
+# §S3's first row, where R2 has to win over R1, and the Checked group's label
+# (App/Flows/PreflightReport, with the two files its button row and refusal
+# card reach into) — the set-up assistant's shape (App/Flows/SetUpFlow with
+# the flow files under it): §2.3's step label counting this run's screens,
+# §S4's choice made first and once, the frozen selection on S5, and §6.2 R7
+# coming back to S5 — and §S8's subject (App/Presentation/OtherMacPresentation)
+# — and the Restore sheet's
 # button rows (App/Presentation/RestorePresentation), the only place §6.2's
 # rows for R19, R20, R21, R28 and R30 are written down — and §4.8's two aids:
 # the legend's rows from the stage's own ring decision (App/Stage/StageLegend,
@@ -17,7 +21,7 @@
 # The app target has no test bundle, and these files import nothing but
 # Foundation, Observation, AppKit and RDMALinkCore, so — like script/test_stage_math.sh —
 # they are compiled against the Core module `swift build` left behind and run
-# as a plain executable. Every sentence asserted here is §S1's or §S3's own.
+# as a plain executable. Every sentence asserted here is the spec's own.
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CORE_BIN="$(cd "$ROOT_DIR/Packages/RDMALinkCore" && swift build --show-bin-path)"
@@ -208,8 +212,8 @@ check(looped.rows[0].state == .unsatisfied, "R2 row is unsatisfied")
 check(looped.rows[0].finding.map(text)
       == "Both ends of one cable are in this Mac, on Back, far left and Back, far right. Unplug one end and put it in the other Mac.",
       "R2 row finding is §S3's")
-check(looped.continueReason.map(text) == "Unplug one end of that cable to continue.", "R2 disabled-Continue reason")
-check(!looped.canContinue, "R2 blocks Continue")
+check(looped.disabledReason.map(text) == "Unplug one end of that cable to continue.", "R2 disabled-button reason")
+check(!looped.canProceed, "R2 disables S5's default button")
 check(looped.attentionPortIDs == ["en5", "en6"], "R2 rings both ends of the cable")
 
 // The same cable with both ends reading as linked Macs in one bridge — every
@@ -219,7 +223,7 @@ findings.portsInALoop = [farLeft, farRight]
 let both = PreflightReport(findings)
 check(both.rows[0].finding.map(text)?.hasPrefix("Both ends of one cable are in this Mac") == true,
       "R2 wins over R1")
-check(both.continueReason.map(text) == "Unplug one end of that cable to continue.", "R2 reason wins over R1's")
+check(both.disabledReason.map(text) == "Unplug one end of that cable to continue.", "R2 reason wins over R1's")
 
 // Without the loop, the same two linked, bridged ports are R1.
 findings.portsLoopedBack = []
@@ -227,7 +231,7 @@ let r1 = PreflightReport(findings)
 check(r1.rows[0].finding.map(text)
       == "Two Macs are connected, on Back, far left and Back, far right. Unplug one and I'll pick this back up.",
       "R1 row finding is §S3's")
-check(r1.continueReason.map(text) == "Unplug one of the two cables to continue.", "R1 disabled-Continue reason")
+check(r1.disabledReason.map(text) == "Unplug one of the two cables to continue.", "R1 disabled-button reason")
 check(r1.attentionPortIDs == ["en5", "en6"], "R1 rings the ports in the loop")
 
 // The hub's snapshots carry Core's pairing through to the findings.
@@ -401,6 +405,216 @@ stage.select("en3")
 check(stage.selectedID == "en3", "and its rows select again")
 check(stage.relevantFaces == [.back], "and the selector shows the faces that carry ports")
 
+// MARK: §S3 — the Checked group's label follows how many rows said no.
+
+var satisfied = PreflightFindings()
+satisfied.mountedThunderboltVolumes = []
+satisfied.route = .wiFi
+satisfied.notesWritability = .writable
+let allGood = PreflightReport(satisfied)
+check(allGood.groupLabel.map(text)
+      == "Checked: one cable, nothing mounted, another way in, room for the undo note.",
+      "all four satisfied: the collapsed disclosure's one line")
+check(!allGood.isExpanded && allGood.unsatisfiedCount == 0 && allGood.canProceed && allGood.disabledReason == nil,
+      "all four satisfied: collapsed, and the default button is live")
+var oneThing = satisfied
+oneThing.portsWithAMac = [farLeft, farRight]
+oneThing.portsInALoop = [farLeft, farRight]
+let oneReport = PreflightReport(oneThing)
+check(oneReport.groupLabel.map(text) == "Checked — one thing to sort out first", "one unsatisfied: §S3's label")
+check(oneReport.isExpanded && oneReport.unsatisfiedCount == 1 && !oneReport.canProceed,
+      "one unsatisfied: expanded, default button disabled")
+var twoThings = oneThing
+twoThings.mountedThunderboltVolumes = ["Vault"]
+let twoReport = PreflightReport(twoThings)
+check(twoReport.groupLabel.map(text) == "Checked — two things to sort out first", "two unsatisfied: §S3's label")
+check(twoReport.unsatisfiedCount == 2 && twoReport.disabledReason.map(text) == "Unplug one of the two cables to continue.",
+      "two unsatisfied: the first row's reason is the one printed")
+let checking = PreflightReport(PreflightFindings())
+check(checking.isChecking && checking.isExpanded && checking.groupLabel == nil && !checking.canProceed,
+      "not observed yet: expanded, no label, and no claim")
+
+// MARK: §2.3 band 1 — the label counts the screens of the current run.
+
+check(text(WizardStep.choose.caption(openedOn: .choose)) == "Step 1 of 3", "picker run: choose is 1 of 3")
+check(text(WizardStep.review.caption(openedOn: .choose)) == "Step 2 of 3", "picker run: review is 2 of 3")
+check(text(WizardStep.apply.caption(openedOn: .choose)) == "Step 2 of 3", "picker run: setting up keeps review's label")
+check(text(WizardStep.ready.caption(openedOn: .choose)) == "Step 3 of 3", "picker run: ready is 3 of 3")
+check(text(WizardStep.review.caption(openedOn: .review)) == "Step 1 of 2", "chosen run: review is 1 of 2")
+check(text(WizardStep.apply.caption(openedOn: .review)) == "Step 1 of 2", "chosen run: setting up keeps review's label")
+check(text(WizardStep.ready.caption(openedOn: .review)) == "Step 2 of 2", "chosen run: ready is 2 of 2")
+
+// MARK: §S4 — the choice is made at the beginning, and only once.
+
+let farLeftPort = snapshot(port("en5", "Back, far left", bridges: [bridge0]),
+                           configuration: .unconfigured(bridges: ["bridge0"]))
+let leftMiddle = snapshot(port("en6", "Back, left middle", link: .macLinked, bridges: [bridge0]),
+                          configuration: .unconfigured(bridges: ["bridge0"]))
+let rightMiddle = snapshot(port("en7", "Back, right middle", link: .macLinked, bridges: [bridge0]),
+                           configuration: .unconfigured(bridges: ["bridge0"]))
+// A plan the way S5 gets one: Core's own preview over a world with nothing in
+// the way. Read once here; the flow's planner hands it back.
+let quietWorld = ObservedWorld(
+    snapshot: InterfaceSnapshot(interfaces: []), services: [],
+    context: PreflightContext(hardware: studio, observedPorts: [],
+                              thunderboltBSDNames: ["en5", "en6", "en7"], primaryInterfaces: ["en0"]),
+    rdma: .off)
+let plannedFarLeft = SetUpPorts(ports: [OperationPort(farLeftPort.port)]).preview(world: quietWorld)
+check(plannedFarLeft.canProceed && plannedFarLeft.buttonTitle == "Set Up Port", "the test plan can proceed")
+
+@MainActor func settle(_ condition: @MainActor () -> Bool) async {
+    for _ in 0..<300 {
+        if condition() { return }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+}
+
+/// A flow whose planner answers with the plan above and whose runner — the
+/// only thing that would ask for a password — answers as macOS does when the
+/// dialog is dismissed. Nothing here can write.
+@MainActor func makeFlow(ports: [PortSnapshot], findings: PreflightFindings = satisfied) -> SetUpFlow {
+    let flow = SetUpFlow(
+        planner: { _ in plannedFarLeft },
+        runner: { _ in
+            AsyncThrowingStream { continuation in
+                continuation.finish(throwing: NetworkConfigurationError.authorizationCancelled(-60006))
+            }
+        },
+        finish: {})
+    flow.update(ports: ports, hardware: studio, switchState: .unobserved, findings: findings)
+    return flow
+}
+
+// A port chosen on the hub: the run opens on S5 and has two steps.
+let fromHub = makeFlow(ports: [farLeftPort, leftMiddle])
+fromHub.open(choosing: "en5")
+check(fromHub.step == .review && fromHub.openedOn == .review, "hub choice: opens on review")
+check(text(fromHub.stepCaption) == "Step 1 of 2", "hub choice: Step 1 of 2")
+check(fromHub.selection == ["en5"] && !fromHub.pickedForTheUser && fromHub.reviewPreSelectionLine == nil,
+      "hub choice: the port is the one chosen, and nobody picked for the user")
+check(fromHub.isSelectionFrozen && fromHub.frozenSelection == ["en5"], "hub choice: the choice is frozen on S5")
+
+// Nothing chosen and exactly one port with a Mac on the end: picked for the
+// user, opens on S5, says so, and Back is the picker — which the run then counts.
+let picked = makeFlow(ports: [farLeftPort, leftMiddle])
+picked.open(choosing: nil)
+check(picked.step == .review && picked.selection == ["en6"] && picked.pickedForTheUser, "pre-selection: opens on review")
+check(picked.reviewPreSelectionLine.map(text)
+      == "I've picked Back, left middle for you, because that's the port with another Mac on the end of it. Choose a different one if you'd rather.",
+      "pre-selection: §S4's line is stated on S5")
+check(text(picked.stepCaption) == "Step 1 of 2", "pre-selection: Step 1 of 2")
+picked.goBack()
+check(picked.step == .choose && picked.openedOn == .choose && picked.selection == ["en6"] && !picked.pickedForTheUser,
+      "Back from S5 is the picker, with the selection intact and now the user's")
+check(text(picked.stepCaption) == "Step 1 of 3", "back on the picker: Step 1 of 3")
+picked.goForward()
+check(picked.step == .review && text(picked.stepCaption) == "Step 2 of 3" && picked.reviewPreSelectionLine == nil,
+      "continuing from the picker: Step 2 of 3, and no pre-selection line")
+
+// §S5's line is the reason for the pick that was made. A second Mac arriving
+// while S5 is up is the Checked group's news (R1), not a new sentence on a
+// screen where nothing can be chosen.
+let pickedThenAnother = makeFlow(ports: [farLeftPort, leftMiddle])
+pickedThenAnother.open(choosing: nil)
+let reasonAtOpen = pickedThenAnother.reviewPreSelectionLine.map(text)
+pickedThenAnother.update(ports: [farLeftPort, leftMiddle, rightMiddle], hardware: studio,
+                         switchState: .unobserved, findings: oneThing)
+check(pickedThenAnother.step == .review && pickedThenAnother.selection == ["en6"]
+      && pickedThenAnother.reviewPreSelectionLine.map(text) == reasonAtOpen
+      && pickedThenAnother.choose.preSelectionLine.map(text) != reasonAtOpen,
+      "a second Mac arrives on S5: the pre-selection line stays the reason for the pick")
+check(pickedThenAnother.checks.unsatisfiedCount == 1 && pickedThenAnother.checks.isExpanded,
+      "…and the Checked group carries R1")
+
+// Nothing chosen and no candidate, or two: the run opens on the picker.
+let noCandidate = makeFlow(ports: [farLeftPort])
+noCandidate.open(choosing: nil)
+check(noCandidate.step == .choose && noCandidate.selection.isEmpty && text(noCandidate.stepCaption) == "Step 1 of 3",
+      "no Mac on any port: opens on choose")
+let twoCandidates = makeFlow(ports: [farLeftPort, leftMiddle, rightMiddle])
+twoCandidates.open(choosing: nil)
+check(twoCandidates.step == .choose && twoCandidates.selection.isEmpty && !twoCandidates.pickedForTheUser,
+      "two Macs on the end: opens on choose, nothing picked")
+check(twoCandidates.choose.preSelectionLine.map(text)
+      == "Two ports have a Mac on the end. I haven't picked for you — choose the one with the cable you mean.",
+      "two candidates: the picker says why it didn't pick")
+check(twoCandidates.primary?.isEnabled == false, "nothing chosen: Continue is disabled")
+
+// A port in hand that S4 would route elsewhere gets S4 and the same answer.
+let routed = makeFlow(ports: [farLeftPort, managed])
+routed.open(choosing: "en6")
+check(routed.step == .choose && routed.selection.isEmpty && routed.routingLine.map(text)
+      == "This one's already a link. Want to see how it's doing?", "an already-ready port in hand: the picker, and R27's line")
+
+// MARK: §S4 — after the picker the choice is frozen, on the flow and on the stage.
+
+fromHub.select("en6")
+fromHub.extendSelection("en6")
+check(fromHub.selection == ["en5"], "a click on S5 leaves the flow's selection alone")
+let frozenStage = StageModel()
+if let chassis = ReceptacleCatalogue.chassis(for: .studioSix) { frozenStage.picture = .chassis(chassis) }
+frozenStage.ports = [farLeftPort, leftMiddle].enumerated().map {
+    StagePort(port: $1.port, physicalIndex: $0 + 1, configuration: cfg($1))
+}
+frozenStage.freezeSelection(on: ["en5"])
+check(frozenStage.isSelectionFrozen && frozenStage.selectedID == "en5", "the stage holds the chosen receptacle")
+check(frozenStage.frozenSelection == ["en5"], "the list dims by the frozen set: one chosen, one other")
+frozenStage.select("en6")
+check(frozenStage.selectedID == "en5", "a click on S5 leaves the stage's selection alone")
+frozenStage.hover("en6")
+check(frozenStage.hoveredID == nil, "no hover glow while the choice is frozen")
+frozenStage.thawSelection()
+check(!frozenStage.isSelectionFrozen && frozenStage.frozenSelection.isEmpty, "thawed: nothing is held")
+frozenStage.select("en6")
+check(frozenStage.selectedID == "en6", "choosing again: the stage takes clicks once more")
+// Two ports chosen (§S4's ⌘-click): both are chosen, so neither is "the
+// others" — the list dims by the set while the model lights the first.
+frozenStage.freezeSelection(on: ["en5", "en6"])
+check(frozenStage.frozenSelection == ["en5", "en6"] && frozenStage.selectedID == "en5",
+      "a two-port run: both held, the first in physical order lit")
+frozenStage.thawSelection()
+
+// MARK: §S5 — a check that said no disables the button; a refusal removes it.
+
+await settle { fromHub.reviewPlan != nil }
+check(fromHub.reviewPlan != nil, "the plan landed")
+check(fromHub.primary.map { text($0.title) } == "Set Up Port" && fromHub.primary?.isEnabled == true,
+      "all four satisfied: Set Up Port, live")
+fromHub.update(ports: [farLeftPort, leftMiddle], hardware: studio, switchState: .unobserved, findings: oneThing)
+check(fromHub.primary.map { text($0.title) } == "Set Up Port" && fromHub.primary?.isEnabled == false,
+      "R1: the default button is disabled, not removed")
+check(fromHub.disabledReason.map(text) == "Unplug one of the two cables to continue.", "R1: the reason above the separator")
+check(fromHub.reviewRefusal == nil && fromHub.checks.isExpanded, "R1: no card; the Checked group expands")
+check(fromHub.attentionPortIDs == ["en5", "en6"], "R1: the two receptacles ring on S5")
+fromHub.update(ports: [farLeftPort, leftMiddle], hardware: studio, switchState: .unobserved, findings: satisfied)
+await settle { fromHub.primary?.isEnabled == true }
+check(fromHub.primary?.isEnabled == true && fromHub.disabledReason == nil, "the cable goes: the button is live again, no click")
+
+// MARK: §6.2 R7 — no permission given: back on S5 with the selection intact.
+
+fromHub.goForward()
+check(fromHub.apply != nil && fromHub.isAuthorizing && fromHub.step == .review,
+      "Set Up Port asks straight away, with S5 still the screen showing")
+check(fromHub.primary?.isEnabled == false && !fromHub.showsBack, "while the dialog is up nothing else can be pressed")
+await settle { fromHub.apply == nil }
+check(fromHub.refusal?.code == "R7" && fromHub.reviewRefusal?.code == "R7", "the dialog dismissed: R7")
+check(fromHub.step == .review && fromHub.selection == ["en5"] && fromHub.isSelectionFrozen,
+      "R7: still on S5, selection intact")
+check(fromHub.primary == nil && fromHub.showsBack, "R7: the card's Try Again is the default; Back stays")
+fromHub.tryAgain()
+check(fromHub.refusal == nil && fromHub.apply == nil && fromHub.step == .review && fromHub.selection == ["en5"],
+      "Try Again: back to S5 proper with the selection intact, nothing asked yet")
+check(fromHub.reviewPlan != nil && fromHub.primary.map { text($0.title) } == "Set Up Port"
+      && fromHub.primary?.isEnabled == true,
+      "…and the default button is live again")
+fromHub.goForward()
+check(fromHub.apply != nil && fromHub.isAuthorizing, "Set Up Port asks again")
+await settle { fromHub.apply == nil }
+check(fromHub.refusal?.code == "R7", "and macOS can say no again")
+fromHub.goBack()
+check(fromHub.step == .choose && fromHub.refusal == nil && fromHub.selection == ["en5"],
+      "Back from R7 is the picker, selection intact")
+
 if failures > 0 {
     FileHandle.standardError.write(Data("test_presentation: \(failures) failed\n".utf8))
     exit(1)
@@ -424,6 +638,13 @@ xcrun swiftc -swift-version 6 -warnings-as-errors \
   "$ROOT_DIR/App/Flows/PreflightReport.swift" \
   "$ROOT_DIR/App/Flows/WizardRefusal.swift" \
   "$ROOT_DIR/App/Flows/WizardActions.swift" \
+  "$ROOT_DIR/App/Flows/WizardStep.swift" \
+  "$ROOT_DIR/App/Flows/ChoosePortReport.swift" \
+  "$ROOT_DIR/App/Flows/ReadyReport.swift" \
+  "$ROOT_DIR/App/Flows/ReviewPreview.swift" \
+  "$ROOT_DIR/App/Flows/IdentifySession.swift" \
+  "$ROOT_DIR/App/Flows/ApplyRun.swift" \
+  "$ROOT_DIR/App/Flows/SetUpFlow.swift" \
   "$ROOT_DIR/App/Presentation/RestorePresentation.swift" \
   "$ROOT_DIR/App/Stage/StageMath.swift" \
   "$ROOT_DIR/App/Stage/StageModel.swift" \

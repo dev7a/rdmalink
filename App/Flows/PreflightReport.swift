@@ -1,12 +1,14 @@
 //
 //  PreflightReport.swift
 //
-//  S3 — Before we change anything (UX_SPEC §S3). Every hard rule the app can
-//  measure, so the user is never asked to promise something.
+//  S3 — The four checks (UX_SPEC §S3). Every hard rule the app can measure,
+//  so the user is never asked to promise something. They are not a screen:
+//  they are S5's **Checked** group, collapsed to one line when every check is
+//  satisfied and expanded to the four rows when one is not.
 //
-//  Nothing on this screen is a checkbox and nothing here can be waved through.
-//  There is not one attestation row in it: every row states a *finding*, and a
-//  finding the app has not observed yet reads as "checking" rather than as
+//  Nothing here is a checkbox and nothing here can be waved through. There is
+//  not one attestation row in it: every row states a *finding*, and a finding
+//  the app has not observed yet reads as "checking" rather than as
 //  "satisfied", because the app never claims something it hasn't verified
 //  (§1.3 rules 4 and 10).
 //
@@ -47,10 +49,11 @@ enum PreflightRoute: Sendable, Equatable {
 /// Everything S3's four rows are derived from.
 ///
 /// `nil` means *not observed yet*, which is a third state and not a quiet
-/// "fine". It draws `circle.dotted` and it greys `Continue` without printing a
-/// reason, exactly as a re-check does.
+/// "fine". It draws `circle.dotted` and it greys S5's default button without
+/// printing a reason, exactly as a re-check does.
 struct PreflightFindings: Sendable, Equatable {
-    /// True while `Check Again` is running: `Continue` greys for the duration.
+    /// True while `Check Again` is running: the default button greys for the
+    /// duration.
     var isRechecking = false
     /// Receptacles with a Mac on the end, in physical order.
     var portsWithAMac: [PreflightPort] = []
@@ -103,8 +106,8 @@ struct PreflightFindings: Sendable, Equatable {
         } ?? []
     }
 
-    /// Everything S3 asks, from the one read Core already does for the
-    /// operations. Call it off the main actor and hand the result back.
+    /// Everything the four checks ask, from the one read Core already does
+    /// for the operations. Call it off the main actor and hand the result back.
     ///
     /// R13 is not in `ObservedWorld` — nothing in this repository reads the
     /// configuration profiles yet — so it stays unobserved and its row keeps
@@ -195,40 +198,59 @@ struct PreflightRow: Sendable, Equatable, Identifiable {
     var id: String { check.rawValue }
 }
 
-/// S3, ready to draw.
+/// S5's Checked group, ready to draw.
 struct PreflightReport: Sendable, Equatable {
     var rows: [PreflightRow]
-    /// R13 replaces the whole list. Nothing else does.
+    /// R13 replaces the whole of S5's working area. Nothing else here does.
     var replacement: WizardRefusal?
     /// Printed in `.callout` `.orange` directly above the footer separator,
-    /// and only when `Continue` is disabled because a check said no.
-    var continueReason: LocalizedStringResource?
-    var canContinue: Bool
+    /// and only when the default button is disabled because a check said no.
+    var disabledReason: LocalizedStringResource?
+    /// Every check satisfied and none being re-run: the default button is
+    /// live. Disabled rather than removed, because these clear by themselves.
+    var canProceed: Bool
     /// The receptacles an unsatisfied check names, for the attention ring.
     var attentionPortIDs: Set<String>
     /// §6.2 R2's two receptacles, in the order the refusal names them, for
     /// the thread the stage draws between them. Empty for every other row 1.
     var loopedPortIDs: [String]
 
-    static let headline: LocalizedStringResource = "Before we change anything"
+    /// How many rows said no. §S3: the group is collapsed at zero and
+    /// expanded otherwise.
+    var unsatisfiedCount: Int { rows.count { $0.state == .unsatisfied } }
 
-    /// UX_SPEC §S3 writes "Five things worth knowing", over a list whose fifth
-    /// row is the always-satisfied, informational **This Mac only**. The user
-    /// struck that row: that RDMALink changes the Mac it runs on and nothing
-    /// else is implied by everything on screen, and the window subtitle already
-    /// names the machine — the same reason the `This Mac` toolbar badge went.
-    /// Four rows are left, so the count in the sentence follows them; printing
-    /// "Five" over four rows would be the one thing §1.3 rule 10 forbids.
-    /// **Owed from the spec owner:** this sentence and §S3's table.
-    static let body: LocalizedStringResource =
-        "Four things worth knowing. RDMALink checks them itself — nothing here is a promise you have to make."
+    /// A row that has not been observed yet. The group is expanded so the
+    /// dotted circles can be seen, and its label claims nothing (§1.3 rule 10).
+    var isChecking: Bool { rows.contains { $0.state == .checking } }
+
+    var isExpanded: Bool { unsatisfiedCount > 0 || isChecking }
+
+    /// §S3's group label: the collapsed disclosure's one line when all four
+    /// are satisfied, the count of what is left to sort out otherwise. `nil`
+    /// while a row is still checking, because there is nothing true to say.
+    ///
+    /// §S3 writes the count for one and for two and stops there. Four rows
+    /// can all be unsatisfied at once, so three and four follow the same
+    /// shape with the count spelled out the way the hub spells its counts.
+    /// **Owed from the spec owner:** the sentence past two.
+    var groupLabel: LocalizedStringResource? {
+        guard !isChecking else { return nil }
+        switch unsatisfiedCount {
+        case 0: return "Checked: one cable, nothing mounted, another way in, room for the undo note."
+        case 1: return "Checked — one thing to sort out first"
+        case 2: return "Checked — two things to sort out first"
+        case 3: return "Checked — three things to sort out first"
+        // There are four rows, so four is the most there can be.
+        default: return "Checked — four things to sort out first"
+        }
+    }
 
     init(_ findings: PreflightFindings) {
         if findings.isManagedByProfile == true {
             self.rows = []
             self.replacement = WizardRefusals.managedByProfile
-            self.continueReason = nil
-            self.canContinue = false
+            self.disabledReason = nil
+            self.canProceed = false
             self.attentionPortIDs = []
             self.loopedPortIDs = []
             return
@@ -241,8 +263,8 @@ struct PreflightReport: Sendable, Equatable {
         ]
         self.rows = rows
         self.replacement = nil
-        self.continueReason = findings.isRechecking ? nil : Self.reason(rows: rows, findings)
-        self.canContinue =
+        self.disabledReason = findings.isRechecking ? nil : Self.reason(rows: rows, findings)
+        self.canProceed =
             !findings.isRechecking && rows.allSatisfy { $0.state == .satisfied }
         // R2 rings the two ends of the cable; R1 rings the ports in the loop.
         // Each follows its refusal's subjects, so an end that is unplugged
@@ -387,11 +409,11 @@ struct PreflightReport: Sendable, Equatable {
         )
     }
 
-    // MARK: - The disabled-Continue reason
+    // MARK: - The reason the default button is disabled
 
     /// §S3's five reasons, in row order. Only an *unsatisfied* check prints
-    /// one: a check that is still running greys `Continue` and says nothing,
-    /// because there is nothing yet to tell the user to do.
+    /// one: a check that is still running greys the default button and says
+    /// nothing, because there is nothing yet to tell the user to do.
     private static func reason(
         rows: [PreflightRow], _ findings: PreflightFindings
     ) -> LocalizedStringResource? {

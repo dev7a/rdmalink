@@ -188,6 +188,7 @@ struct PortGroupSection: View {
 
     private func row(_ port: PortSnapshot) -> some View {
         let presentation = PortRowPresentation(snapshot: port)
+        let isSelected = stage.selectedID == port.id
         return PortRow(
             presentation: presentation,
             showsTechnicalNames: showsTechnicalNames,
@@ -196,12 +197,22 @@ struct PortGroupSection: View {
                 ? "About to change"
                 : presentation.compactBadge,
             isThunderbolt: port.port.isThunderbolt,
-            isSelected: stage.selectedID == port.id,
+            isSelected: isSelected,
             isHovered: stage.hoveredID == port.id,
-            // §4.5: a USB-only row is not selectable, and the click is not
-            // swallowed either — it produces the same R3 copy the stage's
-            // own click does.
+            // §S4 "After this screen the choice is frozen": "the chosen port
+            // alone carries the accent ring and its badge, and the others are
+            // dimmed — the list and the model are status there, not a picker."
+            // "The others" are the ports outside the frozen selection, not
+            // outside the one receptacle the model can light: the second of
+            // a two-port run is chosen too (§S5 "the target port(s)").
+            isDimmed: stage.isSelectionFrozen && !stage.frozenSelection.contains(port.id),
             select: {
+                // A frozen list takes no click at all: not a selection, not
+                // R3, nothing (§S4).
+                guard !stage.isSelectionFrozen else { return }
+                // §4.5: a USB-only row is not selectable, and the click is
+                // not swallowed either — it produces the same R3 copy the
+                // stage's own click does.
                 guard port.port.isThunderbolt else { return onUSBClick(port.id) }
                 // §S4's multi-select: ⌘-click and ⇧-click add to the
                 // selection rather than replacing it, on the screen that has

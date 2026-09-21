@@ -1,12 +1,13 @@
 //
 //  WizardApply.swift
 //
-//  S6 — Setting up (UX_SPEC §S6). Phase A is the password moment. Phase B is
-//  the burst, and it has **no buttons at all** — there is no control the app
-//  could honour once macOS has handed back a thirty-second permission.
+//  S6 — Setting up (UX_SPEC §S6). The burst, which begins the moment macOS
+//  hands back the permission S5's button asked for, and which has **no
+//  buttons at all** — there is no control the app could honour once that
+//  thirty-second permission is in hand.
 //
-//  `SetUpFlow.primary` returns `nil` for phase B, so the footer's trailing
-//  button is gone rather than greyed, and `showsBack` turns `Back` off with it.
+//  `SetUpFlow.primary` returns `nil` here, so the footer's trailing button is
+//  gone rather than greyed, and `showsBack` turns `Back` off with it.
 //
 
 import SwiftUI
@@ -26,8 +27,10 @@ struct WizardApply: View {
     @ViewBuilder
     private func content(_ run: ApplyRun) -> some View {
         switch run.phase {
-        case .password:
-            password
+        case .authorizing:
+            // Never drawn: the flow keeps S5 on screen, dimmed, until the
+            // permission lands (§S5), and only then moves here.
+            EmptyView()
         case .refused:
             VStack(alignment: .leading, spacing: 12) {
                 // §S10's rule, applied to set-up: the summary never rounds up.
@@ -57,26 +60,6 @@ struct WizardApply: View {
         case .running, .finished:
             checklist(run)
         }
-    }
-
-    private var password: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            WizardHeadline(
-                headline: ApplyRun.passwordHeadline, message: ApplyRun.passwordBody)
-            GroupedSection {
-                HStack(alignment: .top, spacing: 10) {
-                    PortRowSymbol(name: ApplyRun.passwordSymbol, style: .secondary)
-                    Text(ApplyRun.passwordRow)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func checklist(_ run: ApplyRun) -> some View {

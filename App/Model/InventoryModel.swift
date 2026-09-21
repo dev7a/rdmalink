@@ -219,7 +219,7 @@ private enum Probe {
 
     static func identity() -> Identity {
         if let fixture = SnapshotHook.fixture {
-            return Identity(hardware: fixture.inventory.model, sharingName: sharingName())
+            return Identity(hardware: fixture.model, sharingName: sharingName())
         }
         return Identity(hardware: Inventory.readModel(), sharingName: sharingName())
     }

@@ -254,8 +254,8 @@ enum WizardRefusals {
         )
     }
 
-    /// Replaces the whole preflight list. Identify, the model and the port list
-    /// all keep working, so the app is still a useful map.
+    /// Replaces the whole of S5's working area. Identify, the model and the
+    /// port list all keep working, so the app is still a useful map.
     static let managedByProfile = WizardRefusal(
         code: "R13",
         symbol: "building.2",

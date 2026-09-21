@@ -727,7 +727,7 @@ final class StageScene {
         for node in graph.receptacles {
             let port = moment.ports.first { $0.id == node.id }
             // Identify owns the thin ring while it is running (§S4b), so a
-            // preflight breath is never half way through underneath it.
+            // check's breath is never half way through underneath it.
             let ringing = port?.attention == true && moment.identify == .off
             if ringing {
                 if node.attentionStarted == nil { node.attentionStarted = elapsed }
@@ -970,7 +970,7 @@ final class StageScene {
 
     // MARK: - §6.2 R2's thread between two ports of the same machine
 
-    /// Built when preflight names a pair and taken down once it has faded:
+    /// Built when a check names a pair and taken down once it has faded:
     /// the pair is two ids, so a re-read that names the same two is one
     /// comparison a frame, and a different pair — or none — swaps the thread
     /// out under the same cross-fade the rings use.

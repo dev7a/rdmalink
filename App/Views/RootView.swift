@@ -19,9 +19,9 @@ struct RootView: View {
     /// §S1's rows, footer and Port menu all raise their actions through this
     /// one object, and §S9–§S11's surfaces are what it opens.
     @State private var actions = HubActionsModel()
-    /// S3–S7, while the set-up assistant is up. `nil` is the hub.
+    /// S4–S7, while the set-up assistant is up. `nil` is the hub.
     @State private var flow: SetUpFlow?
-    /// §S3 re-evaluates live, so the preflight read runs again whenever this
+    /// §S3's checks re-evaluate live, so their read runs again whenever this
     /// Mac changes while the assistant is up. It is a read and nothing else.
     @State private var findings = PreflightFindings()
     /// §4.5: clicking a USB-only receptacle produces R3 inline in the working
@@ -30,15 +30,15 @@ struct RootView: View {
     @State private var usbTip: USBTip?
     /// §9.2: the waking-ports beat runs once per launch and is never repeated.
     @State private var hasWoken = false
-    /// Bumped whenever S3 has to look again. §S3's rows 2, 3 and 4 are not
-    /// about cables at all — a volume ejected in Finder, Wi-Fi coming up, room
-    /// freed on the disk — so a read keyed on link state alone can never clear
-    /// them, and `Continue` would stay greyed for ever.
+    /// Bumped whenever the checks have to look again. §S3's rows 2, 3 and 4
+    /// are not about cables at all — a volume ejected in Finder, Wi-Fi coming
+    /// up, room freed on the disk — so a read keyed on link state alone can
+    /// never clear them, and S5's button would stay greyed for ever.
     @State private var preflightToken = 0
     /// True between `Check Again` and the read it asked for landing, which is
-    /// what greys `Continue` for the duration (§S3's re-checking state). The
-    /// quiet one-second read underneath (§7.4) never sets it: a button that
-    /// flickers once a second is worse than no state at all.
+    /// what greys S5's default button for the duration (§S3's re-checking
+    /// state). The quiet one-second read underneath (§7.4) never sets it: a
+    /// button that flickers once a second is worse than no state at all.
     @State private var isRechecking = false
     @AppStorage(AppSettings.showTechnicalNames) private var showsTechnicalNames = false
 
@@ -115,16 +115,17 @@ struct RootView: View {
             actions.pendingSetUp = nil
             startSetUp(portID: request.portID)
         }
-        // Every live read reaches the assistant, which re-derives all five
-        // screens from it — that is what makes a check flip in the same beat
+        // Every live read reaches the assistant, which re-derives every
+        // screen from it — that is what makes a check flip in the same beat
         // as the cable (§S3, §S4).
         .onChange(of: StageInput(hardware: model.hardware, ports: model.ports)) { _, _ in
             updateFlow()
         }
         .onChange(of: findings) { _, _ in updateFlow() }
         .task(id: preflightReadKey) { await readPreflight() }
-        // §7.4's "quiet one-second state diff", pointed at S3: the checks that
-        // are not about cables have nothing else that could ever re-run them.
+        // §7.4's "quiet one-second state diff", pointed at the checks: the
+        // ones that are not about cables have nothing else that could ever
+        // re-run them.
         .task(id: flow != nil) {
             guard flow != nil else { return }
             while !Task.isCancelled {
@@ -187,8 +188,26 @@ struct RootView: View {
                 // inline, never a disabled-button dead end.
                 raiseUSBTip(port.id)
             },
-            onExtendClick: extendSelection
+            onExtendClick: extendSelection,
+            onDoubleClick: doubleClickSetUp
         )
+    }
+
+    /// §S1: "double-clicking a configurable one starts set-up for it". Only
+    /// on the hub — inside a run the choice is the picker's — and only for a
+    /// port the picker would accept, so a ready or hand-configured port is
+    /// not sent to a set-up that would refuse it. The run then opens on
+    /// Review, the port already chosen (§S4).
+    private var doubleClickSetUp: ((StagePort) -> Void)? {
+        guard flow == nil else { return nil }
+        return { port in
+            guard port.isThunderbolt,
+                  actions.canPerform(.setUpAPort(portID: port.id)),
+                  let snapshot = actions.snapshot(id: port.id),
+                  ChoosePortReport.route(for: snapshot) == nil
+            else { return }
+            actions.perform(.setUpAPort(portID: port.id))
+        }
     }
 
     /// §S4's ⌘/⇧-click on the model, which only means anything on Choose a
@@ -242,15 +261,25 @@ struct RootView: View {
         switch route {
         case .hub:
             break
-        case .preflight, .choose, .review:
+        case .choose, .review, .reviewFromPicker:
             // §S4: "An unrecognized Mac never reaches this screen: R31 offers
             // no set-up." The hook stops at the hub, as a person would.
             guard !actions.isUnrecognized else { return }
-            startSetUp(portID: thunderbolt?.id)
             switch route {
-            case .choose: flow?.route(to: .choose)
-            case .review: flow?.route(to: .review)
-            default: break
+            case .choose:
+                // The picker, whatever a pre-selection would have done.
+                startSetUp(portID: nil)
+                flow?.route(to: .choose, openedOn: .choose)
+            case .review:
+                // As it opens from a port chosen on the hub: two steps.
+                startSetUp(portID: thunderbolt?.id)
+                flow?.route(to: .review, openedOn: .review)
+            case .reviewFromPicker:
+                // As it opens from the picker's `Continue`: three steps.
+                startSetUp(portID: nil)
+                flow?.route(to: .review, openedOn: .choose)
+            default:
+                break
             }
         case .restoreSheet:
             // A note if there is one; otherwise §7.5's form, which is the one
@@ -283,10 +312,10 @@ struct RootView: View {
         router.showsOtherMac = true
     }
 
-    // MARK: - The set-up assistant (S3–S7)
+    // MARK: - The set-up assistant (S4–S7)
 
-    /// Builds the flow and hands it the reading it already has, so S3 is drawn
-    /// with findings rather than with five spinners.
+    /// Builds the flow, hands it the reading it already has, and opens it on
+    /// the screen the choice calls for (§S4 "When this screen appears").
     private func startSetUp(portID: String?) {
         // Reached from the hub alone, where this Mac is known and — on an
         // unrecognized one — every way in is absent (§S4, R31).
@@ -302,7 +331,7 @@ struct RootView: View {
             })
         self.flow = flow
         updateFlow()
-        if let portID { flow.select(portID) }
+        flow.open(choosing: portID)
     }
 
     /// The whole assistant re-derives itself from this.
@@ -314,8 +343,9 @@ struct RootView: View {
             findings: findings)
     }
 
-    /// What S3 has to look at, and what has to be looked at again when it
-    /// changes. The read is skipped entirely while the assistant is down.
+    /// What the checks have to look at, and what has to be looked at again
+    /// when it changes. The read is skipped entirely while the assistant is
+    /// down.
     private var preflightReadKey: PreflightReadKey {
         PreflightReadKey(
             isAssistantUp: flow != nil,
@@ -323,8 +353,8 @@ struct RootView: View {
             token: preflightToken)
     }
 
-    /// `Check Again`, ⌘R, and S3's own button: re-run the full probe **and**
-    /// S3's reads, and say so on screen while it happens.
+    /// `Check Again`, ⌘R, and the Checked group's own button: re-run the full
+    /// probe **and** the checks' reads, and say so on screen while it happens.
     private func recheck() {
         if flow != nil {
             isRechecking = true
@@ -336,13 +366,14 @@ struct RootView: View {
 
     /// `ObservedWorld.read` off the main actor: IOKit, `ifconfig`, `/sbin/mount`
     /// and an unauthorized `SCPreferences`. It takes no credential and writes
-    /// nothing, which is why S3 can run it on every change.
+    /// nothing, which is why the checks can run it on every change.
     private func readPreflight() async {
         guard flow != nil else {
             isRechecking = false
             return
         }
-        let ports = model.ports.map { OperationPort($0.port) }
+        let snapshots = model.ports
+        let ports = snapshots.map { OperationPort($0.port) }
         guard !ports.isEmpty, let hardware = model.hardware else { return }
         // R14 is measured against the folder the notes really go to.
         let notesDirectory = NotesLocation.store.directory
@@ -352,7 +383,18 @@ struct RootView: View {
             else {
                 return nil
             }
-            return PreflightFindings(world: world)
+            var findings = PreflightFindings(world: world)
+            // Review hook only; see App/SnapshotHook.swift. A fixture stands
+            // in for this Mac's ports, and the world just read is this Mac's,
+            // so the half of the checks that is about the receptacles — row 1,
+            // R1 and R2 — is taken from the fixture's ports instead.
+            if SnapshotHook.fixture != nil {
+                let staged = PreflightFindings(ports: snapshots)
+                findings.portsWithAMac = staged.portsWithAMac
+                findings.portsInALoop = staged.portsInALoop
+                findings.portsLoopedBack = staged.portsLoopedBack
+            }
+            return findings
         }.value
         guard !Task.isCancelled else { return }
         isRechecking = false
@@ -475,8 +517,8 @@ struct USBTip: Equatable {
     var isResolved = false
 }
 
-/// What S3's read depends on. While the assistant is down nothing is read at
-/// all.
+/// What the checks' read depends on. While the assistant is down nothing is
+/// read at all.
 struct PreflightReadKey: Equatable {
     var isAssistantUp: Bool
     var ports: [String]

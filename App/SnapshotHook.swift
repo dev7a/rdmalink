@@ -33,22 +33,26 @@
 //  in a state that only exists while something is happening.
 //
 //  `RDMALINK_SNAPSHOT_FIXTURE` stands a Mac this machine is not in for the
-//  live inventory — `unrecognized`, a Mac neither rule in §4.7 recognizes,
-//  whose three ports macOS places two on the left side and one on the right
-//  — so §6.2 R31's read-only hub can be reviewed on a Mac the catalogue
-//  knows. It replaces every read of this Mac's identity and ports for the
-//  run and nothing else; the services, notes and stored bridges are still
-//  this Mac's.
+//  live inventory. `unrecognized` is a Mac neither rule in §4.7 recognizes,
+//  whose three ports macOS places two on the left side and one on the right,
+//  so §6.2 R31's read-only hub can be reviewed on a Mac the catalogue knows.
+//  `twoMacs` is this Mac with a second Mac on the end of its first two
+//  Thunderbolt ports, both in the bridge, so §S3's row 1 says no (R1) and
+//  S5's Checked group can be reviewed open. A fixture replaces every read of
+//  this Mac's identity and ports for the run and nothing else; the services,
+//  notes and stored bridges are still this Mac's.
 //
 //  `RDMALINK_SNAPSHOT_ROUTE` opens one of the app's own routes on the live
-//  inventory first: `hub`, `preflight`, `choose`, `review`, `restore-sheet`,
-//  `adopt-sheet`, `changelog` or `other-mac` (§S8, a screen in the working
-//  area, with the ghost second Mac on the stage). The three assistant routes
-//  arrive with the first Thunderbolt port already chosen. **Every one of
-//  them is a read.**
-//  `review` runs `SetUpPorts.preview` and stops; no route reaches
+//  inventory first: `hub`, `choose`, `review`, `review-from-picker`,
+//  `restore-sheet`, `adopt-sheet`, `changelog` or `other-mac` (§S8, a screen
+//  in the working area, with the ghost second Mac on the stage). `review` is
+//  S5 as it opens from a port chosen on the hub — the first Thunderbolt port
+//  — with the two-step label; `review-from-picker` is S5 as it opens from
+//  S4's `Continue`, with the three-step label; `choose` is S4 whatever a
+//  pre-selection would have done. **Every one of them is a read.**
+//  The two review routes run `SetUpPorts.preview` and stop; no route reaches
 //  `perform`, opens an `AuthorizedSession` or raises the administrator
-//  prompt — S6's burst is behind its own button, which nothing here presses.
+//  prompt — that is S5's default button, which nothing here presses.
 //
 //  Nothing here runs unless the environment variable is present, and nothing
 //  here writes anywhere but the path it was handed.
@@ -96,9 +100,9 @@ enum SnapshotHook {
     /// capture. `RDMALINK_SNAPSHOT_ROUTE`.
     enum Route: String, Sendable {
         case hub
-        case preflight
         case choose
         case review
+        case reviewFromPicker = "review-from-picker"
         case restoreSheet = "restore-sheet"
         case adoptSheet = "adopt-sheet"
         case changelog
@@ -117,32 +121,63 @@ enum SnapshotHook {
         /// left and right faces in that order — the MacBook Pro M5 Max as it
         /// looked before family-and-layout recognition existed. R31's state.
         case unrecognized
+        /// This Mac, with another Mac on the end of its first two Thunderbolt
+        /// ports and both of them in `bridge0` — R1's state, which the checks
+        /// derive from the receptacles alone (App/Views/RootView.swift).
+        case twoMacs
+
+        /// The Mac the fixture stands for, without reading its ports.
+        var model: HardwareModel {
+            switch self {
+            case .unrecognized:
+                HardwareModel(
+                    identifier: "Mac99,99", marketingName: "Mac", chip: "M5 Max",
+                    archetype: .unknown, recognition: Recognition.none
+                )
+            case .twoMacs:
+                Inventory.readModel()
+            }
+        }
 
         /// What `Inventory.read()` would have returned on that Mac.
         var inventory: Inventory {
-            switch self {
-            case .unrecognized:
-                let bridge = ThunderboltPort.BridgeMembership(
-                    name: "bridge0", displayName: "Thunderbolt Bridge", isUp: false,
-                    source: .stored
-                )
-                let ports = zip([PortFace.left, .left, .right], 1...).map { face, receptacle in
-                    ThunderboltPort(
-                        id: "en9\(receptacle)", receptacle: receptacle,
-                        bsdName: "en9\(receptacle)", face: face,
-                        positionName: ThunderboltPort.numberedName(receptacle: receptacle),
-                        link: receptacle == 2 ? .macLinked : .empty, bridges: [bridge]
+            get throws {
+                switch self {
+                case .unrecognized:
+                    return Self.unrecognizedInventory
+                case .twoMacs:
+                    var inventory = try Inventory.read()
+                    let bridge = ThunderboltPort.BridgeMembership(
+                        name: "bridge0", displayName: "Thunderbolt Bridge", isUp: true,
+                        source: .stored
                     )
+                    for index in inventory.ports.indices.filter({ inventory.ports[$0].isThunderbolt })
+                        .prefix(2)
+                    {
+                        inventory.ports[index].link = .macLinked
+                        if !inventory.ports[index].bridges.contains(where: { $0.name == bridge.name }) {
+                            inventory.ports[index].bridges.append(bridge)
+                        }
+                    }
+                    return inventory
                 }
-                return Inventory(
-                    model: HardwareModel(
-                        identifier: "Mac99,99", marketingName: "Mac", chip: "M5 Max",
-                        archetype: .unknown, recognition: Recognition.none
-                    ),
-                    ports: ports,
-                    rdma: .off
+            }
+        }
+
+        private static var unrecognizedInventory: Inventory {
+            let bridge = ThunderboltPort.BridgeMembership(
+                name: "bridge0", displayName: "Thunderbolt Bridge", isUp: false,
+                source: .stored
+            )
+            let ports = zip([PortFace.left, .left, .right], 1...).map { face, receptacle in
+                ThunderboltPort(
+                    id: "en9\(receptacle)", receptacle: receptacle,
+                    bsdName: "en9\(receptacle)", face: face,
+                    positionName: ThunderboltPort.numberedName(receptacle: receptacle),
+                    link: receptacle == 2 ? .macLinked : .empty, bridges: [bridge]
                 )
             }
+            return Inventory(model: Fixture.unrecognized.model, ports: ports, rdma: .off)
         }
     }
 

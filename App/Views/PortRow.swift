@@ -27,6 +27,9 @@ struct PortRow: View {
     var isThunderbolt = true
     var isSelected = false
     var isHovered = false
+    /// §S4: a row that is not the chosen one while the choice is frozen. Drawn
+    /// at the same 45 % as a USB-only row: status, not a picker.
+    var isDimmed = false
     var select: () -> Void = {}
     var hover: (Bool) -> Void = { _ in }
     /// The hub's actions, when this row is in the hub. The list is also drawn
@@ -56,7 +59,7 @@ struct PortRow: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .opacity(isThunderbolt ? 1 : 0.45)
+                .opacity(isThunderbolt && !isDimmed ? 1 : 0.45)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -77,6 +80,7 @@ struct PortRow: View {
         .animation(.smooth(duration: 0.18), value: density)
         .animation(.smooth(duration: 0.15), value: isSelected)
         .animation(.smooth(duration: 0.15), value: isHovered)
+        .animation(.smooth(duration: 0.18), value: isDimmed)
     }
 
     /// §2.4 and §4.6: the row highlights for the same two reasons the

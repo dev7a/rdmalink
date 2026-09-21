@@ -1,9 +1,10 @@
 //
 //  ApplyRun.swift
 //
-//  S6 — Setting up (UX_SPEC §S6). One password, then every write in a single
-//  burst inside the thirty-second credential window, with real progress and
-//  never a cancel the app cannot honour.
+//  S6 — Setting up (UX_SPEC §S6). The password is asked for by S5's default
+//  button; this begins the moment macOS hands back the permission, and then
+//  performs every write in a single burst inside the thirty-second credential
+//  window, with real progress and never a cancel the app cannot honour.
 //
 //  **This file performs no writes and opens no session.** It consumes an
 //  `AsyncThrowingStream` somebody else produces, which is the seam where
@@ -54,16 +55,17 @@ enum ApplyEvent: Sendable {
 
 /// S6's live state.
 ///
-/// Phase A is the password moment with a `Continue` button. Phase B has no
-/// buttons at all — there is no control the app could honour once macOS has
-/// handed back a permission that lasts about thirty seconds.
+/// While the OS dialog is up the review screen is still the one showing,
+/// dimmed 20 % and saying nothing over it (§S5). From the first write on
+/// there are no buttons at all — there is no control the app could honour
+/// once macOS has handed back a permission that lasts about thirty seconds.
 @MainActor
 @Observable
 final class ApplyRun {
     enum Phase: Sendable, Equatable {
-        /// Phase A. Nothing has been asked for yet.
-        case password
-        /// Phase B, running.
+        /// The OS password dialog is up. Nothing has been written.
+        case authorizing
+        /// The permission landed and the burst is running: S6 proper.
         case running
         /// Every step landed. S7 follows about 400 ms later.
         case finished
@@ -76,7 +78,11 @@ final class ApplyRun {
     typealias Runner = @Sendable (SetUpPortsPlan) -> AsyncThrowingStream<ApplyEvent, any Error>
 
     let plan: SetUpPortsPlan
-    private(set) var phase: Phase = .password
+    private(set) var phase: Phase = .authorizing
+    /// The flow listens here: the permission landing is what moves the
+    /// working area from S5 to S6, and a refusal before the first write is
+    /// S5's to show (§S5 "back here with the selection intact").
+    var onPhaseChange: (@MainActor (Phase) -> Void)?
     private(set) var rows: [ApplyStepRow]
     /// Which rows belong to which port, so §S6's ring can close in step with
     /// the checklist on the receptacle the writes are about.
@@ -115,13 +121,6 @@ final class ApplyRun {
 
     // MARK: - Copy
 
-    static let passwordHeadline: LocalizedStringResource = "One password, one moment"
-    static let passwordBody: LocalizedStringResource =
-        "macOS will ask for an administrator's name and password — it doesn't have to be yours. RDMALink then makes every change in a single burst, because that permission only lasts about thirty seconds."
-    static let passwordRow: LocalizedStringResource =
-        "RDMALink never sees or stores the password. macOS handles it and hands back a short-lived permission."
-    /// §3.3: the password moment.
-    static let passwordSymbol = "lock.shield"
     static let runningBody: LocalizedStringResource =
         "A few seconds. Your other network connections stay up the whole time."
     static let statusLine: LocalizedStringResource =
@@ -161,12 +160,11 @@ final class ApplyRun {
 
     // MARK: - Driving
 
-    /// Phase A's `Continue`. Everything after this point is the runner's, and
-    /// the footer has nothing left to offer.
+    /// S5's default button. The runner's first act is to ask macOS for the
+    /// permission; everything after this point is the runner's, and the
+    /// footer has nothing left to offer.
     func begin() {
-        guard phase == .password else { return }
-        phase = .running
-        task?.cancel()
+        guard phase == .authorizing, task == nil else { return }
         task = Task { [runner, plan] in
             do {
                 for try await event in runner(plan) {
@@ -174,6 +172,8 @@ final class ApplyRun {
                 }
             } catch let refusal as Refusal {
                 await MainActor.run { self.fail(with: WizardRefusal(refusal)) }
+            } catch let error as NetworkConfigurationError {
+                await MainActor.run { self.fail(with: Self.refusal(for: error)) }
             } catch is CancellationError {
                 // The window went away. Nothing to say and nobody to say it to.
             } catch {
@@ -184,23 +184,28 @@ final class ApplyRun {
         }
     }
 
-    /// A refusal the window raised rather than the runner — R7 when the
-    /// authorization dialog was cancelled, R6 when the account can't.
-    func fail(with refusal: WizardRefusal) {
-        task?.cancel()
-        self.refusal = refusal
-        phase = .refused
+    /// §6.2's refusal for what macOS said: R7 when the dialog was dismissed,
+    /// R6 when the account can't, R12 when another writer holds the
+    /// configuration — and R10 for a write that failed, because Core has put
+    /// the port back by the time the error reaches here.
+    private static func refusal(for error: NetworkConfigurationError) -> WizardRefusal {
+        switch error {
+        case .authorizationCancelled: WizardRefusals.noAuthorization
+        case .authorizationDenied: WizardRefusals.notAnAdministrator
+        case .busy: WizardRefusals.networkLockHeld(bySystemSettings: false)
+        default: WizardRefusals.rolledBack
+        }
     }
 
-    /// R7's recovery: "returns to phase A of the apply screen with the
-    /// selection intact".
-    func returnToPassword() {
-        task?.cancel()
-        refusal = nil
-        completionLine = nil
-        landed = []
-        rows = Self.build(plan).rows
-        phase = .password
+    private func fail(with refusal: WizardRefusal) {
+        self.refusal = refusal
+        enter(.refused)
+    }
+
+    private func enter(_ next: Phase) {
+        guard phase != next else { return }
+        phase = next
+        onPhaseChange?(next)
     }
 
     func cancel() { task?.cancel() }
@@ -208,6 +213,9 @@ final class ApplyRun {
     private func apply(_ event: ApplyEvent) {
         switch event {
         case let .step(step, state):
+            // The first step to be reported is the permission having landed:
+            // nothing runs before it, and S6 begins here (§S6).
+            if phase == .authorizing { enter(.running) }
             update(step, to: state)
         case let .finished(result):
             landed = result.ports.map(\.positionName)
@@ -217,10 +225,10 @@ final class ApplyRun {
             // one that was put back.
             if let unfinished = result.unfinished {
                 refusal = WizardRefusal(unfinished.refusal)
-                phase = .refused
+                enter(.refused)
                 return
             }
-            phase = .finished
+            enter(.finished)
         }
     }
 
@@ -245,8 +253,8 @@ final class ApplyRun {
         rows[index].state = state
     }
 
-    /// Every write the plan says will happen, pending, before the password is
-    /// asked for — so the user sees the whole list and not a list that grows.
+    /// Every write the plan says will happen, pending, from the first frame of
+    /// S6 — so the user sees the whole list and not a list that grows.
     private static func build(
         _ plan: SetUpPortsPlan
     ) -> (rows: [ApplyStepRow], groups: [ApplyPortGroup]) {

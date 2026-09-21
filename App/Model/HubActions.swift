@@ -117,7 +117,7 @@ enum RestoreSubject: Sendable, Equatable, Identifiable {
     }
 }
 
-/// The hub's hand-off to the set-up flow (S3–S7), which is its own slice. The
+/// The hub's hand-off to the set-up flow (S4–S7), which is its own slice. The
 /// footer, the Port menu and `Set It Up Again` set this and nothing else.
 struct SetUpRequest: Sendable, Equatable {
     /// The port the user already had in hand, when there was one.

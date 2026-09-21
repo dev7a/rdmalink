@@ -39,7 +39,7 @@ final class HubActionsModel {
         offersRestore: true
     )
 
-    /// The set-up flow's inbox (S3–S7). Written here, taken by the flow.
+    /// The set-up flow's inbox (S4–S7). Written here, taken by the flow.
     var pendingSetUp: SetUpRequest?
 
     /// The live checklist, while an operation is running or has just ended.

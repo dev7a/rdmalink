@@ -116,7 +116,7 @@ struct StageSceneGraph {
     /// §S8's ghost second Mac, off stage until a handoff is up.
     var ghost: StageGhostNode
     /// §6.2 R2's thread between the two ends of one cable, built when
-    /// preflight names a pair and taken down when it stops.
+    /// a check names a pair and taken down when it stops.
     var loop: StageLoopThread?
     var keyLight: DirectionalLight
     var fillLight: DirectionalLight

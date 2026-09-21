@@ -22,6 +22,9 @@ struct StageView: View {
     /// §S4's ⌘-click and ⇧-click, on the one screen that has a selection to
     /// extend. Absent elsewhere, so a modified click is an ordinary one.
     var onExtendClick: ((StagePort) -> Void)?
+    /// §S1: "double-clicking a configurable one starts set-up for it". Set
+    /// by the hub only; `nil` inside a run, where the picker owns the choice.
+    var onDoubleClick: ((StagePort) -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -153,12 +156,26 @@ struct StageView: View {
                 model.announcementDelivered()
             }
             .onChange(of: isStageFocused) { _, focused in
-                focusedID = focused ? (model.selectedID ?? firstThunderboltID) : nil
+                // §S4: while the choice is frozen there is no receptacle for
+                // focus to land on, because none is a selection target.
+                focusedID = focused && !model.isSelectionFrozen
+                    ? (model.selectedID ?? firstThunderboltID) : nil
                 scene.setFocus(focusedID)
                 // §4.8: "moving keyboard focus to it shows a small callout".
                 // Tab lands on the selected receptacle or the first one, and
                 // that is a move too; focus leaving takes the callout with it.
                 keyboardCalloutID = focused ? focusedID : nil
+            }
+            // §S4 "After this screen the choice is frozen": the keyboard is
+            // gated like the pointer, so a focus ring that arrived on S4 is
+            // taken away rather than left over a port Space can no longer
+            // choose, and ← → ↑ ↓ cannot turn the Mac away from the port S5
+            // is describing or S6 is working on (§S5, §S6).
+            .onChange(of: model.isSelectionFrozen) { _, frozen in
+                guard frozen else { return }
+                focusedID = nil
+                scene.setFocus(nil)
+                keyboardCalloutID = nil
             }
             .onAppear {
                 scene.startScrollMonitor()
@@ -427,6 +444,9 @@ struct StageView: View {
             guard dragDistance < 4, let id = hit,
                   let port = model.ports.first(where: { $0.id == id })
             else { return }
+            // §S4: from S5 on no receptacle is a selection target, and a
+            // click does nothing — not R3, not a focus ring, nothing.
+            guard !model.isSelectionFrozen else { return }
             guard port.isThunderbolt else {
                 onUSBOnlyClick?(port)
                 return
@@ -440,6 +460,9 @@ struct StageView: View {
                 return
             }
             model.select(id)
+            // The second click of a double-click arrives as its own tap; the
+            // event's count is what tells the two apart (§S1 3D behavior).
+            if NSApp.currentEvent?.clickCount == 2 { onDoubleClick?(port) }
         }
     }
 
@@ -450,7 +473,10 @@ struct StageView: View {
     private var firstThunderboltID: StagePort.ID? { thunderboltPorts.first?.id }
 
     /// ← → move between receptacles in physical order, camera leaning to follow.
+    /// Ignored while the choice is frozen (§S4): no receptacle is a target,
+    /// and the camera stays square on the face the review is about (§S5).
     private func moveFocus(by step: Int) -> KeyPress.Result {
+        guard !model.isSelectionFrozen else { return .ignored }
         let ports = thunderboltPorts
         guard !ports.isEmpty else { return .ignored }
         let current = ports.firstIndex { $0.id == focusedID } ?? -1
@@ -468,6 +494,10 @@ struct StageView: View {
     /// toward a pointer callout is cancelled rather than left to raise one
     /// on a receptacle that has just turned away.
     private func cycleFace(by step: Int) -> KeyPress.Result {
+        // §S6: "the camera is locked for the duration so the eye has one
+        // place to be" — and the same key is gated the same way on S5 and
+        // S7, where the freeze is on for the same reason.
+        guard !model.isSelectionFrozen else { return .ignored }
         let faces = model.relevantFaces
         guard faces.count > 1 else { return .ignored }
         let current = faces.firstIndex(of: model.currentFace) ?? 0
@@ -480,7 +510,9 @@ struct StageView: View {
     }
 
     private func activateFocused() -> KeyPress.Result {
-        guard let focusedID else { return .ignored }
+        // Ignored rather than silently dead: `select` would refuse anyway,
+        // but a key that reports itself handled swallows the press (§S4).
+        guard !model.isSelectionFrozen, let focusedID else { return .ignored }
         model.select(focusedID)
         return .handled
     }
@@ -514,6 +546,9 @@ struct StageView: View {
                     .accessibilityValue(Text(verbatim: port.accessibilityValue ?? ""))
                     .accessibilityAddTraits(port.selected ? [.isButton, .isSelected] : .isButton)
                     .accessibilityAction {
+                        // §S4: the freeze covers every input, VoiceOver
+                        // included — no R3 for a USB-only receptacle either.
+                        guard !model.isSelectionFrozen else { return }
                         if port.isThunderbolt {
                             model.select(port.id)
                         } else {
