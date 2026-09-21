@@ -180,6 +180,7 @@ from `StageMath.project`.
 ```
 RDMALink.xcodeproj        the app (App/) linking the local package
 App/                      SwiftUI app: window, stage, assistant column
+  Assets.xcassets/        the app icon, generated (see "App icon")
 Packages/RDMALinkCore/    everything shared with the CLI and tests
   Sources/RDMALinkCore/
     Inventory/            hardware model, ports, positions, live watcher
@@ -192,8 +193,41 @@ Packages/RDMALinkCore/    everything shared with the CLI and tests
   Sources/rdmalink/       command-line companion: read-only diagnostics
   Tests/RDMALinkCoreTests Swift Testing
 docs/                     spec, this file, prototype
-script/                   test.sh, build and packaging
+script/                   test.sh, the icon renderer, build and packaging
 ```
+
+## App icon
+
+The icon is drawn, not painted. `script/render_app_icon.swift` writes every
+PNG in `App/Assets.xcassets/AppIcon.appiconset` and that set's
+`Contents.json`, so the catalogue has one source and cannot drift:
+
+```sh
+swift script/render_app_icon.swift App/Assets.xcassets/AppIcon.appiconset
+```
+
+It draws UX_SPEC §3.3 — one Thunderbolt slot on the stage's graphite, wearing
+the ready ring, with one light thread leaving it toward the lower right — in
+the stage's own numbers: the opening keeps the two ratios of
+`FeatureKind.thunderbolt.opening`, the ring is the `.ready` track
+`StageSceneBuilder.makeReceptacle` puts around that opening, and the thread
+keeps `StageMath`'s taper and fade. Nothing is downloaded and nothing is
+traced: the script is CoreGraphics and ImageIO only, and it reads no colour
+from the running Mac, because the user's accent colour is theirs and must not
+end up baked into a shipped icon. Every size is drawn at its own pixel count
+for its own point size rather than resampled from the 1024, and the sizes at
+and below 32 pt open the slot out and thicken the ring — the model's 1.5 pt
+ring track is a fifth of a point at 16 pt, which is a blue smudge.
+
+The artwork is a plain opaque square: macOS applies the icon's shape and
+finish, so nothing here is pre-rounded and nothing is transparent. The target
+names the set with `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon` in both
+configurations, and `actool` writes `CFBundleIconFile` and `CFBundleIconName`
+into the built `Info.plist` itself, which is why `App/Info.plist` names no
+icon. The built bundle carries `Contents/Resources/Assets.car` with all ten
+sizes, plus the compatibility `AppIcon.icns` Xcode generates beside it — that
+one is a subset by design (16, 32, 128 and 256 px), and the system reads the
+catalogue, verified with `assetutil --info`.
 
 ## Packaging
 
