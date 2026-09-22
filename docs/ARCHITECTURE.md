@@ -211,18 +211,66 @@ PNG in `App/Assets.xcassets/AppIcon.appiconset` and that set's
 swift script/render_app_icon.swift App/Assets.xcassets/AppIcon.appiconset
 ```
 
-It draws UX_SPEC §3.3 — one Thunderbolt slot on the stage's graphite, wearing
-the ready ring, with one light thread leaving it toward the lower right — in
-the stage's own numbers: the opening keeps the two ratios of
-`FeatureKind.thunderbolt.opening`, the ring is the `.ready` track
-`StageSceneBuilder.makeReceptacle` puts around that opening, and the thread
-keeps `StageMath`'s taper and fade. Nothing is downloaded and nothing is
-traced: the script is CoreGraphics and ImageIO only, and it reads no colour
-from the running Mac, because the user's accent colour is theirs and must not
-end up baked into a shipped icon. Every size is drawn at its own pixel count
-for its own point size rather than resampled from the 1024, and the sizes at
-and below 32 pt open the slot out and thicken the ring — the model's 1.5 pt
-ring track is a fifth of a point at 16 pt, which is a blue smudge.
+It draws UX_SPEC §3.3 — a link seen head-on, on the stage's graphite
+gradient. Two closed metal plug ends face each other across the middle of the
+square, left and right, a little over a quarter of it wide each: an octagon in
+side view, with a 45° chamfer off all four corners, a turned back and a flat
+front face. A thin cyan-white edge of light sits on each front face — the lit
+rim, filled light and never an opening — and between the two rims runs one
+level beam of accent light, 12 % of the square thick, carrying three brighter
+marks along its length like packets in flight. Nothing in the drawing is a
+hole: the plug ends are closed, the rims are light rather than apertures, and
+the only round thing in it is the back of each plug.
+
+Both subjects are *lit* rather than filled flat, because a flat fill of either
+reads as a sticker:
+
+- a plug end is drawn as a shell. The outer octagon is filled with the
+  chamfer's own steep ramp and an inner octagon, inset by the bevel, with the
+  body's gentler one, so the top facets come out well above the front face
+  where the key lands on them and the bottom ones below the graphite — which
+  is what a milled corner does and what tells a chamfer from a rounded
+  rectangle. A contact line runs under the base and a specular hairline along
+  the top edge, each a stroke of the outline faded out along the height, so
+  neither reaches the middle of the block.
+- the beam is drawn as light. A bloom fades over about one beam-height into
+  the graphite above and below it; the body ramps from the accent at its two
+  edges to a brighter core on the centre line; and a lens over the middle of
+  the span takes that core up to near-white where the run is furthest from
+  either plug. The bloom is a shaped vertical ramp, not a blurred or stacked
+  shape — both of those draw a silhouette, a rounded rectangle or an oval,
+  that reads as an object parked behind the beam — and its two ends are taken
+  to nothing by a one-row grey mask, because cutting them off at the plug's
+  face left a straight edge standing in the wedge of graphite above the
+  chamfer.
+
+The geometry is written down as fractions of the square (see `Art`), so the
+same drawing comes out at every size, and the tones are the stage's own,
+resolved once and written down rather than read from the running Mac. The
+metal is one family of greys covering the whole range `StagePalette.chassis`
+renders at under the dark IBL rather than a slice of its middle, which is what
+the flat version used; the darkest of them is lifted about twenty levels off
+the metal's own shadow value, because at 35 of 255 the bottom of a plug came
+out one level off the graphite behind it and the lower third of the block
+disappeared. Nothing is downloaded and nothing is traced: the script is
+CoreGraphics and ImageIO only, and it reads no colour from the running Mac,
+because the user's accent colour is theirs and must not end up baked into a
+shipped icon.
+
+Every size is drawn at its own pixel count for its own point size rather than
+resampled from the 1024, and what the sizes at and below 32 pt change is the
+drawing's *weights*: the beam thickens while its bloom, core and lens all pull
+back, the rims widen and shorten toward the beam's own height, the chamfer
+closes up, the lit facet and the specular fade toward the front face, the
+plugs' lighting ramp flattens, and the plugs themselves grow taller — the one
+part of the composition that moves with size, and it moves because height
+costs the beam nothing and because at 16 pt a six-pixel block against a
+three-pixel bar reads as one stripe with dark ends. Everything that gives way
+gives way for the same sentence in §3.3: at 16 pt this has to be two dark
+blocks and one blue bar, so the core and the lens go rather than let the bar
+come out pale, and the specular goes rather than cap each block in white. The
+three packet marks are drawn only at 64 px and above; below that the run is
+too short to hold three marks and two gaps.
 
 The artwork is a plain opaque square: macOS applies the icon's shape and
 finish, so nothing here is pre-rounded and nothing is transparent. The target
