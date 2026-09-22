@@ -378,7 +378,7 @@ The rings say what the words say; two small aids make sure nobody has to guess w
 - Section headers: **Thunderbolt ports** · **Back** · **Front** · **Left side** · **Right side**
 - Subtitles — **Nothing plugged in** · **A device is connected — not a Mac** · **Another Mac is here. The link is still coming up.** · **Linked to another Mac** · **USB only — this one isn't Thunderbolt**
 - Membership appended after a middle dot: **· In the Thunderbolt Bridge** · **· In two bridges, including one that isn't in use** · **· Not in any bridge**
-- Ready: **Ready for RDMA · fe80::1c3d:5aff:fe22:9b04%en6**
+- Ready: **Ready for RDMA · fe80::a2d1:73b4:9e0c:5f16%en6**
 - Ready, adopted: **Ready for RDMA · set up by you, looked after by RDMALink**
 - Ready, nothing attached: **Ready for RDMA · the address appears when a Mac arrives**
 - Set up elsewhere: **Set up outside RDMALink** *[Adopt…]*
@@ -617,8 +617,8 @@ You can watch each sentence mean something before you agree to it.
 - Headline: **Back, far left is ready**
 - Body: **The port has left the Thunderbolt Bridge and has its own link-local address. It'll carry RDMA as soon as the other Mac is set up the same way.**
 - Value label: **Address for this link**
-- Value: **fe80::1c3d:5aff:fe22:9b04%en6**
-- Footnote: **The part after the % is this port's system name. Tools like RotorFS need the whole thing, so copy it as it is.**
+- Value: **fe80::a2d1:73b4:9e0c:5f16%en6**
+- Footnote: **The part after the % is this port's system name. The tools that take an address need the whole thing, so copy it as it is.**
 - Status rows: **RDMA over Thunderbolt — On** · **RDMA over Thunderbolt — Off. Turn it on and restart to finish.** *[Turn It On…]* · **RDMA device — Ready** · **RDMA device — Not here yet. It usually appears after a restart.** · **The other Mac — Not set up yet**
 - Nothing-attached headline: **Back, far left is ready and waiting**
 - Nothing-attached body: **There's no address yet — one appears the moment another Mac is connected to this port. Leave this window open and you'll see it arrive.**
@@ -643,7 +643,7 @@ You can watch each sentence mean something before you agree to it.
 - Step 1: **Copy RDMALink across, or download it again on the other Mac.**
 - Step 2: **Open it and walk the same short path.**
 - Step 3: **Pick the port with the other end of this cable in it. Identify makes that painless.**
-- Step 4: **When both sides are done, each Mac has its own address on this link. This one is fe80::1c3d:5aff:fe22:9b04%en6.**
+- Step 4: **When both sides are done, each Mac has its own address on this link. This one is fe80::a2d1:73b4:9e0c:5f16%en6.**
 - Step 4, address not known yet: **When both sides are done, each Mac has its own address on this link. This one's address appears as soon as a Mac is connected.**
 - Note: **Leave this one cable connected while you're over there — and keep it to one cable between the pair.**
 - Honesty line: **I can only see this Mac. Nothing I did crossed that cable — that's deliberate.**
@@ -750,14 +750,12 @@ You can watch each sentence mean something before you agree to it.
 
 **Purpose.** The one preferences surface. A single pane, so per HIG **no toolbar and no tab bar**.
 
-**Layout.** Separate window, 480 pt wide, height to fit. One `Form` with `.formStyle(.grouped)`: a section of two toggles with `.callout` help text beneath each, and a section with buttons.
+**Layout.** Separate window, 480 pt wide, height to fit. One `Form` with `.formStyle(.grouped)`: a section of one toggle with `.callout` help text beneath it, and a section with buttons. There is no update check: the app never contacts anything, and a toggle that claimed to would be a promise it does not keep (§1.3 rule 10).
 
 **Copy.**
 - Toggle: **Show technical names** · Help: **Adds names like en6 and the exact service names next to each port. The link address always shows in full, because tools need every character of it. Nothing is ever written on the picture of your Mac.**
-- Toggle: **Check for updates automatically** · Help: **RDMALink checks the release page now and then. It never sends anything about your Mac.**
 - Button: **Reveal Notes in Finder** · Help: **RDMALink keeps one small note per port it set up. That note is what makes putting things back possible — it's safe to back up and safe to leave alone.**
 - Button: **Save a Diagnostics File…** · Help: **A plain text file with what RDMALink can see on this Mac and what it has changed: the model, the chip, the macOS build, the ports, and any step that failed. No personal information, and nothing is sent anywhere — it's yours to keep or share.**
-- Button: **Check for Updates Now**
 
 **States.** Default · Technical names on (the main window updates live, no relaunch) · No notes saved yet (`Reveal Notes in Finder` is disabled with a help tooltip).
 
@@ -775,7 +773,7 @@ You can watch each sentence mean something before you agree to it.
 
 **Copy.**
 - Headline: **What this all means**
-- **RDMA over Thunderbolt** — **RDMA lets two Macs move data between them without troubling either one's processor very much. Over a Thunderbolt 5 cable that's quick enough to feel like a local disk. Tools like RotorFS, exo and MLX clusters use it.**
+- **RDMA over Thunderbolt** — **RDMA lets two Macs move data between them without troubling either one's processor very much. Over a Thunderbolt 5 cable that's quick enough to feel like a local disk. Tools like exo and MLX clusters use it.**
 - **Why take the port out of Thunderbolt Bridge?** — **The bridge joins your Thunderbolt ports into one ordinary network, which is lovely for file sharing and wrong for this. RDMA wants a cable that belongs to it alone, so RDMALink gives the port its own service and leaves the bridge otherwise untouched. A port has to be out of every bridge, even one that isn't switched on.**
 - **Why only one cable between two Macs?** — **The bridge works like a hub: whatever arrives on one Thunderbolt port is sent out of all the others. So a second Thunderbolt connection between the same two Macs — or a ring of Macs — with those ports still in the bridge gives traffic a way to go round and round for ever, eating processor time and dragging the network down. Apple says so in its technote on RDMA over Thunderbolt. One cable, no loop.**
 - Under that section, a `.caption` link: **Apple's technote on RDMA over Thunderbolt** → `https://developer.apple.com/documentation/technotes/tn3205-low-latency-communication-with-rdma-over-thunderbolt` (TN3205, which says a bridge forwards like a hub, that a loop lets frames travel indefinitely, and to keep looped ports out of the bridge). Opens in the default browser; the only link on the sheet.
@@ -1218,7 +1216,7 @@ All copy is localizable with no concatenated sentences. Position names and locat
 6. **Identify's moment of silence.** The instant a port is unplugged, every other port's shimmer stops dead and only the one that moved keeps a ring — the app going quiet around the answer. When the cable goes back in, it blooms and the list row selects itself: **"That's the one."**
 7. **The light thread.** A port linked to a real Mac grows a short soft thread of light leaving the receptacle in the cable's direction, fading at the frame edge. It is the only ornament in the entire scene, and it appears only when a real link really exists — which is exactly why it feels earned rather than decorative.
 8. **Hover-to-preview.** Point at "Leave the Thunderbolt Bridge" on the review screen and the ribbon links to the other members fade away in front of you; point at "Get its own network service" and a small node appears beside the receptacle. You watch each sentence happen before you agree to it.
-9. **The address arrives.** `fe80::1c3d:5aff:fe22:9b04%en6` fades in over 250 ms with a hair of scale, once, and `Copy Address` goes live. After a flow made entirely of plain English, one line of pure technical truth lands as a reward.
+9. **The address arrives.** `fe80::a2d1:73b4:9e0c:5f16%en6` fades in over 250 ms with a hair of scale, once, and `Copy Address` goes live. After a flow made entirely of plain English, one line of pure technical truth lands as a reward.
 10. **"Done. That took 1.8 seconds."** Four ticks land in a little over a second, the ring closing one shade per tick so the checklist and the hardware finish together — and then the app tells you the actual elapsed time. A small, confident brag that makes the whole thing feel light.
 11. **Waiting with you.** Finish a port with nothing plugged in and the app doesn't send you away — *"Leave this window open and you'll see it arrive."* — and when the cable goes in, the ring brightens, the thread appears and the address fades in, all in the same 250 ms.
 12. **The wordless second Mac.** At the handoff, your machine slides aside and a featureless box fades in beside it: near port lit, far port hollow, one thin line between them. It says *half done* with no text at all, and it never pretends to know anything about that other machine. When the far end finally answers, a pulse travels back along the line and blooms at your port.

@@ -34,6 +34,11 @@ from `StageMath.project`.
 
 ## Verified constraints (macOS 27.2, Mac Studio M3 Ultra, 2026-09-19)
 
+"The rig" below is the two-Mac bench these were measured on: a Mac Studio
+(M3 Ultra, Mac15,14) and a MacBook Pro (14-inch, M5 Max, Mac17,7), cabled
+by Thunderbolt 5. Example addresses in this document and the spec are
+made up; they are not the rig's.
+
 - `SCBridgeInterface*` is in no public header. Eleven symbols resolve under
   their plain names; `SCBridgeInterfaceCopyActive` and
   `SCBridgeInterfaceUpdateConfiguration` resolve only as
@@ -366,10 +371,14 @@ Reading the approval keys from `main` stops a tag from approving itself with
 keys it carries, and the ancestor check stops a tag off `main` from shipping,
 but both of those checks live in code that comes from the tag. Anyone who can
 push a tag to this repository can therefore change them. The boundary that
-holds is who may push tags — the repository is private and has one owner — and
-the `release` environment, which is where the signing secrets live. This is
-the same boundary as in the model repository; it is written down here so it is
-a decision and not an oversight.
+holds is who may create a `v*` tag — a repository ruleset restricts creating,
+moving and deleting `refs/tags/v*` to the repository's administrators, so a
+collaborator or a fork cannot cut a release — and the `release` environment,
+which holds the signing secrets and requires the owner's approval before the
+notarize job runs. A pull request from a fork reaches neither: it gets no
+environment secrets and cannot create tags. This is the same boundary as in
+the model repository; it is written down here so it is a decision and not an
+oversight, and it does not depend on the repository being private.
 
 What the repository owner must configure once, under **Settings →
 Environments → `release`** (create the environment first; its protection
