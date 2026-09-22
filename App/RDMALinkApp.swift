@@ -13,9 +13,6 @@ enum AppSettings {
     static let showsLegend = "ShowLegend"
     /// §2.3: where the divider sits, remembered between launches.
     static let stageSplitFraction = "StageSplitFraction"
-    /// §S12: stored in ML1 and read by nothing. The release-page check itself
-    /// is ML3, and RDMALink makes no network request before then.
-    static let checksForUpdates = "ChecksForUpdatesAutomatically"
 }
 
 @main

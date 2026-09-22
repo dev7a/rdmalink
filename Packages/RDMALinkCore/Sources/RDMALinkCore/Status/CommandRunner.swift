@@ -3,12 +3,12 @@ import Foundation
 
 /// Runs one of the small system tools the app reads its state from.
 ///
-/// The rules are the ones the RotorFS link tool arrived at: `posix_spawn` with
-/// standard input closed, an unlinked temporary file for the output so no
-/// inherited writer can hold the parent open, a deadline with `TERM` and then
-/// `KILL`, and a hard cap on how much output is accepted. Nothing here writes
-/// anything: the runner exists so `nvram`, `ibv_devices` and `ifconfig` can be
-/// read without a `Process` object that may outlive its caller.
+/// Every rule here earns its place: `posix_spawn` with standard input closed,
+/// an unlinked temporary file for the output so no inherited writer can hold
+/// the parent open, a deadline with `TERM` and then `KILL`, and a hard cap on
+/// how much output is accepted. Nothing here writes anything: the runner
+/// exists so `nvram`, `ibv_devices` and `ifconfig` can be read without a
+/// `Process` object that may outlive its caller.
 ///
 /// The call blocks for up to `timeout`, so callers on the main actor run it in
 /// a task of their own.

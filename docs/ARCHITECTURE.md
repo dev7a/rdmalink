@@ -25,7 +25,7 @@ from `StageMath.project`.
 |---|---|
 | Distribution | GitHub download, Developer ID + notarized. Never the App Store. |
 | Sandbox | Off. Hardened Runtime on. |
-| Bridge membership | Edited in-app through the private `SCBridgeInterface*` SPI, probed with `dlsym` at launch, remove-only, verified by reading the kernel back. If any symbol is missing the app falls back to a supervised System Settings hand-off. |
+| Bridge membership | Edited in-app through the private `SCBridgeInterface*` SPI, probed with `dlsym` before use, remove-only, verified by reading the kernel back. A missing symbol stops the change and rolls it back (R10); the manual System Settings steps are the documented route (§6.2 R18, R20). |
 | Privilege | No helper daemon. `AuthorizationCopyRights` for `system.services.systemconfiguration.network`, then `SCPreferencesCreateWithAuthorization`. The credential is non-shared and lasts about 30 s, so every write of one operation happens in a single burst right after the prompt. |
 | RDMA switch | Not the app's to flip. Detected from NVRAM `rdma-enable` and `ibv_devices`; the app deep-links to System Settings › Privacy & Security › Developer Tools (`x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_DevTools`) and re-checks after the restart. |
 | Scope per run | Local Mac only. The user runs the app on each Mac and picks the ports. |
@@ -253,17 +253,19 @@ Applications link), checked with `hdiutil verify`, signed with the same
 identity, and mounted once to confirm the code hash on the image is the
 exported one. Without `--notarize` the script stops there, writes
 `dist/RDMALink-<version>-unnotarized.dmg` and prints the notarize command;
-with it, the script first checks that the `rotorfs` notarytool Keychain
-profile exists, then submits the app (zipped) through it and staples it
-before it goes into the image, submits and staples the image too, assesses
-both with `spctl` (`source=Notarized Developer ID` required) and writes
-`dist/RDMALink-<version>.dmg`, the file a release ships.
+with it, the script first checks that the `rdmalink` notarytool Keychain
+profile exists (`NOTARY_PROFILE` overrides the name; it is created once with
+`xcrun notarytool store-credentials rdmalink …`), then submits the app
+(zipped) through it and staples it before it goes into the image, submits and
+staples the image too, assesses both with `spctl` (`source=Notarized Developer
+ID` required) and writes `dist/RDMALink-<version>.dmg`, the file a release
+ships.
 
 The same script runs the release on a GitHub runner, where two things in the
 environment change what it does and nothing else does. `NOTARY_KEY_PATH`,
 `APPLE_API_KEY_ID` and `APPLE_API_ISSUER_ID` — all three or none — make
 `notarytool` authenticate with an App Store Connect API key instead of the
-`rotorfs` Keychain profile. `RELEASE_TAG`, `RELEASE_SHA` and
+`rdmalink` Keychain profile. `RELEASE_TAG`, `RELEASE_SHA` and
 `RELEASE_TAG_OBJECT` make it a release run: it checks that `HEAD` is that
 commit and that the tag names `App/Info.plist`'s version, and, after the
 image is stapled and assessed, calls `script/release/receipt.sh` to write
@@ -380,9 +382,20 @@ environment secrets and cannot create tags. This is the same boundary as in
 the model repository; it is written down here so it is a decision and not an
 oversight, and it does not depend on the repository being private.
 
-What the repository owner must configure once, under **Settings →
-Environments → `release`** (create the environment first; its protection
-rules are what gate the signing secrets):
+What the repository owner must configure once. First, the two settings the
+paragraph above leans on:
+
+- **Settings → Rules → Rulesets**, a ruleset over `refs/tags/v*` that
+  restricts tag creation, update and deletion to the repository's
+  administrators (ruleset id 23810512). Without it any collaborator could cut
+  a release.
+- **Settings → Environments → `release` → Required reviewers**, set to the
+  repository owner, so the notarize job — and with it every signing secret —
+  waits for a human. GitHub allows this protection rule on public repositories
+  on every plan, and on private ones only on paid plans.
+
+Then, under **Settings → Environments → `release`** (create the environment
+first; its protection rules are what gate the signing secrets):
 
 | Kind | Name | Value |
 | --- | --- | --- |

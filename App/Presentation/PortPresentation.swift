@@ -35,7 +35,7 @@ struct PortRowDetail: Sendable, Equatable {
     var link: LocalizedStringResource?
     /// Appended after a middle dot on a port that has no setup of its own.
     var membership: LocalizedStringResource?
-    /// `fe80::1c3d:5aff:fe22:9b04%en6`, scope suffix included.
+    /// `fe80::a2d1:73b4:9e0c:5f16%en6`, scope suffix included.
     var address: String?
 
     /// The whole detail line as one string, joined with the same middle dots

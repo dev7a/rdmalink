@@ -28,7 +28,7 @@ struct ReadyStatusRow: Sendable, Equatable, Identifiable {
 struct ReadyValueBlock: Sendable, Equatable, Identifiable {
     var id: String
     var positionName: String
-    /// `fe80::1c3d:5aff:fe22:9b04%en6`, scope suffix included, never truncated.
+    /// `fe80::a2d1:73b4:9e0c:5f16%en6`, scope suffix included, never truncated.
     var address: String?
 
     static let label: LocalizedStringResource = "Address for this link"
@@ -37,7 +37,7 @@ struct ReadyValueBlock: Sendable, Equatable, Identifiable {
 /// S7, ready to draw.
 struct ReadyReport: Sendable, Equatable {
     static let footnote: LocalizedStringResource =
-        "The part after the % is this port's system name. Tools like RotorFS need the whole thing, so copy it as it is."
+        "The part after the % is this port's system name. The tools that take an address need the whole thing, so copy it as it is."
 
     var headline: LocalizedStringResource
     var body: LocalizedStringResource

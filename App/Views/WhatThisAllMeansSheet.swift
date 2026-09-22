@@ -19,7 +19,7 @@ struct WhatThisAllMeansSheet: View {
             VStack(alignment: .leading, spacing: 16) {
                 ExplainerSection(
                     title: "RDMA over Thunderbolt",
-                    detail: "RDMA lets two Macs move data between them without troubling either one's processor very much. Over a Thunderbolt 5 cable that's quick enough to feel like a local disk. Tools like RotorFS, exo and MLX clusters use it."
+                    detail: "RDMA lets two Macs move data between them without troubling either one's processor very much. Over a Thunderbolt 5 cable that's quick enough to feel like a local disk. Tools like exo and MLX clusters use it."
                 )
                 ExplainerSection(
                     title: "Why take the port out of Thunderbolt Bridge?",

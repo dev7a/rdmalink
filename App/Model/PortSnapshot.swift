@@ -90,7 +90,7 @@ struct PortSnapshot: Sendable, Equatable, Identifiable {
     }
 
     /// The link-local address with its scope suffix, the way UX_SPEC §S1 prints
-    /// it: `fe80::1c3d:5aff:fe22:9b04%en6`. Core stores the address without the
+    /// it: `fe80::a2d1:73b4:9e0c:5f16%en6`. Core stores the address without the
     /// suffix; tools need every character of it, so it is put back here.
     var linkLocalAddress: String? {
         guard let address = port.linkLocal.first else { return nil }

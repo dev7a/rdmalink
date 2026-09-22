@@ -82,6 +82,17 @@ jobs:
     permissions:
       contents: read
     steps:
+      # These two are Actions *variables*, not secrets, so nothing redacts them
+      # on its own — and this repository's logs are public. Mask them before any
+      # step that could echo them; add-mask covers the rest of the job.
+      - name: Mask the notarization identifiers
+        env:
+          APPLE_API_KEY_ID: ${{ vars.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ vars.APPLE_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          [[ -z "$APPLE_API_KEY_ID" ]] || echo "::add-mask::$APPLE_API_KEY_ID"
+          [[ -z "$APPLE_API_ISSUER_ID" ]] || echo "::add-mask::$APPLE_API_ISSUER_ID"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The commit the verified tag names, not the branch head.

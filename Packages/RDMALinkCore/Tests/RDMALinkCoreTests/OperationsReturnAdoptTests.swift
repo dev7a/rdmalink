@@ -390,17 +390,21 @@ struct OperationsAdoptTests {
 @Suite("What is mounted over the link")
 struct OperationsMountedVolumeTests {
 
+    /// The shape `mount` prints, with made-up hosts and share names: one share
+    /// down the port's own link (scope suffix and all), one on the ordinary
+    /// network at a documentation address (RFC 5737), and one whose name has
+    /// spaces in it, which is what makes the trailing ` on ` ambiguous.
     private static let mountOutput = """
         /dev/disk3s5 on / (apfs, sealed, local, read-only, journaled)
-        //guest@[fe80::6%25en6]/Vault on /Volumes/Vault (smbfs, nodev, nosuid, mounted by alessandro)
-        //guest@10.0.0.4/Backup on /Volumes/Backup (smbfs, nodev, nosuid)
-        //guest@[fe80::6]/Music on Mac on /Volumes/Music on Mac (smbfs, nodev)
+        //guest@[fe80::6%25en6]/Vault on /Volumes/Vault (smbfs, nodev, nosuid, mounted by someone)
+        //guest@192.0.2.4/Backup on /Volumes/Backup (smbfs, nodev, nosuid)
+        //guest@[fe80::6]/Scratch on Mac on /Volumes/Scratch on Mac (smbfs, nodev)
         """
 
     @Test("A share reached down the port's own link is found by its scope")
     func findsAVolumeByScope() {
         let volumes = MountedVolumes.parse(Self.mountOutput, ports: [Fixtures.port])
-        #expect(volumes.map(\.name) == ["Vault", "Music on Mac"])
+        #expect(volumes.map(\.name) == ["Vault", "Scratch on Mac"])
         #expect(volumes[0].mountPoint == "/Volumes/Vault")
         #expect(volumes[0].portBSDName == "en6")
     }

@@ -262,14 +262,14 @@ let linkedManaged = snapshot(
     port("en6", "Back, left middle", link: .macLinked), configuration: .readyForRDMA(serviceID: "MINE"),
     baseline: ownNote)
 var addressed = linkedManaged
-addressed.port.linkLocal = ["fe80::1c3d:5aff:fe22:9b04"]
+addressed.port.linkLocal = ["fe80::a2d1:73b4:9e0c:5f16"]
 check(OtherMacReport(ports: [plain, outside]).subjectID == nil, "a Mac with no ready port has no subject")
 check(OtherMacReport(ports: [plain, outside]).address == nil
       && !OtherMacReport(ports: [plain, outside]).answered, "and no address, and nothing has answered")
 check(OtherMacReport(ports: [outside, managed]).subjectID == "en6",
       "a port set up outside RDMALink is never the subject; RDMALink's own is")
 check(OtherMacReport(ports: [managed, addressed]).subjectID == "en6"
-      && OtherMacReport(ports: [managed, addressed]).address == "fe80::1c3d:5aff:fe22:9b04%en6",
+      && OtherMacReport(ports: [managed, addressed]).address == "fe80::a2d1:73b4:9e0c:5f16%en6",
       "the first ready port with an address is the subject, and step 4 names it whole")
 check(OtherMacReport(ports: [managed]).address == nil, "a ready port with no address yet has none to name")
 check(OtherMacReport(ports: [adopted]).subjectID == "en7", "an adopted port is RDMALink's to hand out")
@@ -338,7 +338,7 @@ check(StageCalloutText(presentation: returnedRow, showsTechnicalNames: false).de
       == "Back in the bridge · Nothing plugged in · In the Thunderbolt Bridge",
       "the returned row's three phrases come through with their middle dots")
 check(StageCalloutText(presentation: PortRowPresentation(snapshot: addressed), showsTechnicalNames: false).detail
-      == "Ready for RDMA · fe80::1c3d:5aff:fe22:9b04%en6", "the address goes on the end as the row draws it")
+      == "Ready for RDMA · fe80::a2d1:73b4:9e0c:5f16%en6", "the address goes on the end as the row draws it")
 let usb = snapshot(port("", "Front, right", isThunderbolt: false), configuration: nil)
 let usbCallout = StageCalloutText(presentation: PortRowPresentation(snapshot: usb), showsTechnicalNames: true)
 check(usbCallout.title == "Front, right" && usbCallout.detail == "USB only — this one isn't Thunderbolt",

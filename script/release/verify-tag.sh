@@ -2,9 +2,9 @@
 # Verifies that a release tag is an annotated tag signed by an approved key.
 #
 # Copied from dev7a/lnpctl tools/release/verify-tag.sh, with the GnuPG binary
-# resolved rather than taken from PATH: this Mac's PATH leads to MacGPG 2.2,
-# which cannot read a modern (ed25519, keybox) public key, while the runner
-# has only `gpg`.
+# resolved rather than taken from PATH. An older gpg on PATH may not be able to
+# read a modern (ed25519, keybox) public key at all, so the candidates below are
+# tried in order and GPG_PROGRAM overrides them; on a runner, plain `gpg` is it.
 #
 # usage: verify-tag.sh <tag> <approved-public-keys.asc>
 set -euo pipefail

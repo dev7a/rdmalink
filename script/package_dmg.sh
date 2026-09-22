@@ -45,7 +45,10 @@ DIST_DIR="$ROOT_DIR/dist"
 DERIVED_DATA="$ROOT_DIR/build/DerivedData-package"
 TEAM_ID=BV5XC39R5P
 BUNDLE_IDENTIFIER=com.dev7a.RDMALink
-NOTARY_PROFILE=rotorfs
+# A notarytool Keychain profile created once with
+# `xcrun notarytool store-credentials rdmalink …`; the GitHub release path
+# authenticates with the App Store Connect API key instead and never reads it.
+NOTARY_PROFILE="${NOTARY_PROFILE:-rdmalink}"
 WORK_DIR="$(/usr/bin/mktemp -d /private/tmp/rdmalink-dmg.XXXXXX)"
 ARCHIVE_PATH="$WORK_DIR/RDMALink.xcarchive"
 EXPORT_PATH="$WORK_DIR/export"

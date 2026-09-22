@@ -3,11 +3,10 @@ import RDMALinkCore
 
 // The command-line companion: read-only diagnostics.
 //
-// Since ML3 the app is the only thing that writes. Every subcommand here reads
-// this Mac and prints — the inventory, the refusals, the change log, or an
-// operation's preview — and stops there. Nothing in this tool opens an
-// authorized session, changes the network configuration, writes a note, or
-// changes NVRAM.
+// The app is the only thing that writes. Every subcommand here reads this Mac
+// and prints — the inventory, the refusals, the change log, or an operation's
+// preview — and stops there. Nothing in this tool opens an authorized session,
+// changes the network configuration, writes a note, or changes NVRAM.
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 /// Everything that is not a flag: the subcommand, then its arguments.
@@ -504,8 +503,8 @@ func printUsage() {
     print("""
     rdmalink \(RDMALinkCore.version) — read-only diagnostics for RDMALink
 
-    This tool only reads. Since ML3 the app is the only thing that changes this
-    Mac: nothing here asks for a password, edits the network configuration, or
+    This tool only reads. The app is the only thing that changes this Mac:
+    nothing here asks for a password, edits the network configuration, or
     writes a note.
 
       inventory      this Mac, its RDMA switch, and every Thunderbolt port

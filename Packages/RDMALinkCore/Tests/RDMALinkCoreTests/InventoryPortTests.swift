@@ -159,12 +159,12 @@ struct InventoryPortTests {
                 .init(name: "bridge0", displayName: "Thunderbolt Bridge", isUp: true),
                 .init(name: "bridge4", isUp: false),
             ],
-            linkLocal: ["fe80::1c3d:5aff:fe22:9b04"]
+            linkLocal: ["fe80::a2d1:73b4:9e0c:5f16"]
         )
         #expect(port.bridges.map(\.name) == ["bridge0", "bridge4"])
         #expect(port.bridges.map(\.displayName) == ["Thunderbolt Bridge", nil])
         #expect(port.bridges.map(\.isUp) == [true, false])
-        #expect(port.linkLocal == ["fe80::1c3d:5aff:fe22:9b04"])
+        #expect(port.linkLocal == ["fe80::a2d1:73b4:9e0c:5f16"])
         #expect(port.link == .macLinked)
         #expect(port.positionName == "Front, right")
 
@@ -174,21 +174,22 @@ struct InventoryPortTests {
     }
 }
 
-/// The Thunderbolt domain identities behind R2, as `ioreg` printed them on the
-/// rig on 2026-09-20 (Mac Studio M3 Ultra, macOS 27.2): six local nodes, one
-/// per receptacle, and two cross-domain links — both to the MacBook Pro
-/// (`Mac17,7`) on the front ports. Docks and empty receptacles have no link.
+/// The Thunderbolt domain identities behind R2. These UUIDs are made up — no
+/// Mac ever published them — but they are arranged the way `ioreg` reports a
+/// six-port Mac: six local nodes, one per receptacle, and two cross-domain
+/// links to a notebook on the front ports. Docks and empty receptacles have
+/// no link.
 @Suite("Thunderbolt domain identity")
 struct DomainIdentityTests {
-    private static let acio0 = "25FABFC5-ADB1-4CFF-8F2C-B0DDB355D95E"
-    private static let acio1 = "E9444509-1D36-41AA-89C5-D898E7747649"
-    private static let acio2 = "177E0353-6447-4F22-AB8B-276E12B7E3B9"
-    private static let acio3 = "8FE237A7-666F-4AF5-A6C1-B63C1B260260"
-    private static let acio4 = "54719E74-925A-4EED-A4CD-766B620335E0"
-    private static let acio5 = "F09EA43C-9CF8-4ABC-8952-C32AB6983451"
-    /// The MacBook's two controllers, as this Mac's XDomain links report them.
-    private static let macBookOnEn6 = "537F4213-9E40-4E35-A37A-762A2ACCA158"
-    private static let macBookOnEn7 = "C353FA51-755F-4DEE-9A09-27C2ED2ACEA2"
+    private static let acio0 = "11111111-0000-4000-8000-000000000000"
+    private static let acio1 = "22222222-0000-4000-8000-000000000001"
+    private static let acio2 = "33333333-0000-4000-8000-000000000002"
+    private static let acio3 = "44444444-0000-4000-8000-000000000003"
+    private static let acio4 = "55555555-0000-4000-8000-000000000004"
+    private static let acio5 = "66666666-0000-4000-8000-000000000005"
+    /// The notebook's two controllers, as this Mac's XDomain links report them.
+    private static let macBookOnEn6 = "AAAAAAAA-0000-4000-8000-00000000000A"
+    private static let macBookOnEn7 = "BBBBBBBB-0000-4000-8000-00000000000B"
 
     private static let rig: [PortInventory.PortRow] = [
         .init(receptacle: 1, bsdName: "en2", linkStatus: 1, domainUUID: acio0),
@@ -218,7 +219,7 @@ struct DomainIdentityTests {
         #expect(PortInventory.domainUUID(" \(Self.acio4)\n") == Self.acio4)
         #expect(PortInventory.domainUUID("") == nil)
         #expect(PortInventory.domainUUID("Mac17,7") == nil)
-        #expect(PortInventory.domainUUID("54719E74-925A-4EED-A4CD") == nil)
+        #expect(PortInventory.domainUUID("55555555-0000-4000-8000") == nil)
     }
 
     @Test("Two cables to another Mac are not a loop")

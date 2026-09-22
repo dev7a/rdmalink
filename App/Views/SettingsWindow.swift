@@ -12,10 +12,6 @@ import RDMALinkCore
 
 struct SettingsWindow: View {
     @AppStorage(AppSettings.showTechnicalNames) private var showsTechnicalNames = false
-    /// Off until the check exists. §S12's help text says "RDMALink checks the
-    /// release page now and then", and shipping it on would be the app saying
-    /// so in its own voice about something it does not do (§1.3 rule 10).
-    @AppStorage(AppSettings.checksForUpdates) private var checksForUpdates = false
 
     /// Whether any undo note exists, which decides `Reveal Notes in Finder`.
     /// Read when the window appears rather than watched: notes are written by
@@ -23,11 +19,9 @@ struct SettingsWindow: View {
     @State private var hasNotes = false
     @State private var saveFailure: String?
 
-    // §S12's `Check for Updates Now` is not built here. ML3 owns the
-    // release-page check, §S12's States list names exactly one disabled
-    // control (`Reveal Notes in Finder`), and §1.3 rule 5 is why a permanently
-    // unavailable button with a sentence the spec never wrote is worse than an
-    // absent one. **Owed:** the button, with the ML3 check behind it.
+    // There is no update check and no control for one (§S12): the app never
+    // contacts anything, and a toggle that claimed to would be a promise it
+    // does not keep (§1.3 rule 10).
 
     var body: some View {
         Form {
@@ -36,11 +30,6 @@ struct SettingsWindow: View {
                     title: "Show technical names",
                     help: "Adds names like en6 and the exact service names next to each port. The link address always shows in full, because tools need every character of it. Nothing is ever written on the picture of your Mac.",
                     isOn: $showsTechnicalNames
-                )
-                SettingsToggle(
-                    title: "Check for updates automatically",
-                    help: "RDMALink checks the release page now and then. It never sends anything about your Mac.",
-                    isOn: $checksForUpdates
                 )
             }
             Section {

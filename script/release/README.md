@@ -20,6 +20,12 @@ This file is the operator's side.
 
 All three tests run in `script/test.sh` and need no network.
 
+`script/package_dmg.sh --notarize` run by hand needs a notarytool Keychain
+profile, created once with `xcrun notarytool store-credentials rdmalink
+--apple-id <id> --team-id BV5XC39R5P`; `NOTARY_PROFILE` overrides the name.
+The GitHub release path never reads it — it authenticates with the App Store
+Connect API key from the `release` environment instead.
+
 These are modelled on [dev7a/lnpctl](https://github.com/dev7a/lnpctl)'s
 `tools/release/`, which has run this shape of release before.
 
@@ -38,10 +44,11 @@ this file from `refs/remotes/origin/main`, so a tag cannot approve itself.
 
 1. Bump `CFBundleShortVersionString` (and `CFBundleVersion`) in
    `App/Info.plist` on `main`, and land it.
-2. Sign a tag on that commit:
-   `git -c gpg.program=/opt/homebrew/bin/gpg tag -s v<version> -m "RDMALink <version>"`.
-   The tag must be annotated, signed by a key in `trusted-signers.asc`, and
-   named exactly `v` plus the plist's version.
+2. Sign a tag on that commit: `git tag -s vX.Y.Z -m "RDMALink X.Y.Z"`. The tag
+   must be annotated, signed by a key in `trusted-signers.asc`, and named
+   exactly `v` plus the plist's version. (If the default `gpg` on your PATH
+   cannot sign with that key, pass the one that can for this command only:
+   `git -c gpg.program=/path/to/gpg tag -s …`.)
 3. Push the tag: `git push origin v<version>`.
 4. Watch the run. `preflight` proves the tag, `notarize` builds and submits to
    Apple (the long job), `publish` uploads to a draft and undrafts it.
