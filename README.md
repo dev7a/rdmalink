@@ -63,7 +63,15 @@ Download `RDMALink-<version>.dmg` from the
 RDMALink to Applications. The app is signed with a Developer ID and notarized,
 so macOS opens it without any override.
 
-Coming: `brew install --cask dev7a/tap/rdmalink`.
+Or with Homebrew, from the [dev7a tap](https://github.com/dev7a/homebrew-tap):
+
+```sh
+brew install --cask dev7a/tap/rdmalink
+```
+
+The cask downloads the same release image, checks its pinned SHA-256 and puts
+RDMALink in Applications. `brew upgrade --cask dev7a/tap/rdmalink` follows new
+releases; uninstalling the cask removes the app and keeps the undo notes.
 
 ### Checking what you downloaded
 
