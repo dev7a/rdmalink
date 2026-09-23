@@ -173,7 +173,7 @@ No display face, no letterspacing, no all-caps, no custom fonts. All text uses s
 
 No custom glyphs. **No Thunderbolt trade-dress mark anywhere**, in the UI or on the model.
 
-**The app icon.** One drawing, in the stage's own language: on a full-bleed graphite gradient (the stage's dark background, a little lighter at the top), a single Thunderbolt receptacle slot centred at about a third of the icon's width, drawn as the model draws it — a rounded slot with a darker interior — wearing the solid accent ring of a port that is ready, with a generous soft glow around the ring. Nothing else: no cable or thread, no bolt, no Thunderbolt mark, no text, no Mac silhouette. The artwork is a plain square; the system applies the icon's shape and finish, so nothing is pre-rounded. It has to read at 16 pt as a ring around a slot, which is why the slot is large and alone.
+**The app icon.** An Icon Composer icon (`App/AppIcon.icon`), so macOS renders it in Liquid Glass like its own and makes the dark, tinted and clear appearances itself; a flat pre-rendered picture looks like a sticker beside them. Two layers. The background is a light aluminium-silver fill, lighter at the top, in the family of Apple's own utilities. The foreground is one object: a single Thunderbolt receptacle drawn large, about 60 % of the canvas wide, as clean vector shapes — the rounded slot with its dark interior, and the accent ring of a port that is ready. No painted glow, shadow or highlight: the system's glass supplies those. Nothing else: no cable, bolt, Thunderbolt mark, text or Mac silhouette. It has to read at 16 pt as a blue ring around a dark slot on silver.
 
 ### 3.4 3D materials and lighting
 
