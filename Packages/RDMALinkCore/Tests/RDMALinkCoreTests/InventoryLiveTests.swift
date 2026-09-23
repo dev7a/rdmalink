@@ -89,12 +89,25 @@ struct InventoryLiveTests {
     func watcherStopsOnCancellation() async {
         let names = (try? PortInventory.readRows().map(\.bsdName)) ?? []
         let watcher = LinkWatcher(bsdNames: names, pollInterval: .milliseconds(20))
+        // The claim under test is that cancelling the consumer finishes the
+        // stream — not that a tick lands inside a fixed wait. On a loaded
+        // GitHub runner the consuming task was not scheduled within 120 ms
+        // and the old fixed sleep saw zero ticks, so the test waits for the
+        // first wake-up and only then cancels; the time limit above is the
+        // guard against a watcher that never ticks at all.
+        let (firstTick, seen) = AsyncStream<Void>.makeStream()
         let task = Task {
             var ticks = 0
-            for await _ in watcher.changes() { ticks += 1 }
+            for await _ in watcher.changes() {
+                ticks += 1
+                if ticks == 1 {
+                    seen.yield()
+                    seen.finish()
+                }
+            }
             return ticks
         }
-        try? await Task.sleep(for: .milliseconds(120))
+        for await _ in firstTick { break }
         task.cancel()
         let ticks = await task.value
         print("watcher saw \(ticks) wake-ups before cancellation")
