@@ -185,7 +185,7 @@ made up; they are not the rig's.
 ```
 RDMALink.xcodeproj        the app (App/) linking the local package
 App/                      SwiftUI app: window, stage, assistant column
-  Assets.xcassets/        the app icon, generated (see "App icon")
+  AppIcon.icon/           the app icon, for Icon Composer (see "App icon")
 Packages/RDMALinkCore/    everything shared with the CLI and tests
   Sources/RDMALinkCore/
     Inventory/            hardware model, ports, positions, live watcher
@@ -198,75 +198,70 @@ Packages/RDMALinkCore/    everything shared with the CLI and tests
   Sources/rdmalink/       command-line companion: read-only diagnostics
   Tests/RDMALinkCoreTests Swift Testing
 docs/                     spec, this file, prototype
-script/                   test.sh, the icon renderer, build and packaging
+script/                   test.sh, build and packaging
 ```
 
 ## App icon
 
-The icon is drawn, not painted. `script/render_app_icon.swift` writes every
-PNG in `App/Assets.xcassets/AppIcon.appiconset` and that set's
-`Contents.json`, so the catalogue has one source and cannot drift:
+The icon is an Icon Composer document, `App/AppIcon.icon`, drawn to UX_SPEC
+§3.3: one ready Thunderbolt receptacle on light aluminium silver. macOS
+renders it in Liquid Glass and makes the dark, tinted and clear appearances
+itself, so the document holds the light appearance only. It is a folder of
+two text files, and they are the whole source:
+
+- `icon.json`, the background and the glass. The background is a linear
+  gradient from Display P3 0.94/0.94/0.95 at the top to 0.76/0.77/0.79 at the
+  bottom. One group holds the one foreground layer, with Icon Composer's
+  neutral shadow at 50 % and translucency at 30 %; glass and the specular
+  highlight are left at their defaults, which are on. There are no
+  appearance specializations.
+- `Assets/Receptacle.svg`, the foreground on the 1024-point canvas: two
+  shapes and nothing painted. The ring is a stadium stroked 80 pt wide in
+  `#0088FF`, `NSColor.systemBlue` in Aqua on macOS 27, the default accent;
+  the icon never follows the user's accent. Inside it, 48 pt clear of the
+  ring, is the slot: 352 × 128 pt with a 62 pt corner radius, within 2 % of
+  the proportions of `FeatureKind.thunderbolt.opening`, filled near-black
+  (`#0C0C0E`) with an 8 pt rim of aluminium grey (`#8E8E93`). The ring's
+  outer edge is 608 pt wide in the SVG, and the layer is placed at 117 %
+  scale in `icon.json`, so it spans about 70 % of the canvas. There is no glow,
+  shadow or highlight in the SVG: the glass supplies the specular edge and
+  the shadow under the object. No cable, bolt, mark or text.
+
+The vertical numbers are set for 16 pt. At 16 px one pixel is 64 pt of the
+canvas, so the slot is two pixels tall and the ring's outer edge falls on a
+pixel boundary three pixels from the centre. ictool's 16 px rendering is six
+rows through the middle: ring, gap, slot, slot, gap, ring, measured as
+`#0AA2FF`, a blue-grey gap, `#1F1F21` and `#272729`. At 32 px, 16 pt on a
+Retina display, the slot is two rows of `#1C1C1E` and `#202022` inside its
+grey rim.
+
+To change it, edit the SVG or `icon.json` by hand, or open the document in
+Icon Composer, which ships inside Xcode at
+`Xcode.app/Contents/Applications/Icon Composer.app`. To preview a change from
+the command line, use the `ictool` inside Icon Composer. `xcrun ictool`
+resolves to a different tool in `Developer/usr/bin` that rejects
+`--export-image`.
 
 ```sh
-swift script/render_app_icon.swift App/Assets.xcassets/AppIcon.appiconset
+ICTOOL="/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool"
+"$ICTOOL" App/AppIcon.icon --export-image --output-file /tmp/icon.png \
+  --platform macOS --rendition Default --width 512 --height 512 --scale 1
 ```
 
-It draws UX_SPEC §3.3: one ready Thunderbolt receptacle, head-on, on the
-stage's graphite, in the stage's own numbers. The square is a full-bleed
-gradient from the stage's dark background (30 of 255) at the bottom to its
-lift (47) at the top. In the middle sits one slot a little over a third of
-the square wide, with the two ratios of `FeatureKind.thunderbolt.opening`, so
-it is the hole the model cuts and not a lozenge. Its interior is the darkest
-thing in the drawing, a shallow ramp that is darkest at the top where the
-overhang shadows it, and its edge is a thin rim of aluminium, dim at the top
-and lit at the bottom. Around it runs the solid accent ring of a ready port,
-the `.ready` track `StageSceneBuilder.makeReceptacle` puts around that
-opening. The ring is drawn in the system's default blue, brightened one step
-as the stage brightens it in dark mode. It is never the user's accent colour.
-Nothing else is in the drawing: no cable or thread, no bolt, no mark, no
-text.
+`--rendition` takes `Default`, `Dark`, `ClearLight`, `ClearDark`,
+`TintedLight` or `TintedDark`. The PNG is full bleed, with no margin, and
+tagged Display P3, so a viewer that ignores the profile shows the blue
+washed out.
 
-The ring glows. Its light is two shadow passes drawn under the ring's final
-stroke. A tight halo (blur a third of the slot's width, 90 % opacity) makes
-the ring itself read as lit. A wide bloom (blur a little over a slot-width,
-40 %) lifts the graphite around it, as §4.3's bloom does behind a ready
-receptacle on the stage. Each pass is cast by the ring stroked wider than
-itself, two and a half times for the halo and three times for the bloom. A
-wider blur alone spreads the same light thinner, and a shadow cannot be more
-than opaque, so the thicker source is what makes the ring shine onto the
-graphite rather than just having a blue edge. That wide stroke is drawn two
-canvases off to the right, and the shadow's offset throws only its light back
-onto the icon, so the stroke never shows as a band of its own. Each pass is
-drawn once and never stacked: a stacked wide blur shows CoreGraphics' banding
-as a darker ring in the falloff.
-
-The geometry is written down as fractions of the square and of the slot (see
-`Art`), and the tones are the stage's own, resolved once and written down
-rather than read from the running Mac. Nothing is downloaded and nothing is
-traced: the script is CoreGraphics and ImageIO only, and it reads no colour
-from the running Mac, because the user's accent colour is theirs and must not
-end up baked into a shipped icon.
-
-Every size is drawn at its own pixel count for its own point size rather than
-resampled from the 1024. Below 96 pt the drawing moves toward a compact
-version of itself, which the 16 pt entries (1x and 2x) draw in full. The slot
-opens out to 0.42 of the square, the ring stands further off it and more than
-doubles in thickness, and both glow passes go back to a tight blur cast by
-the ring's own stroke, painted in place. The reason is §3.3's sentence about
-16 pt: the model's ready track is a fifth of a point at that size, and a bloom
-a slot-width wide is a fifth of a 16 px tile, so a ring drawn to the model's
-proportions comes out as a blue smudge. What is left at 16 pt is a solid blue
-ring around a dark slot.
-
-The artwork is a plain opaque square: macOS applies the icon's shape and
-finish, so nothing here is pre-rounded and nothing is transparent. The target
-names the set with `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon` in both
-configurations, and `actool` writes `CFBundleIconFile` and `CFBundleIconName`
-into the built `Info.plist` itself, which is why `App/Info.plist` names no
-icon. The built bundle carries `Contents/Resources/Assets.car` with all ten
-sizes, plus the compatibility `AppIcon.icns` Xcode generates beside it — that
-one is a subset by design (16, 32, 128 and 256 px), and the system reads the
-catalogue, verified with `assetutil --info`.
+The target names the icon with `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`
+in both configurations, and the synchronized `App/` group puts the document
+in the target, so nothing in the project file names it. `actool` compiles it
+into `Contents/Resources/Assets.car`, which holds the layer as a vector, an
+icon stack for the light, dark and tintable appearances, and flattened PNG
+fallbacks from 32 to 1024 px (see `assetutil --info`). It also writes the
+compatibility `AppIcon.icns` (16 and 128 pt at 1x and 2x) and both
+`CFBundleIconFile` and `CFBundleIconName` into the built `Info.plist`, which
+is why `App/Info.plist` names no icon.
 
 ## Packaging
 
