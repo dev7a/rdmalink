@@ -96,7 +96,7 @@ both the app and the image, and the Xcode version that built it.
 
 Bugs, port layouts RDMALink does not recognize, and anything it got wrong about
 your Mac: [GitHub Issues](https://github.com/dev7a/rdmalink/issues). The app's
-Help menu has **Save a Diagnostics File…**, which writes a plain text file with
+Help menu has **Save Diagnostics File…**, which writes a plain text file with
 what RDMALink can see on this Mac and what it changed — that file is the single
 most useful thing to attach.
 

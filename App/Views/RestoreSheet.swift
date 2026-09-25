@@ -58,6 +58,10 @@ struct RestoreSheet: View {
         .padding(24)
         .frame(width: 500, alignment: .leading)
         .animation(.smooth(duration: 0.18), value: hub.run)
+        // A sheet closes on Escape by itself (§2.6) — except while the
+        // checklist runs, when that would be a cancel the app cannot honor
+        // (§S6): the burst carries on and its answer would land on nothing.
+        .interactiveDismissDisabled(hub.run?.isRunning == true)
         .onDisappear { hub.sheetDismissed() }
     }
 
@@ -177,7 +181,8 @@ struct RestoreSheet: View {
             tint: RestoreRefusals.isAttention(refusal.code) ? .attention : .secondary,
             headline: LocalizedStringResource(core: refusal.headline),
             message: LocalizedStringResource(core: refusal.body),
-            extraMessage: refusal.detail.map { LocalizedStringResource(core: $0) }
+            extraMessage: refusal.detail.map { LocalizedStringResource(core: $0) },
+            buttonRowAlignment: .trailing
         ) {
             buttons(RestoreRefusals.actions(for: refusal.code), plan: plan, refusal: refusal)
         }
@@ -195,31 +200,37 @@ struct RestoreSheet: View {
                 .font(.body)
                 .foregroundStyle(.secondary)
             HStack(spacing: 10) {
+                Spacer(minLength: 0)
                 CopyDetailsButton { model.diagnosticsText(failingStep: "reading this Mac") }
                 Button(RestoreAction.cancel.title) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
             }
         }
     }
 
     // MARK: - Buttons
 
+    /// The full width is offered to the row, so it only breaks when it has
+    /// to (`SheetButtonRow`).
     private func buttonRow(
         _ actions: [RestoreAction], plan: RestorePlan, refusal: Refusal?
     ) -> some View {
-        HStack(spacing: 10) {
-            Spacer(minLength: 0)
-            buttons(actions, plan: plan, refusal: refusal)
-        }
+        buttons(actions, plan: plan, refusal: refusal)
+            .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     /// The last action is the default, which is where AppKit puts it and where
-    /// every other sheet in this app puts it.
-    @ViewBuilder
+    /// every other sheet in this app puts it — unless it is the way out or
+    /// removes something unasked (`RestoreAction.defaultAction(in:)`, §2.6).
+    /// The way out is Escape's wherever it sits in the row.
     private func buttons(
         _ actions: [RestoreAction], plan: RestorePlan, refusal: Refusal?
     ) -> some View {
-        ForEach(actions) { action in
-            button(action, isDefault: action == actions.last, plan: plan, refusal: refusal)
+        let defaultAction = RestoreAction.defaultAction(in: actions)
+        return SheetButtonRow {
+            ForEach(actions) { action in
+                button(action, isDefault: action == defaultAction, plan: plan, refusal: refusal)
+            }
         }
     }
 
@@ -239,6 +250,9 @@ struct RestoreSheet: View {
                 Button(action.title) { perform(action, plan: plan) }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
+            } else if action.isCancel {
+                Button(action.title) { perform(action, plan: plan) }
+                    .keyboardShortcut(.cancelAction)
             } else {
                 Button(action.title) { perform(action, plan: plan) }
             }
@@ -268,7 +282,7 @@ struct RestoreSheet: View {
         case .setItUpAgain:
             if let port = plan.port { hub.perform(.setItUpAgain(portID: port.id)) }
             dismiss()
-        case .removeMyServiceOnly:
+        case .removeServiceOnly:
             running = plan
             runServiceOnly(plan)
         case .copyDetails, .copyTheseSteps:
@@ -280,7 +294,7 @@ struct RestoreSheet: View {
 
     /// Every call below is an RDMALinkCore operation type, performed in one
     /// burst inside the credential window `OperationHost` opens (§2.6: the
-    /// macOS authorization dialog is the one sheet this app does not draw).
+    /// macOS authorization dialog is a sheet the system draws, not this app).
     /// The checklist advances from the operation's own progress reports.
     private func run(_ plan: RestorePlan) {
         guard let environment = hub.environment else { return }
@@ -352,7 +366,7 @@ struct RestoreSheet: View {
         }
     }
 
-    /// R21's `Remove My Service Only`: RDMALink deletes the service it made —
+    /// R21's `Remove Service Only`: RDMALink deletes the service it made —
     /// "that part is squarely its own" — and keeps the note, because the
     /// bridge it came from is somebody else's to rebuild.
     private func runServiceOnly(_ plan: RestorePlan) {
@@ -371,6 +385,57 @@ struct RestoreSheet: View {
                 headline: nil,
                 body: LocalizedStringResource(core: RestorePort.serviceOnlyConfirmation))
         }
+    }
+}
+
+/// §2.6's sheet button row: trailing, on one line when it fits. When it does
+/// not, the last two buttons, the default's place among them, keep the
+/// bottom line and the rest sit on the line above, trailing too, so no title
+/// is truncated. R19's and R20's four buttons ask
+/// for about 480–570 pt and the sheet has 452 inside its margins; squeezed
+/// into one line they came out as `Open Network S…`.
+private struct SheetButtonRow: Layout {
+    private let spacing: CGFloat = 10
+    private let lineSpacing: CGFloat = 8
+
+    func sizeThatFits(
+        proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) -> CGSize {
+        let lines = lines(of: subviews, within: proposal.width)
+        let heights = lines.map { height(of: $0) }
+        return CGSize(
+            width: lines.map { width(of: $0) }.max() ?? 0,
+            height: heights.reduce(0, +) + lineSpacing * CGFloat(max(heights.count - 1, 0)))
+    }
+
+    func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        var y = bounds.minY
+        for line in lines(of: subviews, within: proposal.width) {
+            var x = bounds.maxX - width(of: line)
+            for subview in line {
+                let size = subview.sizeThatFits(.unspecified)
+                subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += height(of: line) + lineSpacing
+        }
+    }
+
+    private func lines(of subviews: Subviews, within width: CGFloat?) -> [[LayoutSubview]] {
+        let all = Array(subviews)
+        guard let width, all.count > 2, self.width(of: all) > width else { return [all] }
+        return [Array(all.dropLast(2)), Array(all.suffix(2))]
+    }
+
+    private func width(of line: [LayoutSubview]) -> CGFloat {
+        line.map { $0.sizeThatFits(.unspecified).width }.reduce(0, +)
+            + spacing * CGFloat(max(line.count - 1, 0))
+    }
+
+    private func height(of line: [LayoutSubview]) -> CGFloat {
+        line.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
     }
 }
 

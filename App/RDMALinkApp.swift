@@ -1,6 +1,4 @@
-import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 import RDMALinkCore
 
 /// Keys shared between the window, the menu bar and Settings.
@@ -40,12 +38,22 @@ struct RDMALinkApp: App {
                 PortCommands()
             }
             CommandGroup(after: .toolbar) {
+                // §2.7: the app's View items follow the system's toolbar
+                // items — `Check Again` ⌘R first, then a divider, then the
+                // stage's items.
+                CheckAgainCommand()
+                Divider()
                 StageViewCommands()
                 Divider()
-                Toggle("Show Technical Names", isOn: $showsTechnicalNames)
-                    .keyboardShortcut("t", modifiers: .command)
+                // §2.7: both switches here are one idiom — an item whose
+                // title says what it will do, never a checkmark. Settings
+                // keeps its own switch for the same preference.
+                Button(showsTechnicalNames ? "Hide Technical Names" : "Show Technical Names") {
+                    showsTechnicalNames.toggle()
+                }
+                .keyboardShortcut("t", modifiers: .command)
                 // §2.7 and §4.8: `Hide Legend`, "which then reads `Show
-                // Legend`" — one item whose title says what it will do.
+                // Legend`".
                 Button(showsLegend ? "Hide Legend" : "Show Legend") { showsLegend.toggle() }
                     .keyboardShortcut("k", modifiers: .command)
                 ChangeLogCommand()
@@ -57,12 +65,17 @@ struct RDMALinkApp: App {
                 // explainer, deliberately, and the second is not duplicated
                 // onto the same sheet. §2.2 makes the toolbar's Help button
                 // open the first item, which is therefore the explainer too.
+                // It carries ⌘? and a divider sets it apart from the rest, as
+                // in every Mac app's Help menu.
                 // **Owed:** a real help destination, and the second item back.
                 Button("RDMALink Help") { show(.whatThisAllMeans) }
+                    .keyboardShortcut("?", modifiers: .command)
+                Divider()
                 // §S8: a screen in the working area, not a sheet, so it is
                 // routed like the change log and not like the item above it.
                 Button("What to Do on the Other Mac") { showOtherMac() }
-                Button("Save a Diagnostics File…") { saveDiagnostics() }
+                // §S12's save, the same one Settings and the change log use.
+                SaveDiagnosticsCommand()
             }
         }
 
@@ -85,20 +98,6 @@ struct RDMALinkApp: App {
     private func showOtherMac() {
         openWindow(id: Self.mainWindowID)
         router.showsOtherMac = true
-    }
-
-    /// §2.7's fourth Help item, on the same payload Settings saves (§6.1
-    /// rule 8: it is the same text `Copy Details` puts on the pasteboard).
-    private func saveDiagnostics() {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = Diagnostics.suggestedFileName()
-        panel.allowedContentTypes = [.plainText]
-        panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        Task {
-            let text = await Task.detached(priority: .userInitiated) { Diagnostics.live() }.value
-            try? text.write(to: url, atomically: true, encoding: .utf8)
-        }
     }
 }
 

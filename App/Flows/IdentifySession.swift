@@ -76,7 +76,7 @@ final class IdentifySession {
     static let ambiguityWindow: Duration = .milliseconds(400)
     /// "Still waiting for it to come back. Take your time."
     static let nudgeAfter = IdentifyClock.nudgeAfter
-    /// "I didn't see anything change."
+    /// "RDMALink didn't see anything change."
     static let timeoutAfter = IdentifyClock.timeoutAfter
 
     private(set) var outcome: Outcome = .watching
@@ -110,18 +110,18 @@ final class IdentifySession {
 
     static let headline: LocalizedStringResource = "Unplug it and plug it back in"
     static let body: LocalizedStringResource =
-        "Take the cable out of the port you want to use, wait a moment, then put it back. I'll watch every port and light up the one that moved."
+        "Take the cable out of the port you want to use, wait a moment, then put it back. RDMALink watches every port and lights up the one that moved."
     static let replugHeadline: LocalizedStringResource = "That's the one"
     static let nudge: LocalizedStringResource =
         "Still waiting for it to come back. Take your time."
     static let ambiguousHeadline: LocalizedStringResource =
         "Two ports changed at the same moment"
     static let ambiguousBody: LocalizedStringResource =
-        "I'd only be guessing which one you meant, and I'd rather not. Let's try again — one cable at a time."
+        "RDMALink would only be guessing which one you meant, and it would rather not. Try again — one cable at a time."
     static let usbHeadline: LocalizedStringResource = "That's a USB port"
-    static let timeoutHeadline: LocalizedStringResource = "I didn't see anything change"
+    static let timeoutHeadline: LocalizedStringResource = "RDMALink didn't see anything change"
     static let timeoutBody: LocalizedStringResource =
-        "Some devices don't announce themselves, and an empty port has nothing to announce. Pick a port from the list instead — or try again with a Mac on the other end."
+        "Some devices don't announce themselves, and an empty port has nothing to announce. Choose a port from the list instead — or try again with a Mac on the other end."
 
     /// §S4b writes the count in words for six, four and three. Any other
     /// machine takes the digit in the same sentence. **Owed from the spec
@@ -156,7 +156,7 @@ final class IdentifySession {
             // the one that actually moved. Without a previous selection there
             // is nothing to contrast, so R3's own body stands in.
             guard let previousPositionName else {
-                return "The front ports on this Mac carry USB, not Thunderbolt. Move the cable to one of the four Thunderbolt ports on the back and I'll follow along."
+                return "The front ports on this Mac carry USB, not Thunderbolt. Move the cable to one of the four Thunderbolt ports on the back and RDMALink will follow along."
             }
             return "\(previousPositionName) isn't it — that's \(port.positionName), and the front ports on this Mac carry USB, not Thunderbolt. Try one of the ports on the back."
         case .timedOut:
@@ -181,7 +181,7 @@ final class IdentifySession {
         case .watching: nil
         case .unplugged, .replugged: .useThisPort
         case .ambiguous, .usbOnly: .identifyAgain
-        case .timedOut: .pickFromTheList
+        case .timedOut: .chooseFromList
         }
     }
 

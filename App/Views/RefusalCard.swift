@@ -25,6 +25,9 @@ struct RefusalCard<Buttons: View>: View {
     let message: LocalizedStringResource
     /// A second paragraph some refusals grow into — R24 after three tries.
     var extraMessage: LocalizedStringResource?
+    /// Leading in the working area. Inside a sheet the card's buttons sit
+    /// bottom-trailing like every other sheet's button row (§2.6).
+    var buttonRowAlignment: Alignment = .leading
     @ViewBuilder var buttons: Buttons
 
     var body: some View {
@@ -49,6 +52,7 @@ struct RefusalCard<Buttons: View>: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 10) { buttons }
+                .frame(maxWidth: .infinity, alignment: buttonRowAlignment)
                 .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

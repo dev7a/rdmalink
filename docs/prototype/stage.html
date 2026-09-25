@@ -74,7 +74,7 @@
   <div class="stage" id="stage">
     <canvas id="c" aria-label="Your Mac. Drag to rotate, click a Thunderbolt port to select it."></canvas>
     <div class="caption">Drag to rotate · scroll to zoom · click a port</div>
-    <div class="narration" id="narration">Let me turn it around</div>
+    <div class="narration" id="narration">Turning the Mac around</div>
     <div class="faces" id="faces" role="group" aria-label="Which side to look at"></div>
     <div class="tools">
       <button id="reset" aria-label="Reset view" title="Reset view">
@@ -86,7 +86,7 @@
     <div class="models" id="models" role="group" aria-label="Which Mac"></div>
     <div>
       <h1 id="title">Which port should carry RDMA?</h1>
-      <p class="lede">Click a port on the model, or pick one from the list. If it's on the other side, I'll turn the Mac around.</p>
+      <p class="lede">Click a port on the model, or pick one from the list. If it's on the other side, RDMALink will turn the Mac around.</p>
     </div>
     <div class="status" id="status"><span class="k">Selected port</span><span class="v">Nothing yet</span><span class="s">Hover a port to see what's in it.</span></div>
     <div id="list"></div>
@@ -433,7 +433,7 @@
     if (selected) { selected.rings.sel.visible = false; selected.rings.bloom.visible = false; rowFor(selected)?.classList.remove('sel'); }
     selected = p; p.rings.sel.visible = true; p.rings.bloom.visible = true; p.rings.hover.visible = false; rowFor(p)?.classList.add('sel');
     const face = p.data.face;
-    if (faceOf(cam.th) !== face) animateTo(thForFace(face, true), cam.ph, cam.r, 'Let me turn it around'); else if (from === 'list') animateTo(thForFace(face, true), cam.ph, cam.r);
+    if (faceOf(cam.th) !== face) animateTo(thForFace(face, true), cam.ph, cam.r, 'Turning the Mac around'); else if (from === 'list') animateTo(thForFace(face, true), cam.ph, cam.r);
     renderStatus(); syncFaces();
   }
 
@@ -474,7 +474,7 @@
   }
   function renderStatus(usbHit) {
     const p = usbHit || hovered || selected;
-    if (usbHit) { statusEl.innerHTML = `<span class="k">That's a USB port</span><span class="v">${p.data.name}</span><span class="s">The front ports on this Mac carry USB, not Thunderbolt. Move the cable to one of the ports on the back and I'll follow along.</span>`; return; }
+    if (usbHit) { statusEl.innerHTML = `<span class="k">That's a USB port</span><span class="v">${p.data.name}</span><span class="s">The front ports on this Mac carry USB, not Thunderbolt. Move the cable to one of the ports on the back and RDMALink will follow along.</span>`; return; }
     if (!p) { statusEl.innerHTML = `<span class="k">Selected port</span><span class="v">Nothing yet</span><span class="s">Hover a port to see what's in it.</span>`; return; }
     const isSel = p === selected;
     const tech = techEl.checked && p.data.bsd ? ` <code style="font-family:var(--mono);font-size:11px;color:var(--ink3)">${p.data.bsd}</code>` : '';
@@ -508,7 +508,7 @@
     const rings = mac.ports.map(p => p.rings.bridge).filter(Boolean); rings.forEach(r => r.visible = false);
     rings.forEach((r, i) => setTimeout(() => { r.visible = true; }, reduceMotion ? 0 : 120 + i * 60));
   }
-  document.getElementById('reset').addEventListener('click', () => animateTo(mac.model.rest.th, mac.model.rest.ph, cam.base * mac.model.rest.r, 'Back to where we started'));
+  document.getElementById('reset').addEventListener('click', () => animateTo(mac.model.rest.th, mac.model.rest.ph, cam.base * mac.model.rest.r));
 
   // keyboard on the stage: arrows move between ports, space selects
   canvas.tabIndex = 0;

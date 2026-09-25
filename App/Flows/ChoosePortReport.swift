@@ -18,7 +18,7 @@ import RDMALinkCore
 /// produces R3's copy. A row that refuses a click without saying anything
 /// would be the dead end §1.3 rule 5 exists to forbid.
 enum ChooseRefusalRoute: Sendable, Equatable {
-    /// USB-only: R3, inline, with `Turn the Mac Around`.
+    /// USB-only: R3, inline, with `Show Thunderbolt Ports`.
     case usbPort
     /// Already a link: the row offers `Restore…` and one line is printed.
     case alreadyReady
@@ -60,7 +60,7 @@ struct ChoosePortReport: Sendable, Equatable {
         self.body =
             hardware?.archetype == .notebook
             ? "Click a port on the model, or pick one from the list. Use the selector below the model to see the other side."
-            : "Click a port on the model, or pick one from the list. If it's on the other side, I'll turn the Mac around."
+            : "Click a port on the model, or pick one from the list. If it's on the other side, RDMALink will turn the Mac around."
 
         let selectablePorts = ports.filter { Self.route(for: $0) == nil }
         self.selectable = Set(selectablePorts.map(\.id))
@@ -70,11 +70,11 @@ struct ChoosePortReport: Sendable, Equatable {
         case 1:
             self.preSelection = [candidates[0].id]
             self.preSelectionLine =
-                "I've picked \(candidates[0].port.positionName) for you, because that's the port with another Mac on the end of it. Choose a different one if you'd rather."
+                "RDMALink has picked \(candidates[0].port.positionName) for you, because that's the port with another Mac on the end of it. Choose a different one if you'd rather."
         case 2:
             self.preSelection = []
             self.preSelectionLine =
-                "Two ports have a Mac on the end. I haven't picked for you — choose the one with the cable you mean."
+                "Two ports have a Mac on the end. RDMALink hasn't picked for you — choose the one with the cable you mean."
         default:
             self.preSelection = []
             self.preSelectionLine = nil

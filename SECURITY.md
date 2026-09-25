@@ -10,7 +10,7 @@ advisory only the maintainer and you can read.
 
 Please include the app version (its `release.json` or the About window), the
 macOS build, and the smallest sequence of steps that shows the problem. A
-diagnostics file — Help → **Save a Diagnostics File…** — is usually the fastest
+diagnostics file — Help → **Save Diagnostics File…** — is usually the fastest
 way to describe the machine.
 
 You should get a reply within a week. If a week passes with no answer, open a

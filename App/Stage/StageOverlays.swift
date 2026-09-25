@@ -11,7 +11,7 @@
 import RDMALinkCore
 import SwiftUI
 
-/// UX_SPEC §2.3: a segmented control inside a `Capsule` of `.regularMaterial`,
+/// UX_SPEC §2.3: a segmented control inside a Liquid Glass capsule,
 /// Maps-style. `Back / Front` on desktops, `Left / Right` on notebooks.
 struct StageFaceSelector: View {
     let faces: [PortFace]
@@ -55,7 +55,7 @@ struct StageFaceSelector: View {
             }
         }
         .padding(3)
-        .stageCapsule(appearance)
+        .stageGlass(appearance)
         .animation(
             appearance.reduceMotion ? nil : .smooth(duration: 0.18), value: unseenChange
         )
@@ -74,7 +74,8 @@ struct StageFaceSelector: View {
     }
 }
 
-/// §2.3: two small borderless buttons, bottom-trailing.
+/// §2.3: two small borderless buttons, bottom-trailing, icons on both, in one
+/// Liquid Glass capsule.
 ///
 /// Their ⌘0 / ⇧⌘0 shortcuts live on the View menu (§2.7), not here, so the
 /// menu stays the one place a shortcut is declared.
@@ -82,7 +83,7 @@ struct StageViewControls: View {
     let fit: () -> Void
     let reset: () -> Void
     /// §3.6 and §8.6 name *both* floating capsules, so this one takes the
-    /// same treatment the face selector and the narration do.
+    /// same treatment the face selector does.
     let appearance: StageAppearance
 
     var body: some View {
@@ -91,14 +92,14 @@ struct StageViewControls: View {
         // `Reset View` read as one four-word label.
         HStack(spacing: 14) {
             Button("Fit", systemImage: "arrow.up.left.and.arrow.down.right", action: fit)
-            Button("Reset View", action: reset)
+            Button("Reset View", systemImage: "arrow.counterclockwise", action: reset)
         }
         .buttonStyle(.borderless)
         .font(.callout)
         .labelStyle(.titleAndIcon)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .stageCapsule(appearance)
+        .stageGlass(appearance)
     }
 }
 
@@ -128,14 +129,33 @@ struct StageNarration: View {
 }
 
 extension View {
-    /// §3.6: both floating capsules become opaque under Reduce Transparency
-    /// and gain a hairline under Increase Contrast.
+    /// §2.3 and §3.1 `material.floating`: the stage's two controls float over
+    /// the render in Liquid Glass, as macOS draws controls over content.
+    /// §3.6: under Reduce Transparency the capsule is opaque instead, and
+    /// under Increase Contrast it gains a hairline.
+    @ViewBuilder
+    func stageGlass(_ appearance: StageAppearance) -> some View {
+        if appearance.reduceTransparency {
+            stageSurface(appearance, shape: .capsule)
+        } else {
+            glassEffect(.regular, in: .capsule)
+                .overlay {
+                    if appearance.increaseContrast {
+                        Capsule().strokeBorder(.secondary, lineWidth: 1)
+                    }
+                }
+        }
+    }
+
+    /// §3.1 `material.label`: the narration capsule floats over the stage but
+    /// is a label, not a control, so it stays on the material.
     func stageCapsule(_ appearance: StageAppearance) -> some View {
         stageSurface(appearance, shape: .capsule)
     }
 
-    /// The same treatment on any shape: §4.8's callout is a small rounded
-    /// rectangle and takes exactly what the capsules take.
+    /// The material on any shape — opaque under Reduce Transparency, with a
+    /// hairline under Increase Contrast (§3.6). §4.8's callout is a small
+    /// rounded rectangle and takes exactly what the narration capsule takes.
     func stageSurface(_ appearance: StageAppearance, shape: some InsettableShape) -> some View {
         background {
             if appearance.reduceTransparency {

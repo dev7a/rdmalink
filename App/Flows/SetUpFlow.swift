@@ -191,9 +191,12 @@ final class SetUpFlow {
 
     // MARK: - The footer
 
-    /// §S4b: `Cancel` leading while Identify is up, `Back` everywhere else.
+    /// §S4b: `Cancel` leading while Identify is up. §2.3 band 4: `Cancel` on
+    /// the picker too, because `goBack()` there leaves the assistant, and
+    /// `Back` moves between steps — it never dismisses. `Back` everywhere
+    /// else, S5 included when the run opened there: it goes to the picker.
     var backTitle: LocalizedStringResource {
-        identify != nil ? WizardAction.cancel.title : WizardAction.back.title
+        identify != nil || step == .choose ? WizardAction.cancel.title : WizardAction.back.title
     }
 
     /// §2.3 band 4. `nil` means the button is gone, not greyed.
@@ -231,10 +234,10 @@ final class SetUpFlow {
         }
     }
 
-    /// §6.1 rule 10: `Back` always remains, so the only ways out of a refusal
-    /// are backwards or fixing the cause. The exceptions are the password
-    /// moment and the burst, which cannot be interrupted, and S7, where there
-    /// is nothing to go back to.
+    /// §6.1 rule 10: `Back` — `Cancel` on the picker — always remains, so the
+    /// only ways out of a refusal are backwards or fixing the cause. The
+    /// exceptions are the password moment and the burst, which cannot be
+    /// interrupted, and S7, where there is nothing to go back to.
     var showsBack: Bool {
         if identify != nil { return true }
         switch step {
@@ -249,7 +252,8 @@ final class SetUpFlow {
         }
     }
 
-    /// Printed in `.callout` `.orange` directly above the footer separator.
+    /// Printed in `.callout` `.primary`, behind the orange attention symbol,
+    /// directly above the footer separator (§2.3 band 4).
     var disabledReason: LocalizedStringResource? {
         step == .review && reviewRefusal == nil ? checks.disabledReason : nil
     }
@@ -322,7 +326,7 @@ final class SetUpFlow {
             switch session.defaultAction {
             case .useThisPort: useIdentifiedPort()
             case .identifyAgain: session.restart()
-            case .pickFromTheList: dismissIdentify()
+            case .chooseFromList: dismissIdentify()
             default: break
             }
             return
@@ -403,6 +407,15 @@ final class SetUpFlow {
         case .choose, .ready:
             break
         }
+    }
+
+    /// §6.2 R16's `Choose Another Port`. On the picker it puts the card away
+    /// and leaves the user choosing, the way clicking a port that works does
+    /// (`select(_:)`) — `goBack()` there would leave the assistant, which is
+    /// `Cancel`'s job (§2.3 band 4). Raised on S5, it is `Back` to the picker.
+    func chooseAnotherPort() {
+        guard step == .choose else { return goBack() }
+        refusal = nil
     }
 
     /// S6 finished: S7 follows about 400 ms after the last checkmark settles.
@@ -591,7 +604,7 @@ final class SetUpFlow {
         select(port.id)
     }
 
-    /// `Pick from the List`.
+    /// `Choose from List`.
     func dismissIdentify() { identify = nil }
 
     // MARK: - R17

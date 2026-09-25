@@ -11,9 +11,10 @@ import Observation
 @MainActor
 @Observable
 final class HubRouter {
-    /// The one sheet the Help menu opens. §2.6 allows exactly five in the
-    /// finished app; Adopt, Restore and Restore All Ports are the hub's own
-    /// (`HubActionsModel.sheet`), and the fifth is the system's dialog.
+    /// The one sheet the Help menu opens, and the fourth of the four §2.6
+    /// lets the app draw; Adopt, Restore and Restore All Ports are the hub's
+    /// own (`HubActionsModel.sheet`). The system draws the rest: the
+    /// authorization dialog, and the diagnostics save panel and alert.
     enum Sheet: String, Sendable, Identifiable {
         case whatThisAllMeans
 

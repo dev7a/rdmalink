@@ -52,8 +52,7 @@ struct WizardChecksGroup: View {
                 Spacer(minLength: 0)
                 if report.unsatisfiedCount > 0 {
                     Button(WizardAction.checkAgain.title) { perform(.checkAgain) }
-                        .buttonStyle(.borderless)
-                        .controlSize(.small)
+                        .inlineAction()
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -84,8 +83,7 @@ struct WizardCheckRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             if let action = row.action {
                 Button(action.wizardAction.title) { perform(action.wizardAction) }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
+                    .inlineAction()
             }
         }
         .padding(.vertical, 7)

@@ -26,7 +26,7 @@ struct WizardReview: View {
     let perform: (WizardAction) -> Void
 
     @AppStorage(AppSettings.showTechnicalNames) private var showsTechnicalNames = false
-    @State private var showsWhatIWontTouch = false
+    @State private var showsWhatRDMALinkWontTouch = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -41,7 +41,7 @@ struct WizardReview: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(.smooth(duration: 0.18), value: showsWhatIWontTouch)
+        .animation(.smooth(duration: 0.18), value: showsWhatRDMALinkWontTouch)
         .animation(.smooth(duration: 0.18), value: showsTechnicalNames)
         // The pointer does not have to move for this screen to go away, so the
         // preview is cleared outright rather than by a row's hover ending.
@@ -69,15 +69,15 @@ struct WizardReview: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            DisclosureGroup(isExpanded: $showsWhatIWontTouch) {
-                Text(SetUpPortsPlan.whatIWontTouch)
+            DisclosureGroup(isExpanded: $showsWhatRDMALinkWontTouch) {
+                Text(SetUpPortsPlan.whatRDMALinkWontTouch)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 4)
             } label: {
-                Text(SetUpPortsPlan.whatIWontTouchLabel).font(.callout)
+                Text(SetUpPortsPlan.whatRDMALinkWontTouchLabel).font(.callout)
             }
             // Bound to the same preference as Settings and the View menu, so
             // turning it on here turns it on everywhere (§1.3 rule 6).

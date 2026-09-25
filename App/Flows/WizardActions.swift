@@ -48,7 +48,7 @@ enum WizardFinder {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    /// R14's `Show the Notes Folder`.
+    /// R14's `Show Notes in Finder`.
     @MainActor
     static func showNotesFolder(_ directory: URL = NotesLocation.store.directory) {
         NSWorkspace.shared.activateFileViewerSelecting([directory])

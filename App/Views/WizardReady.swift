@@ -42,7 +42,6 @@ struct WizardReady: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-                .help(Text(ReadyReport.footnote))
             if let showOtherMac {
                 Button("What to Do on the Other Mac", action: showOtherMac)
             }
@@ -66,8 +65,7 @@ struct WizardAddressBlock: View {
                 Spacer(minLength: 8)
                 if let address = block.address {
                     CopyButton(title: "Copy Address") { address }
-                        .buttonStyle(.borderless)
-                        .controlSize(.small)
+                        .inlineAction()
                 }
             }
             if let address = block.address {
@@ -99,8 +97,7 @@ struct WizardStatusRow: View {
                 Button("Turn It On…") {
                     NSWorkspace.shared.open(WizardSettingsPane.developerTools)
                 }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
+                .inlineAction()
             }
         }
         .padding(.vertical, 7)

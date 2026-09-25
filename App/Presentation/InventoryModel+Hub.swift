@@ -35,7 +35,7 @@ extension InventoryModel {
         return rows
     }
 
-    /// `Copy Details` and `Save a Diagnostics File…` share this payload
+    /// `Copy Details` and `Save Diagnostics File…` share this payload
     /// (§6.1 rule 8).
     func diagnosticsText(failingStep: String? = nil) -> String {
         Diagnostics.text(

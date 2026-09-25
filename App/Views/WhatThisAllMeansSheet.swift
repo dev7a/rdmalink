@@ -11,7 +11,53 @@ import SwiftUI
 struct WhatThisAllMeansSheet: View {
     @Environment(\.dismiss) private var dismiss
 
+    /// The tallest the reading region grows (§S13, §2.6). A window at §2.1's
+    /// 600 pt minimum loses 52 pt to the unified toolbar the sheet hangs
+    /// beneath, and `Done` with its margin below the scroll takes 48 more:
+    /// 500 pt is what is left, and 480 keeps a little of it spare. The sheet
+    /// measures 528 pt this way; before it scrolled it measured 738, taller
+    /// than §2.1's default 720 pt window, never mind the minimum.
+    private static let readingHeight: CGFloat = 480
+
+    /// Which edges of the reading have more past them. The same fold as the
+    /// column's working area and port list, so every region in the app that
+    /// scrolls reads the same way — an edge fades rather than slicing a line
+    /// of text against the button row.
+    @State private var fold = ScrollFold()
+
     var body: some View {
+        VStack(spacing: 0) {
+            ScrollView(.vertical) {
+                reading
+                    .padding([.horizontal, .top], 24)
+                    .padding(.bottom, 18)
+            }
+            .frame(maxHeight: Self.readingHeight)
+            .onScrollGeometryChange(for: ScrollFold.self) { geometry in
+                ScrollFold(geometry)
+            } action: { _, current in
+                fold = current
+            }
+            .mask { ScrollFoldMask(fold: fold) }
+            .animation(.smooth(duration: 0.18), value: fold)
+            // §2.6: the button row does not scroll.
+            HStack {
+                Spacer(minLength: 0)
+                Button("Done") { dismiss() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding([.horizontal, .bottom], 24)
+        }
+        .frame(width: 560)
+        // §2.6: Escape is the way out. `Done` is the only button and it is
+        // Return's; Escape closes the sheet the way it closes any SwiftUI
+        // sheet on macOS. Nothing here takes it: an `.onExitCommand` only
+        // fires while something in the sheet has focus, and with Keyboard
+        // navigation off (the default) nothing here can.
+    }
+
+    private var reading: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("What this all means")
                 .font(.title2.weight(.semibold))
@@ -39,21 +85,14 @@ struct WhatThisAllMeansSheet: View {
                 .font(.caption)
                 ExplainerSection(
                     title: "That fe80:: address",
-                    detail: "It's a link-local IPv6 address. It only means anything down that one cable, which is exactly what we want — the port is now its own small private network. That's also why IPv4 can be off entirely."
+                    detail: "It's a link-local IPv6 address. It only means anything down that one cable, which is exactly the point — the port is now its own small private network. That's also why IPv4 can be off entirely."
                 )
             }
             Text("You don't need to know any of this to use RDMALink.")
                 .font(.body)
                 .foregroundStyle(.secondary)
-            HStack {
-                Spacer(minLength: 0)
-                Button("Done") { dismiss() }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-            }
         }
-        .padding(24)
-        .frame(width: 560, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -40,6 +40,9 @@ struct AdoptSheet: View {
         .padding(24)
         .frame(width: 500, alignment: .leading)
         .animation(.smooth(duration: 0.18), value: hub.run)
+        // §2.6: Escape closes the sheet, but not while the note is being
+        // written — its answer would land on nothing.
+        .interactiveDismissDisabled(hub.run?.isRunning == true)
         .task {
             // §S9: "Not a match at all (no `Adopt…` button is ever offered)".
             // If one is somehow reached anyway, there is nothing here to say.
@@ -104,6 +107,7 @@ struct AdoptSheet: View {
         HStack(spacing: 10) {
             Spacer(minLength: 0)
             Button("Leave As Is") { dismiss() }
+                .keyboardShortcut(.cancelAction)
             Button("Adopt") { adopt(port) }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
@@ -122,13 +126,14 @@ struct AdoptSheet: View {
                 .padding(.vertical, 8)
                 .padding(.horizontal, 12)
         }
-        Text("I'll keep looking. When it matches, I'll offer to adopt it.")
+        Text("RDMALink keeps looking, and offers to adopt the port the moment it matches.")
             .font(.callout)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
         HStack(spacing: 10) {
             Spacer(minLength: 0)
             Button("Leave As Is") { dismiss() }
+                .keyboardShortcut(.cancelAction)
             CopyButton(title: "Copy These Steps") { String(localized: AdoptFindings.steps(port)) }
             Button("Open Network Settings") {
                 WizardSettingsPane.open(WizardSettingsPane.network)
@@ -158,10 +163,12 @@ struct AdoptSheet: View {
                 tint: RestoreRefusals.isAttention(refusal.code) ? .attention : .secondary,
                 headline: LocalizedStringResource(core: refusal.headline),
                 message: LocalizedStringResource(core: refusal.body),
-                extraMessage: refusal.detail.map { LocalizedStringResource(core: $0) }
+                extraMessage: refusal.detail.map { LocalizedStringResource(core: $0) },
+                buttonRowAlignment: .trailing
             ) {
                 CopyDetailsButton { model.diagnosticsText(failingStep: refusal.code.rawValue) }
                 Button("Leave As Is") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
             }
         case .failed(let details):
             VStack(alignment: .leading, spacing: 8) {
@@ -179,6 +186,7 @@ struct AdoptSheet: View {
                     Spacer(minLength: 0)
                     CopyDetailsButton { model.diagnosticsText(failingStep: "adopting a port") }
                     Button("Leave As Is") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
                 }
             }
         }

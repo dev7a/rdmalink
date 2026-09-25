@@ -17,10 +17,11 @@ import RDMALinkCore
 
 /// One thing the hub offers. Every title is the spec's own.
 enum HubAction: Sendable, Equatable, Identifiable {
-    /// The footer's default button and the Port menu's ⌘N. The port is the one
-    /// already selected, when there is one.
-    case setUpAPort(portID: String?)
-    case identifyAPort(portID: String?)
+    /// The footer's default button and the Port menu's ⌘N, where the port is
+    /// the one already selected, when there is one — and a row's `Set Up…`,
+    /// which names its own (§S1).
+    case setUpPort(portID: String?)
+    case identifyPort(portID: String?)
     case adopt(portID: String)
     case restore(portID: String)
     case returnToBridge(portID: String)
@@ -37,8 +38,8 @@ enum HubAction: Sendable, Equatable, Identifiable {
 
     var id: String {
         switch self {
-        case .setUpAPort(let port): "setUp:\(port ?? "")"
-        case .identifyAPort(let port): "identify:\(port ?? "")"
+        case .setUpPort(let port): "setUp:\(port ?? "")"
+        case .identifyPort(let port): "identify:\(port ?? "")"
         case .adopt(let port): "adopt:\(port)"
         case .restore(let port): "restore:\(port)"
         case .returnToBridge(let port): "return:\(port)"
@@ -54,13 +55,13 @@ enum HubAction: Sendable, Equatable, Identifiable {
 
     /// The button's words, verbatim from §S1, §S10 and §S11.
     ///
-    /// `Set Up a Port…` has a second form once a port is ready — the footer
+    /// `Set Up Port…` has a second form once a port is ready — the footer
     /// picks between them, because only the footer knows (§S1's primary
     /// action); the Port menu's item is always the first form.
     var title: LocalizedStringResource {
         switch self {
-        case .setUpAPort: "Set Up a Port…"
-        case .identifyAPort: "Identify a Port…"
+        case .setUpPort: "Set Up Port…"
+        case .identifyPort: "Identify Port…"
         case .adopt: "Adopt…"
         case .restore: "Restore…"
         case .returnToBridge: "Return to Bridge…"
@@ -73,10 +74,34 @@ enum HubAction: Sendable, Equatable, Identifiable {
         case .forgetThisNote: "Forget This Note"
         }
     }
+
+    /// The words on a port row's trailing button (§S1 "Copy — buttons"). The
+    /// row already names the port, so `Set Up Port…` is `Set Up…` there; the
+    /// footer and the Port menu keep `title`. Every other action reads the
+    /// same on a row as anywhere else.
+    var rowTitle: LocalizedStringResource {
+        switch self {
+        case .setUpPort: "Set Up…"
+        default: title
+        }
+    }
+
+    /// A way into the set-up assistant (S4–S7): the footer's and the Port
+    /// menu's `Set Up Port…`, a row's `Set Up…`, and `Set It Up Again`.
+    /// §S1 offers every one of them on the footer's terms
+    /// (`HubFooterModel.offers(_:)`), and §S4 gives none of them to a row on
+    /// the picker, where the run is already under way.
+    var opensSetUp: Bool {
+        switch self {
+        case .setUpPort, .setItUpAgain: true
+        default: false
+        }
+    }
 }
 
 /// §2.6's sheets that belong to this slice: Adopt, Restore and Restore All
-/// Ports. The other two are the system's authorization dialog and S13.
+/// Ports, three of the four the app draws. S13 is the fourth, and the system
+/// draws the authorization dialog and the diagnostics save panel and alert.
 enum HubSheet: Sendable, Equatable, Identifiable {
     case adopt(portID: String)
     case restore(RestoreSubject)
@@ -118,7 +143,8 @@ enum RestoreSubject: Sendable, Equatable, Identifiable {
 }
 
 /// The hub's hand-off to the set-up flow (S4–S7), which is its own slice. The
-/// footer, the Port menu and `Set It Up Again` set this and nothing else.
+/// footer, the Port menu, a row's `Set Up…` and `Set It Up Again` set this
+/// and nothing else.
 struct SetUpRequest: Sendable, Equatable {
     /// The port the user already had in hand, when there was one.
     var portID: String?

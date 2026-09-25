@@ -56,12 +56,12 @@ extension Situation {
 
     static let usbCableTip = Situation(
         id: "usbCableTip",
-        text: "There's a cable in a front port. Those carry USB, not Thunderbolt. Move it to one of the four ports on the back and I'll follow along."
+        text: "There's a cable in a front port. Those carry USB, not Thunderbolt. Move it to one of the four ports on the back and RDMALink will follow along."
     )
 
     static let twoMacsTip = Situation(
         id: "twoMacsTip",
-        text: "Two Macs are connected. Leave just one cable in place while we work — two can send Ethernet traffic around in a loop."
+        text: "Two Macs are connected. Leave just one cable in place while you set up — two can send Ethernet traffic around in a loop."
     )
 }
 
@@ -82,6 +82,27 @@ struct HubFooterModel: Sendable, Equatable {
     /// is not RDMALink's to act on; whether a note *exists* is the hub's live
     /// answer (`HubActionsModel.hasRestorableNote`).
     var offersRestore: Bool
+}
+
+extension HubFooterModel {
+    /// §S1: a row's set-up button — `Set Up…` or `Set It Up Again`, and the
+    /// drift situation row's `Set It Up Again` — is this footer's `Set Up
+    /// Port…` for one port, on the same terms. Where the primary is absent —
+    /// R23's Thunderbolt 4 Mac and R31's unrecognized one — so is every one of
+    /// them. Every other action is not the footer's to answer, and is offered
+    /// as its row says.
+    func offers(_ action: HubAction) -> Bool {
+        !action.opensSetUp || primary != nil
+    }
+
+    /// And where the primary is disabled — two Macs connected, R1, with the
+    /// reason printed above the footer separator — so is every set-up button.
+    /// `HubActionsModel.perform` does not ask the footer itself, so a button
+    /// that raises a set-up is kept from it here, and `canPerform` gives the
+    /// Port menu and the stage's double-click this same answer.
+    func allows(_ action: HubAction) -> Bool {
+        offers(action) && (!action.opensSetUp || isPrimaryEnabled)
+    }
 }
 
 /// R3 — "A cable is in a USB-only port", as the card §4.5 raises when a
@@ -108,7 +129,7 @@ enum USBPortTip {
             return "The two ports at the front of a Mac mini carry USB, not Thunderbolt. The three on the back are the Thunderbolt ones."
         }
         guard back == 4 else { return nil }
-        return "The front ports on this Mac carry USB, not Thunderbolt. Move the cable to one of the four Thunderbolt ports on the back and I'll follow along."
+        return "The front ports on this Mac carry USB, not Thunderbolt. Move the cable to one of the four Thunderbolt ports on the back and RDMALink will follow along."
     }
 }
 
@@ -128,7 +149,7 @@ enum HubPresentation {
     ) -> HubCopy {
         if hardware?.isRecognized == false {
             return HubCopy(
-                headline: "I don't recognize this Mac",
+                headline: "RDMALink doesn't recognize this Mac",
                 body: "RDMALink only draws, and only changes, Macs it knows — and this isn't one of them. So there's no picture, and nothing here will be changed. The ports below are listed the way macOS reports them, and everything you see is real."
             )
         }
@@ -141,7 +162,7 @@ enum HubPresentation {
         let ready = ports.ready
         guard let first = ready.first else {
             return HubCopy(
-                headline: "Let's set up a Thunderbolt link",
+                headline: "Set up a Thunderbolt link",
                 body: "RDMALink prepares one Thunderbolt port on this Mac so it can carry RDMA straight to another Mac. You'll do the same on the other Mac afterwards."
             )
         }
@@ -219,13 +240,13 @@ enum HubPresentation {
         let twoMacs = ports.inALoop.count >= 2
         // R31: §6.2 "Buttons: **Quit** only" — and `Quit` is the view's, not
         // the model's, so there is nothing here for it to offer. R23: no
-        // primary button at all, and `Identify a Port…` stays in the Port
+        // primary button at all, and `Identify Port…` stays in the Port
         // menu.
         let unrecognized = hardware?.isRecognized == false
         let readOnly = unrecognized || hardware?.isThunderbolt4 == true
         return HubFooterModel(
-            primary: readOnly ? nil : .setUpAPort(portID: nil),
-            primaryTitle: ports.ready.isEmpty ? "Set Up a Port…" : "Set Up Another Port…",
+            primary: readOnly ? nil : .setUpPort(portID: nil),
+            primaryTitle: ports.ready.isEmpty ? "Set Up Port…" : "Set Up Another Port…",
             isPrimaryEnabled: !twoMacs,
             // §S1 asks for "the reason printed above the footer separator" and
             // does not write one there. This is S3's own reason for the same

@@ -13,7 +13,6 @@
 //  later entry, never by rewriting the old one.
 //
 
-import AppKit
 import SwiftUI
 import RDMALinkCore
 
@@ -50,8 +49,8 @@ struct ChangeLogView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
-                Button("Show the Notes in Finder") { WizardFinder.showNotesFolder() }
-                SaveDiagnosticsButton()
+                Button("Show Notes in Finder") { WizardFinder.showNotesFolder() }
+                Button("Save Diagnostics File…") { DiagnosticsFile.save() }
                 Spacer(minLength: 0)
                 Button("Done") { hub.closeChangeLog() }
                     .buttonStyle(.borderedProminent)
@@ -91,8 +90,7 @@ struct ChangeLogEntryRow: View {
             // recognize the entries are read and the buttons are absent.
             if let action = row.action, !hub.isUnrecognized {
                 Button(action.title) { hub.perform(action) }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
+                    .inlineAction()
             }
         }
         // §S11: undone entries stay, greyed, with the action replaced by a note.
@@ -104,26 +102,6 @@ struct ChangeLogEntryRow: View {
             // An entry for a port that is not here any more produces no
             // highlight, and the row has already said why.
             stage.hover(isInside ? row.portID : nil)
-        }
-    }
-}
-
-/// §S11's and §S12's `Save a Diagnostics File…`, on the payload §6.1 rule 8
-/// shares with every `Copy Details`.
-struct SaveDiagnosticsButton: View {
-    var body: some View {
-        Button("Save a Diagnostics File…") {
-            let panel = NSSavePanel()
-            panel.nameFieldStringValue = Diagnostics.suggestedFileName()
-            panel.allowedContentTypes = [.plainText]
-            panel.canCreateDirectories = true
-            guard panel.runModal() == .OK, let url = panel.url else { return }
-            Task {
-                let text = await Task.detached(priority: .userInitiated) {
-                    Diagnostics.live()
-                }.value
-                try? text.write(to: url, atomically: true, encoding: .utf8)
-            }
         }
     }
 }

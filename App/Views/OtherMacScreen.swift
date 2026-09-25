@@ -48,7 +48,7 @@ struct OtherMacScreen: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text("Leave this one cable connected while you're over there — and keep it to one cable between the pair.")
-                Text("I can only see this Mac. Nothing I did crossed that cable — that's deliberate.")
+                Text("RDMALink can only see this Mac. Nothing it did crossed that cable — that's deliberate.")
                 if report.answered {
                     // §S8's live line, in the same beat as the stage's
                     // returning pulse: one event, two places.

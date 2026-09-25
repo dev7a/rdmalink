@@ -40,13 +40,16 @@ struct WizardChoosePort: View {
             }
             // §3.3: Identify is `hand.point.up.left`, offered above the list —
             // which is also where §4.7 promotes it on a recognized Mac whose
-            // port names are only macOS's numbering.
+            // port names are only macOS's numbering. In the accent, at its
+            // regular size (§2.3 band 3): borderless, it would otherwise draw
+            // in the same gray as the lines around it.
             Button {
-                perform(.identifyAPort)
+                perform(.identifyPort)
             } label: {
-                Label(WizardAction.identifyAPort.title, systemImage: "hand.point.up.left")
+                Label(WizardAction.identifyPort.title, systemImage: "hand.point.up.left")
             }
             .buttonStyle(.borderless)
+            .foregroundStyle(.tint)
             .keyboardShortcut("i", modifiers: .command)
             .frame(maxWidth: .infinity, alignment: .leading)
 

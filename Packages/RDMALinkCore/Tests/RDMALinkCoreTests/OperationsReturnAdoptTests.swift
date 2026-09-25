@@ -431,7 +431,7 @@ struct OperationsMountedVolumeTests {
         #expect(single.headline == "Something is still using this link")
         #expect(single.body == """
             The volume Vault is mounted over Thunderbolt. Eject it in Finder so \
-            nothing gets interrupted, then we'll carry on.
+            nothing gets interrupted, then RDMALink will carry on.
             """)
         #expect(single.detail == nil)
 

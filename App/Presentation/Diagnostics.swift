@@ -1,8 +1,9 @@
 //
 //  Diagnostics.swift
 //
-//  One payload, two doors: `Copy Details` on a refusal and `Save a Diagnostics
-//  File…` in Settings. UX_SPEC §6.1 rule 8 says they are the same text.
+//  One payload, two doors: `Copy Details` on a refusal and `Save Diagnostics
+//  File…` (App/Views/DiagnosticsFile.swift, behind Settings, the change log
+//  and the Help menu alike). UX_SPEC §6.1 rule 8 says they are the same text.
 //
 //  What it contains: the technical names regardless of the "Show technical
 //  names" toggle, the model, the chip, the macOS build, the ports, the RDMA
@@ -67,7 +68,7 @@ enum Diagnostics {
     /// A full reading, taken on the spot.
     ///
     /// Settings is a separate window with no probe behind it, so
-    /// `Save a Diagnostics File…` reads this Mac once, at the moment the user
+    /// `Save Diagnostics File…` reads this Mac once, at the moment the user
     /// asks for it. Blocking: call it off the main actor.
     static func live(date: Date = Date()) -> String {
         do {
@@ -186,7 +187,7 @@ enum Diagnostics {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
     }
 
-    /// The default file name `Save a Diagnostics File…` offers.
+    /// The default file name `Save Diagnostics File…` offers.
     static func suggestedFileName(date: Date = Date()) -> String {
         let stamp = date.formatted(.iso8601.year().month().day())
         return "RDMALink diagnostics \(stamp).txt"

@@ -5,19 +5,16 @@
 //  §2.7, §S12) there is no toolbar and no tab bar.
 //
 
-import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 import RDMALinkCore
 
 struct SettingsWindow: View {
     @AppStorage(AppSettings.showTechnicalNames) private var showsTechnicalNames = false
 
-    /// Whether any undo note exists, which decides `Reveal Notes in Finder`.
+    /// Whether any undo note exists, which decides `Show Notes in Finder`.
     /// Read when the window appears rather than watched: notes are written by
     /// the set-up path, which cannot run while this window is in front.
     @State private var hasNotes = false
-    @State private var saveFailure: String?
 
     // There is no update check and no control for one (§S12): the app never
     // contacts anything, and a toggle that claimed to would be a promise it
@@ -34,23 +31,19 @@ struct SettingsWindow: View {
             }
             Section {
                 SettingsButton(
-                    title: "Reveal Notes in Finder",
+                    title: "Show Notes in Finder",
                     help: "RDMALink keeps one small note per port it set up. That note is what makes putting things back possible — it's safe to back up and safe to leave alone.",
                     isEnabled: hasNotes,
                     disabledHelp: "RDMALink hasn't set up a port on this Mac yet, so there are no notes to show.",
-                    action: revealNotes
+                    action: showNotesInFinder
                 )
                 SettingsButton(
-                    title: "Save a Diagnostics File…",
+                    title: "Save Diagnostics File…",
                     help: "A plain text file with what RDMALink can see on this Mac and what it has changed: the model, the chip, the macOS build, the ports, and any step that failed. No personal information, and nothing is sent anywhere — it's yours to keep or share.",
-                    action: saveDiagnostics
+                    // §S12: one save for every door; a failure is an alert
+                    // on this window, never a line printed here.
+                    action: DiagnosticsFile.save
                 )
-                if let saveFailure {
-                    Text(verbatim: saveFailure)
-                        .font(.callout)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
         }
         .formStyle(.grouped)
@@ -61,27 +54,8 @@ struct SettingsWindow: View {
 
     /// Exactly the folder `BaselineStore` writes to, so the button never opens
     /// a directory the app does not actually use.
-    private func revealNotes() {
+    private func showNotesInFinder() {
         WizardFinder.showNotesFolder()
-    }
-
-    private func saveDiagnostics() {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = Diagnostics.suggestedFileName()
-        panel.allowedContentTypes = [.plainText]
-        panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        Task {
-            let text = await Task.detached(priority: .userInitiated) { Diagnostics.live() }.value
-            do {
-                try text.write(to: url, atomically: true, encoding: .utf8)
-                saveFailure = nil
-            } catch {
-                saveFailure = String(
-                    localized: "The file couldn't be written: \(error.localizedDescription)"
-                )
-            }
-        }
     }
 
     private static func notesExist() -> Bool {
@@ -109,6 +83,8 @@ private struct SettingsToggle: View {
 
 /// A button with §S12's `.callout` help text beneath it. When the button is
 /// unavailable the reason is the tooltip, so nothing is disabled in silence.
+/// An available one has no tooltip: it would only repeat the help printed
+/// beneath it (§8.4, §S12).
 private struct SettingsButton: View {
     let title: LocalizedStringResource
     var help: LocalizedStringResource?
@@ -118,9 +94,7 @@ private struct SettingsButton: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Button(title, action: action)
-                .disabled(!isEnabled)
-                .help(tooltip)
+            button
             if let help {
                 Text(help)
                     .font(.callout)
@@ -131,8 +105,13 @@ private struct SettingsButton: View {
         .padding(.vertical, 2)
     }
 
-    private var tooltip: Text {
-        if !isEnabled, let disabledHelp { return Text(disabledHelp) }
-        return Text(help ?? title)
+    @ViewBuilder
+    private var button: some View {
+        let button = Button(title, action: action).disabled(!isEnabled)
+        if !isEnabled, let disabledHelp {
+            button.help(Text(disabledHelp))
+        } else {
+            button
+        }
     }
 }
