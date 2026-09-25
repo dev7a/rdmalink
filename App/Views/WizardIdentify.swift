@@ -13,7 +13,6 @@ import SwiftUI
 
 struct WizardIdentify: View {
     let flow: SetUpFlow
-    let perform: (WizardAction) -> Void
 
     var body: some View {
         if let session = flow.identify {
@@ -44,13 +43,8 @@ struct WizardIdentify: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .transition(.opacity)
             }
-            // The default button lives in the footer, where every default
-            // button in the app lives. These are the rest of §S4b's row.
-            HStack(spacing: 10) {
-                ForEach(secondaryActions(for: session), id: \.self) { action in
-                    Button(action.title) { perform(action) }
-                }
-            }
+            // Every one of §S4b's buttons is the footer's — the default and
+            // the rest of its row before it (§2.3 band 4).
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.smooth(duration: 0.18), value: session.outcome)
@@ -61,16 +55,6 @@ struct WizardIdentify: View {
             guard let announcement else { return }
             AccessibilityNotification.Announcement(announcement).post()
             session.announcementDelivered()
-        }
-    }
-
-    /// §S4b's buttons, minus the one the footer is already showing.
-    private func secondaryActions(for session: IdentifySession) -> [WizardAction] {
-        switch session.outcome {
-        case .watching: []
-        case .unplugged, .replugged: [.identifyAgain, .chooseFromList]
-        case .ambiguous, .usbOnly: [.chooseFromList]
-        case .timedOut: [.identifyAgain]
         }
     }
 }

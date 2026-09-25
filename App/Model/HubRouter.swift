@@ -27,4 +27,11 @@ final class HubRouter {
     /// talking." It takes the working area's place the way §S11's change log
     /// does, and is reached from S7's footer and from the Help menu.
     var showsOtherMac = false
+
+    /// Whether the set-up assistant holds the working area, mirrored by the
+    /// window. The Help menu's `What to Do on the Other Mac` is unavailable
+    /// while it does — never queued to appear when the run ends (§2.7) — and
+    /// the menu has to know even when another window, Settings say, is front
+    /// and the main window's focused values are out of reach.
+    var isAssistantUp = false
 }

@@ -1,8 +1,10 @@
 //
 //  AssistantColumn.swift
 //
-//  The right-hand column: four fixed bands, top to bottom — header row,
-//  working area, the permanent port list, footer (UX_SPEC §2.3).
+//  The right-hand column, in fixed bands, top to bottom — working area, the
+//  permanent port list, footer (UX_SPEC §2.3). The step label has no band of
+//  its own: it rides on the first line of the screen's headline (§2.3 band 1),
+//  so every headline starts at the same height, the hub's included.
 //
 
 import SwiftUI
@@ -34,7 +36,7 @@ struct AssistantColumn: View {
     var preview: (ReviewPreview?, String) -> Void = { _, _ in }
     /// S7's `What to Do on the Other Mac`, which closes the assistant and
     /// opens §S8 in its place.
-    var showOtherMac: (() -> Void)?
+    var showOtherMac: () -> Void = {}
 
     /// §2.3 band 3: **full** on the hub, Choose a port and Identify; compact
     /// on the RDMA screen, review, apply, done, other Mac and the change log.
@@ -90,14 +92,13 @@ struct AssistantColumn: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Absent on the hub by design (§2.3 band 1); the assistant draws
-            // its `Step n of m` caption above its own working area.
-            AssistantHeaderRow(title: nil, stepCaption: nil)
             // §S8 and §S11 each take the working area's place — "The port
             // list stays in place beside it." — and neither interrupts the
-            // assistant: asked for while it is up, they wait for it to close.
+            // assistant: neither can be asked for while it is up (§2.7). A
+            // run started from the change log returns to it when it ends.
             if flow == nil, !router.showsOtherMac, actions.showsChangeLog {
-                // §S11's list scrolls on its own, under its own buttons.
+                // §S11's list scrolls on its own, under its headline and body;
+                // its buttons are band 4's (`ChangeLogFooter`).
                 ChangeLogView(hub: actions, stage: stage, model: model)
                     .padding(.bottom, 12)
             } else {
@@ -156,15 +157,21 @@ struct AssistantColumn: View {
                 maxWidth: .infinity, minHeight: Self.portListFloor, maxHeight: .infinity,
                 alignment: .top
             )
+            // §2.3 band 4: every button a screen owns. §S8 and §S11 bring
+            // their own, and the hub's footer and link row step aside until
+            // their `Done`, so the window has one button row and one default.
             if let flow {
-                WizardFooter(flow: flow)
+                WizardFooter(flow: flow, perform: performer(for: flow).callAsFunction)
+                    .padding(.top, 12)
+            } else if router.showsOtherMac {
+                OtherMacFooter(model: model) { router.showsOtherMac = false }
+                    .padding(.top, 12)
+            } else if actions.showsChangeLog {
+                ChangeLogFooter(hub: actions)
                     .padding(.top, 12)
             } else if model.phase == .ready {
-                HubActionsFooter(
-                    footer: actions.footer, hub: actions, router: router,
-                    primaryIsDefault: !router.showsOtherMac && !actions.showsChangeLog
-                )
-                .padding(.top, 12)
+                HubActionsFooter(footer: actions.footer, hub: actions, router: router)
+                    .padding(.top, 12)
             }
         }
         .padding(24)
@@ -178,11 +185,10 @@ struct AssistantColumn: View {
         if let flow {
             WizardWorkingArea(
                 flow: flow, model: model, stage: stage, preview: preview,
-                turnAndBreathe: turnAndBreathe, recheck: recheck,
-                showOtherMac: showOtherMac
+                perform: performer(for: flow).callAsFunction
             )
         } else if router.showsOtherMac {
-            OtherMacScreen(model: model, stage: stage) { router.showsOtherMac = false }
+            OtherMacScreen(model: model, stage: stage)
         } else {
             WorkingArea(
                 model: model, stage: stage, usbTip: usbTip,
@@ -190,25 +196,12 @@ struct AssistantColumn: View {
             )
         }
     }
-}
 
-/// Band 1. A label, never a progress bar.
-struct AssistantHeaderRow: View {
-    let title: LocalizedStringResource?
-    let stepCaption: LocalizedStringResource?
-
-    var body: some View {
-        if let title {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                Spacer(minLength: 12)
-                if let stepCaption {
-                    Text(stepCaption)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.bottom, 16)
-        }
+    /// What the assistant's buttons do, one answer for band 2's cards and
+    /// band 4's footer.
+    private func performer(for flow: SetUpFlow) -> WizardPerformer {
+        WizardPerformer(
+            flow: flow, recheck: recheck, turnAndBreathe: turnAndBreathe,
+            showOtherMac: showOtherMac)
     }
 }

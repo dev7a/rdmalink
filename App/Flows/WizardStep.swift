@@ -39,10 +39,12 @@ enum WizardStep: Sendable, Equatable, Hashable, CaseIterable, Comparable {
     /// §2.3 band 1: "Step 2 of 3" in `.caption` secondary, trailing. One
     /// localizable resource with two placeholders — nothing is concatenated.
     ///
-    /// The label "counts the screens of the current run": a run that opened on
-    /// the picker has three (Choose, Review, Ready); one whose port was chosen
-    /// on the hub, or picked for the user, opened on Review and has two.
-    /// `first` is the screen the run opened on, and it shifts both numbers.
+    /// The label "counts the screens of the current run": a run opened by the
+    /// footer's `Set Up Port…` or ⌘N opens on the picker and has three
+    /// (Choose, Review, Ready); one opened by a control that names its port —
+    /// a row's `Set Up…`/`Set Up Again…`, the drift row, the change log, R30,
+    /// a double-click — opens on Review and has two. `first` is the screen
+    /// the run opened on, and it shifts both numbers.
     func caption(openedOn first: WizardStep) -> LocalizedStringResource {
         let offset = first.screen - 1
         return "Step \(screen - offset) of \(WizardStep.ready.screen - offset)"

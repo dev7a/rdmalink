@@ -38,13 +38,13 @@ public struct ReturnToBridgeResult: Sendable, Equatable {
     public var successBody: String {
         guard deletedService != nil else {
             return """
-                The port is a member of \(bridgeName) again. Set It Up Again is \
+                The port is a member of \(bridgeName) again. Set Up Again is \
                 one click away if you change your mind.
                 """
         }
         return """
             The port is a member of \(bridgeName) again and its standalone service \
-            is gone. Set It Up Again is one click away if you change your mind.
+            is gone. Set Up Again is one click away if you change your mind.
             """
     }
 }
@@ -59,6 +59,18 @@ public struct ReturnToBridge: Sendable {
     /// The name the spec gives the bridge this looks for first.
     public static let preferredBridgeName = "Thunderbolt Bridge"
 
+    /// §S10's foreign-port question. Like Restore's it names no port — a
+    /// position name at its head would read "Return Back, far right…" — and
+    /// the body does.
+    public static func headline(bridgeName: String = preferredBridgeName) -> String {
+        "Return this port to \(bridgeName)?"
+    }
+
+    /// The same sheet while its checklist runs (§S10).
+    public static func runningHeadline(bridgeName: String = preferredBridgeName) -> String {
+        "Returning this port to \(bridgeName)"
+    }
+
     public let port: OperationPort
 
     public init(port: OperationPort) { self.port = port }
@@ -69,7 +81,7 @@ public struct ReturnToBridge: Sendable {
     public func preview(world: ObservedWorld) -> ReturnToBridgePlan {
         var plan = ReturnToBridgePlan(
             port: port,
-            headline: "Return \(port.positionName) to \(Self.preferredBridgeName)?",
+            headline: Self.headline(),
             body: "",
             rows: [],
             bridgeName: nil,
@@ -97,17 +109,17 @@ public struct ReturnToBridge: Sendable {
         plan.bridgeBSDName = bridge.bsdName
         let named = bridge.displayName ?? bridge.bsdName
         plan.bridgeName = named
-        plan.headline = "Return \(port.positionName) to \(named)?"
+        plan.headline = Self.headline(bridgeName: named)
         // §S10's foreign-port form, and its no-service form when the port was
         // taken out of the bridge by hand and left bare: the delete row and
         // every sentence about a service are omitted, not blanked (§7.5 step 2).
         if let service {
             plan.body = """
-                RDMALink didn't set this port up, so it can't put things back \
-                exactly as they were — but it can do the ordinary thing: add the \
-                port to \(named) and remove the standalone service it has now. It \
-                writes down what it found first, so you can set the port up again \
-                afterwards.
+                RDMALink didn't set up \(port.positionName), so it can't put \
+                things back exactly as they were — but it can do the ordinary \
+                thing: add the port to \(named) and remove the standalone service \
+                it has now. It writes down what it found first, so you can set the \
+                port up again afterwards.
                 """
             plan.rows = [
                 "Add the port to \(named)",
@@ -120,10 +132,10 @@ public struct ReturnToBridge: Sendable {
             ]
         } else {
             plan.body = """
-                RDMALink didn't set this port up, so it can't put things back \
-                exactly as they were — but it can do the ordinary thing: add the \
-                port to \(named). It writes down what it found first, so you can \
-                set the port up again afterwards.
+                RDMALink didn't set up \(port.positionName), so it can't put \
+                things back exactly as they were — but it can do the ordinary \
+                thing: add the port to \(named). It writes down what it found \
+                first, so you can set the port up again afterwards.
                 """
             plan.rows = [
                 "Add the port to \(named)",

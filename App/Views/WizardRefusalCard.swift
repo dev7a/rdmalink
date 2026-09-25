@@ -16,23 +16,24 @@ struct WizardRefusalCard: View {
     let refusal: WizardRefusal
     let model: InventoryModel
     let perform: (WizardAction) -> Void
+    /// Under the picker's own headline (R3, R16, R26), rather than in place
+    /// of the screen as on S5 and a refused S6 (§6.1 rule 3).
+    var isNested = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             // §6.1 rule 7: a refusal that follows a partial write states the
-            // rollback first, before explaining anything else.
-            if let rollbackLine = refusal.rollbackLine {
-                Text(rollbackLine)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            // rollback first, before explaining anything else — under its
+            // headline, which leads the screen and carries the step label
+            // (§2.3 band 1), so nothing is drawn above the card.
             RefusalCard(
                 symbol: refusal.symbol,
                 tint: refusal.isAttention ? .attention : .secondary,
                 headline: refusal.headline,
+                lead: refusal.rollbackLine,
                 message: refusal.body,
-                extraMessage: refusal.detail
+                extraMessage: refusal.detail,
+                isNested: isNested
             ) {
                 ForEach(Array(refusal.actions.enumerated()), id: \.element) { index, action in
                     button(action, isDefault: index == 0)
@@ -66,6 +67,12 @@ struct WizardRefusalCard: View {
             Button(action.title) { perform(action) }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
+        } else if action == .done {
+            // §S6: on a refused S6 the footer's leading button is hidden and
+            // this is the way out, so Escape presses it — always backwards
+            // (§8.3). No card anywhere else carries `Done`.
+            Button(action.title) { perform(action) }
+                .keyboardShortcut(.cancelAction)
         } else {
             Button(action.title) { perform(action) }
         }

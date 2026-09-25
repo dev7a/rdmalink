@@ -2,7 +2,7 @@
 
 RDMALink is a non-sandboxed macOS 27 utility that prepares Thunderbolt 5 ports
 on the Mac it runs on so they can carry RDMA over Thunderbolt: it removes a
-port from the Thunderbolt Bridge, gives it its own network service with IPv4
+port from Thunderbolt Bridge, gives it its own network service with IPv4
 off and IPv6 link-local only, saves an undo note, and can put everything back.
 It changes only the Mac it runs on. There is no peer channel.
 

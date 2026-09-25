@@ -352,8 +352,9 @@ public enum Refusals {
     /// **R12 — Another app is editing the network.**
     ///
     /// Two writers is how configurations get mangled, so RDMALink refuses
-    /// rather than waits. It polls quietly and the refusal clears when the
-    /// lock does.
+    /// rather than waits. macOS doesn't say who holds the lock or when they
+    /// let go, so nothing watches for it: `Check Again` reads this Mac again
+    /// and the next attempt asks again (UX_SPEC §6.2 R12).
     public static func networkIsBusy(port: ObservedPort? = nil) -> Refusal {
         Refusal(
             code: .networkBusy,
@@ -403,7 +404,8 @@ public enum Refusals {
     /// the only one that asks the user to do something by hand.
     ///
     /// The undo note is **kept**: the hub carries "… needs putting back by
-    /// hand" until membership is seen again.
+    /// hand" for as long as it is observed, which ends the moment the port is
+    /// seen back in a bridge (UX_SPEC §6.2 R11, §7.4).
     ///
     /// - Parameters:
     ///   - bridgeDisplayName: `Thunderbolt Bridge`, or the BSD name when macOS
@@ -461,9 +463,9 @@ public enum Refusals {
             body: """
             \(port.positionName) belongs to a bridge whose settings RDMALink \
             can't read properly, and a port has to be out of every bridge — \
-            even one that isn't switched on — before it can carry RDMA. It \
-            won't guess at this. Have a look in Network settings, under Manage \
-            Virtual Interfaces, and it'll check again when you're back.
+            even one that isn't switched on — before it can carry RDMA. \
+            RDMALink won't guess at this. Have a look in Network settings, under \
+            Manage Virtual Interfaces, and RDMALink checks again when you're back.
             """,
             detail: "\(port.bsdName) is a member of \(englishList(unreadable)), "
                 + "which the network configuration doesn't list.",
@@ -525,7 +527,7 @@ public enum Refusals {
     /// **R19 — The undo note is missing or unreadable.** At Restore.
     ///
     /// RDMALink will not guess at network settings it did not write down.
-    /// `Stop Managing This Port` clears only RDMALink's own record.
+    /// `Stop Managing…` clears only RDMALink's own record.
     public static func undoNoteMissing(port: ObservedPort) -> Refusal {
         Refusal(
             code: .undoNoteMissing,
@@ -634,7 +636,7 @@ public enum Refusals {
             headline: "Nothing to put back",
             body: """
             RDMALink's note for \(port.positionName) only records that it put \
-            the port back in \(bridgeName). There's nothing to undo — Set It Up \
+            the port back in \(bridgeName). There's nothing to undo — Set Up \
             Again takes the port out of the bridge, and Stop Managing forgets \
             the note.
             """,
@@ -645,8 +647,8 @@ public enum Refusals {
     /// **R30's adopted form** — the note only records an adoption. Same
     /// number, same headline, §6.2's other body: an adopted port has no
     /// bridge history and nothing to put back (§7.3), and the port keeps its
-    /// setup. Its row is `Stop Managing…` and `Cancel`; there is no `Set It
-    /// Up Again`, because the port is set up.
+    /// setup. Its row is `Stop Managing…` and `Cancel`; there is no `Set Up
+    /// Again…`, because the port is set up.
     ///
     /// The note is kept and nothing is written. R19 is not this either.
     public static func noteIsAnAdoptionRecord(port: ObservedPort) -> Refusal {
@@ -672,20 +674,27 @@ public enum Refusals {
     /// has taken over, given a fixed address and routed real traffic through
     /// is not RDMALink's work any more, whatever its identifier says. Deleting
     /// it would take the addresses with it.
+    ///
+    /// - Parameter offersStopManaging: whether the row beside it has `Stop
+    ///   Managing…`. The body names the command only where it is on screen:
+    ///   over the set-up assistant's picker a sheet opens no second sheet, so
+    ///   the row has none and the body ends at the advice (UX_SPEC §6.2 R28).
     public static func createdServiceEdited(
         port: ObservedPort,
-        differences: [String]
+        differences: [String],
+        offersStopManaging: Bool = true
     ) -> Refusal {
-        Refusal(
+        let advice = offersStopManaging
+            ? "Remove it yourself in Network settings if you're done with it, "
+                + "or Stop Managing leaves everything exactly where it is."
+            : "Remove it yourself in Network settings if you're done with it."
+        return Refusal(
             code: .createdServiceEdited,
             headline: "This port's service isn't the one RDMALink made any more",
             body: """
             The service RDMALink created on \(port.positionName) has been \
             changed since — it's carrying settings RDMALink didn't put there, \
-            and it won't quietly delete something you've made your own. Remove \
-            it yourself in Network settings if you're done with it, or tell \
-            RDMALink to stop looking after this port and it'll leave everything \
-            exactly where it is.
+            and it won't quietly delete something you've made your own. \(advice)
             """,
             detail: differences.isEmpty ? nil : englishList(differences) + ".",
             subjects: [port.bsdName]

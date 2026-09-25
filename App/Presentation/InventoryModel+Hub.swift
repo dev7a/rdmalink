@@ -26,10 +26,15 @@ extension InventoryModel {
     }
 
     /// The three `This Mac` rows, top to bottom. The RDMA row is absent while
-    /// the switch has not been read; the other two are always observable.
+    /// the switch has not been read; the other two are always observable. On
+    /// R23's and R31's read-only hubs — where the footer offers no set-up —
+    /// the RDMA row has nothing to finish and carries no button (§S1).
     var thisMacRows: [ThisMacRowModel] {
         var rows: [ThisMacRowModel] = []
-        if let rdmaRow = ThisMacPresentation.rdmaRow(switchState) { rows.append(rdmaRow) }
+        let isReadOnly = HubPresentation.footer(hardware: hardware, ports: ports).primary == nil
+        if let rdmaRow = ThisMacPresentation.rdmaRow(switchState, isReadOnly: isReadOnly) {
+            rows.append(rdmaRow)
+        }
         rows.append(ThisMacPresentation.bridgeRow(ports))
         rows.append(ThisMacPresentation.readyRow(ports))
         return rows

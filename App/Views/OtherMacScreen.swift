@@ -9,7 +9,9 @@
 //  travels back along that line and blooms at the near receptacle, once.
 //
 //  It takes the working area's place the way §S11's change log does, so the
-//  port list — compact, per §2.3 — and the model stay beside it.
+//  port list — compact, per §2.3 — and the model stay beside it, and its
+//  buttons take band 4 while the hub's footer steps aside (`OtherMacFooter`,
+//  §2.3 band 4).
 //
 
 import AppKit
@@ -20,7 +22,6 @@ struct OtherMacScreen: View {
     /// §S8's 3D behaviour is the stage's; this screen only tells it when the
     /// handoff begins and ends, and which port it is about.
     let stage: StageModel
-    let done: () -> Void
 
     var body: some View {
         let report = OtherMacReport(ports: model.ports)
@@ -59,16 +60,6 @@ struct OtherMacScreen: View {
             .font(.callout)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 10) {
-                Spacer(minLength: 0)
-                // §S8's button row is "**Copy These Steps** → **Copied** ·
-                // **Done**": a state the button passes through, not an end
-                // state (§9.14).
-                CopyButton(title: "Copy These Steps") { plainTextSteps(address: report.address) }
-                Button("Done", action: done)
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.smooth(duration: 0.25), value: report)
@@ -82,7 +73,7 @@ struct OtherMacScreen: View {
     }
 
     /// The same four sentences, as plain text, for the other Mac's notes app.
-    private func plainTextSteps(address: String?) -> String {
+    static func plainTextSteps(address: String?) -> String {
         var lines = [
             String(localized: "Now the other Mac"),
             "",
@@ -99,6 +90,27 @@ struct OtherMacScreen: View {
         lines.append("")
         lines.append(String(localized: "Leave this one cable connected while you're over there — and keep it to one cable between the pair."))
         return lines.joined(separator: "\n") + "\n"
+    }
+}
+
+/// §S8's buttons, in band 4 while the screen holds the working area:
+/// "**Copy These Steps** → **Copied** · **Done**", `Done` the default. The
+/// hub's footer and link row step aside meanwhile (§2.3 band 4), so the window
+/// has one button row and one default.
+struct OtherMacFooter: View {
+    let model: InventoryModel
+    let done: () -> Void
+
+    var body: some View {
+        ScreenFooter {
+            // A state the button passes through, not an end state (§9.14).
+            CopyButton(title: "Copy These Steps") {
+                OtherMacScreen.plainTextSteps(address: OtherMacReport(ports: model.ports).address)
+            }
+            Button("Done", action: done)
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+        }
     }
 }
 

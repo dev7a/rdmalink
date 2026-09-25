@@ -26,7 +26,9 @@ extension StagePort.Configuration {
         switch snapshot.readiness {
         case .managed, .adopted: self = .ready
         case .setUpElsewhere: self = .outside
-        case .drifted: self = .drift
+        // §4.3: a port that needs putting back by hand wears drift's dashed
+        // ring; the panel names it in its own words.
+        case .drifted, .needsAHand: self = .drift
         // §4.3: "Provenance is a panel matter: the ring says only that the
         // port is in the bridge."
         case .returned: self = .bridge

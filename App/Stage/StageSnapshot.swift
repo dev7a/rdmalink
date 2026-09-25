@@ -179,7 +179,7 @@ enum StageSnapshotState: String, Sendable, CaseIterable {
     case identifyAnswer
     /// §S4b: the replug bloom.
     case identifyReplug
-    /// §S5: hovering **Leave the Thunderbolt Bridge**.
+    /// §S5: hovering **Leave Thunderbolt Bridge**.
     case previewLeaveBridge
     /// §S5: hovering **Get its own network service**.
     case previewService

@@ -2,9 +2,9 @@
 
 A macOS utility that prepares Thunderbolt 5 ports for RDMA over Thunderbolt on
 the Mac it runs on. It shows you a 3D model of your machine with every
-receptacle where it really is, walks you through a three-step assistant —
-choose a port, read exactly what will change, watch it happen — and leaves the
-port out of the Thunderbolt Bridge with an IPv6 link-local service of its own,
+receptacle where it really is, walks you through a short assistant — choose a
+port, read exactly what will change, and see it ready — and leaves the port
+out of Thunderbolt Bridge with an IPv6 link-local service of its own,
 ready to carry RDMA to another Mac. It keeps an undo note for every port it
 touches, so it can put everything back the way it found it. It configures only
 the Mac it is running on; run it on each Mac of a pair or cluster and pick the

@@ -47,9 +47,11 @@ struct RestoreSheet: View {
             } else if hub.worldFailure != nil {
                 unreadableWorld
             } else {
-                // Reading this Mac takes a moment and the spec gives the sheet
-                // no sentence for it, so it says nothing rather than something
-                // of its own.
+                // §S10: reading this Mac takes a moment. The question does not
+                // depend on the reading, so it is already there, over a small
+                // spinner; the body and the rows wait for the plan.
+                Text(RestorePlanning.headlineWhileReading(subject: subject, hub: hub))
+                    .font(.title2.weight(.semibold))
                 ProgressView()
                     .controlSize(.small)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -71,11 +73,12 @@ struct RestoreSheet: View {
     @ViewBuilder
     private func content(_ plan: RestorePlan) -> some View {
         if let run = hub.run {
-            // While the writes happen the sheet keeps the headline the user
-            // pressed the button under. Once it has an answer, that answer is
-            // the headline — a question that has been answered is not one.
+            // While the writes happen the headline says what is happening —
+            // "Putting this port back" — rather than asking the question the
+            // button has just answered (§S10). Once there is an answer, that
+            // answer is the headline.
             if run.isRunning {
-                Text(plan.headline)
+                Text(plan.runningHeadline)
                     .font(.title2.weight(.semibold))
             }
             runContent(run, plan: plan)
@@ -123,7 +126,9 @@ struct RestoreSheet: View {
             .font(.callout)
             .foregroundStyle(.secondary)
         }
-        buttonRow([.cancel, plan.primary], plan: plan, refusal: nil)
+        buttonRow(
+            RestoreAction.formRow(committer: plan.primary, isDefault: plan.primaryIsDefault),
+            plan: plan, refusal: nil)
     }
 
     // MARK: - After the button
@@ -170,7 +175,7 @@ struct RestoreSheet: View {
                     .textSelection(.enabled)
                     .lineLimit(3)
             }
-            buttonRow([.copyDetails, .cancel], plan: plan, refusal: nil)
+            buttonRow(RestoreAction.row([.copyDetails], default: nil), plan: plan, refusal: nil)
         }
     }
 
@@ -180,11 +185,18 @@ struct RestoreSheet: View {
             symbol: RestoreRefusals.symbol(for: refusal.code),
             tint: RestoreRefusals.isAttention(refusal.code) ? .attention : .secondary,
             headline: LocalizedStringResource(core: refusal.headline),
-            message: LocalizedStringResource(core: refusal.body),
+            message: LocalizedStringResource(core: RestoreRefusals.message(
+                for: refusal, port: plan.port?.observed,
+                overTheAssistant: hub.assistant != nil)),
             extraMessage: refusal.detail.map { LocalizedStringResource(core: $0) },
             buttonRowAlignment: .trailing
         ) {
-            buttons(RestoreRefusals.actions(for: refusal.code), plan: plan, refusal: refusal)
+            buttons(
+                RestoreRefusals.actions(
+                    for: refusal.code,
+                    offersSetUpAgain: setUpAgain(plan) != nil,
+                    overTheAssistant: hub.assistant != nil),
+                plan: plan, refusal: refusal)
         }
         // §8.2: "Refusals are announced assertively, once, because they stop
         // the flow."
@@ -250,6 +262,11 @@ struct RestoreSheet: View {
                 Button(action.title) { perform(action, plan: plan) }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
+                    // §S1: R30's `Set Up Again…` is on the footer's terms —
+                    // disabled while two Macs are connected, like every
+                    // other set-up button.
+                    .disabled(action == .setUpAgain
+                        && !(setUpAgain(plan).map(hub.footer.allows) ?? false))
             } else if action.isCancel {
                 Button(action.title) { perform(action, plan: plan) }
                     .keyboardShortcut(.cancelAction)
@@ -261,9 +278,9 @@ struct RestoreSheet: View {
 
     private func perform(_ action: RestoreAction, plan: RestorePlan) {
         switch action {
-        case .cancel, .done, .leaveEverythingAlone:
+        case .cancel, .done:
             dismiss()
-        case .restore, .returnToBridge, .stopManaging, .tryAgain:
+        case .restore, .returnToBridge, .confirmStopManaging, .tryAgain:
             running = plan
             run(plan)
         case .checkAgain:
@@ -273,14 +290,15 @@ struct RestoreSheet: View {
             if let volume = plan.volumes.first { WizardFinder.showVolume(named: volume.name) }
         case .openNetworkSettings:
             WizardSettingsPane.open(WizardSettingsPane.network)
-        case .stopManagingThisPort, .stopManagingEllipsis:
+        case .stopManaging:
             if let port = plan.port { hub.perform(.stopManaging(portID: port.id)) }
         // §6.2 R30's default: the note stays, and the port goes back through
-        // the set-up assistant. That is a different window, so this sheet
-        // closes behind it rather than being replaced the way `Stop Managing
-        // This Port` is.
-        case .setItUpAgain:
-            if let port = plan.port { hub.perform(.setItUpAgain(portID: port.id)) }
+        // the set-up assistant — the port row's own set-up action, the one
+        // the button is offered for (§S1). The assistant is the window's, so
+        // this sheet closes behind it rather than being replaced the way
+        // `Stop Managing…` replaces it.
+        case .setUpAgain:
+            if let action = setUpAgain(plan) { hub.perform(action) }
             dismiss()
         case .removeServiceOnly:
             running = plan
@@ -288,6 +306,12 @@ struct RestoreSheet: View {
         case .copyDetails, .copyTheseSteps:
             break
         }
+    }
+
+    /// R30's `Set Up Again…`: the set-up action the port's own row offers,
+    /// on the footer's terms, or `nil` when it offers none (§S1).
+    private func setUpAgain(_ plan: RestorePlan) -> HubAction? {
+        plan.port.flatMap { hub.setUpAction(forRowOf: $0.id) }
     }
 
     // MARK: - Running it
@@ -465,8 +489,9 @@ struct RestoreChecklist: View {
                             core: run.steps[index].done))).post()
                 }
             }
-            // §S10's own promise, kept on screen while the writes happen.
-            Text("Leave every other setting alone")
+            // §S10's own promise, kept on screen while the writes happen —
+            // as a status line, not the plan's instruction to itself.
+            Text("Every other setting stays as it is.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }

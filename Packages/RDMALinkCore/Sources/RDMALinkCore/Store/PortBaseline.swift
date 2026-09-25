@@ -127,7 +127,7 @@ public struct CreatedServiceRecord: Sendable, Codable, Equatable {
 ///
 /// Its presence is what makes a note a **return record**: the port already has
 /// everything the note describes, so there is nothing for `Restore…` to put
-/// back, and the note stays only so the row can offer `Set It Up Again`.
+/// back, and the note stays only so the row can offer `Set Up Again…`.
 public struct BridgeReturn: Sendable, Codable, Equatable {
     /// The kernel interface name, such as `bridge0`.
     public var bsdName: String
@@ -252,8 +252,8 @@ public struct PortBaseline: Sendable, Codable, Equatable {
 
     /// True when this note is a return record: Return to Bridge wrote it, the
     /// port has everything it describes, and `Restore…` has nothing to do
-    /// with it (§7.5 step 5). `Set It Up Again` replaces it and `Forget This
-    /// Port` clears it.
+    /// with it (§7.5 step 5). `Set Up Again…` replaces it and `Stop
+    /// Managing…` clears it.
     public var isReturned: Bool { returnedToBridge != nil }
 
     /// True when this note is a return record **and** the port still has what

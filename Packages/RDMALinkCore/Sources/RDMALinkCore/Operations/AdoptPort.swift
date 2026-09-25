@@ -52,11 +52,13 @@ public struct AdoptPort: Sendable {
         Adopting changes nothing and needs no password. RDMALink is only \
         writing itself a note.
         """
+    /// Names the two buttons it means by their own words, without their
+    /// ellipses, as prose does (§1.3 rule 11).
     public static let honestyNote = """
         One thing to be straight about: RDMALink never saw this port before, so \
         it doesn't know which bridge it came from. There's no exact "put it \
         back" for an adopted port — Return to Bridge does the ordinary thing \
-        instead, and "stop looking after it" leaves the port exactly as it is.
+        instead, and Stop Managing leaves the port exactly as it is.
         """
     public static let watcherLine = """
         RDMALink keeps looking, and offers to adopt the port the moment it \
@@ -106,7 +108,7 @@ public struct AdoptPort: Sendable {
                 findings: findings,
                 steps: nil,
                 notes: [Self.note, Self.honestyNote],
-                buttonTitles: ["Adopt", "Leave As Is"])
+                buttonTitles: ["Adopt", "Cancel"])
 
         case let .nearMatch(_, differences):
             // §7.3: Adopt is for a port "out of every bridge, its own service".
@@ -133,7 +135,7 @@ public struct AdoptPort: Sendable {
                     \(port.positionName) is out of every bridge and has its own \
                     service, but \(clause). RDMALink didn't make this service, so \
                     it won't rewrite it — but here's exactly what to change, and \
-                    it'll adopt the port the moment it matches.
+                    RDMALink adopts the port the moment it matches.
                     """,
                 findings: findings,
                 steps: """
@@ -143,7 +145,7 @@ public struct AdoptPort: Sendable {
                     IPv4 to Off.
                     """,
                 notes: [Self.watcherLine],
-                buttonTitles: ["Open Network Settings", "Copy These Steps", "Leave As Is"])
+                buttonTitles: ["Open Network Settings", "Copy These Steps", "Cancel"])
 
         case .unconfigured, .foreign:
             // Not a match at all: no `Adopt…` button is ever offered, and the
@@ -205,18 +207,43 @@ public struct AdoptPort: Sendable {
 }
 
 /// Forgets RDMALink's note for a port and changes nothing on the system
-/// (UX_SPEC §S10's stop-managing form, §7.3).
+/// (UX_SPEC §S10's stop-managing form, §7.3) — an adopted port's, a return
+/// record's, or a drifted port's (§S1).
 public struct StopManaging: Sendable {
     public let port: OperationPort
+    /// The note that would be forgotten, as it was read when the form opened.
+    /// Only what it records is asked of it: whether it is a way back.
+    public let note: PortBaseline?
 
-    public init(port: OperationPort) { self.port = port }
+    public init(port: OperationPort, note: PortBaseline? = nil) {
+        self.port = port
+        self.note = note
+    }
 
-    public var headline: String { "Stop looking after \(port.positionName)?" }
+    /// True when the note records the bridges the port came from — a
+    /// drifted port's. Forgetting it forgets the only way back, so the form
+    /// says so and has no default (§S10, §2.6).
+    public var forgetsTheWayBack: Bool { note?.bridges.isEmpty == false }
+
+    /// §S10's stop-managing question. It names no port, as Restore's and
+    /// Return to Bridge's don't: the camera has already turned to it, and the
+    /// body names it.
+    public static let headline = "Stop managing this port?"
+    /// The same sheet while the note is being forgotten (§S10).
+    public static let runningHeadline = "Forgetting this port's note"
     public var body: String {
-        """
-        Stopping just means RDMALink forgets its note. The port and its \
-        settings stay exactly as they are.
-        """
+        guard forgetsTheWayBack else {
+            return """
+                Stopping just means RDMALink forgets its note for \
+                \(port.positionName). The port and its settings stay exactly as \
+                they are.
+                """
+        }
+        return """
+            Stopping just means RDMALink forgets its note for \
+            \(port.positionName). The port and its settings stay exactly as they \
+            are. RDMALink won't be able to put it back afterwards.
+            """
     }
     public var buttonTitle: String { "Stop Managing" }
 

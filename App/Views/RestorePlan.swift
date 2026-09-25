@@ -21,7 +21,11 @@ struct RestorePlan: Sendable {
     enum Kind: Sendable, Equatable { case restore, returnToBridge, stopManaging, all }
 
     var kind: Kind
+    /// §S10's question, which names no port — the body does.
     var headline: LocalizedStringResource
+    /// What the headline says once the button is pressed and the checklist
+    /// runs: what is happening, not a question already answered (§S10).
+    var runningHeadline: LocalizedStringResource
     /// Absent where a refusal stands in for the whole plan: the refusal names
     /// the situation itself, and two headlines is one too many.
     var body: LocalizedStringResource?
@@ -29,6 +33,10 @@ struct RestorePlan: Sendable {
     var rows: [LocalizedStringResource] = []
     var notes: [LocalizedStringResource] = []
     var primary: RestoreAction
+    /// Whether `primary` is the sheet's default. Not for the stop-managing
+    /// form over a note that records the bridges the port came from: that
+    /// forgets the only way back, and §2.6 gives it no default.
+    var primaryIsDefault = true
     /// The live checklist, in the order the writes happen — the same steps the
     /// operation reports, so no row can go unmarked.
     var steps: [OperationStep] = []
@@ -46,6 +54,16 @@ struct RestorePlan: Sendable {
 /// Core's: this takes a reading and hands back Core's own plan.
 @MainActor
 enum RestorePlanning {
+
+    /// §S10: the headline the sheet shows while it reads this Mac, over a
+    /// small spinner, before there is a plan — the same question the plan
+    /// will ask, which depends on the form and never on the reading.
+    static func headlineWhileReading(
+        subject: RestoreSubject, hub: HubActionsModel
+    ) -> LocalizedStringResource {
+        LocalizedStringResource(core: RestoreSheetHeadline.whileReading(
+            subject, note: subject.portID.flatMap(hub.baseline(id:))))
+    }
 
     static func plan(subject: RestoreSubject, hub: HubActionsModel) -> RestorePlan? {
         guard let world = hub.world else { return nil }
@@ -102,6 +120,7 @@ enum RestorePlanning {
         return RestorePlan(
             kind: .restore,
             headline: LocalizedStringResource(core: core.headline),
+            runningHeadline: LocalizedStringResource(core: RestorePort.runningHeadline),
             body: core.refusal == nil ? LocalizedStringResource(core: core.body) : nil,
             rows: core.refusal == nil ? core.rows.map { LocalizedStringResource(core: $0) } : [],
             notes: core.refusal == nil ? core.notes.map { LocalizedStringResource(core: $0) } : [],
@@ -137,6 +156,8 @@ enum RestorePlanning {
         return RestorePlan(
             kind: .returnToBridge,
             headline: LocalizedStringResource(core: core.headline),
+            runningHeadline: LocalizedStringResource(core: ReturnToBridge.runningHeadline(
+                bridgeName: core.bridgeName ?? ReturnToBridge.preferredBridgeName)),
             body: core.canProceed ? LocalizedStringResource(core: core.body) : nil,
             rows: core.canProceed ? core.rows.map { LocalizedStringResource(core: $0) } : [],
             primary: .returnToBridge,
@@ -147,16 +168,21 @@ enum RestorePlanning {
             volumes: scoped.mountedVolumes)
     }
 
-    // MARK: - An adopted port RDMALink should simply let go of
+    // MARK: - A port RDMALink should simply let go of
 
+    /// An adopted port's note, a return record, or a drifted port's (§S1).
+    /// Core reads the note and says whether it is a way back; when it is, the
+    /// body says so and the form has no default (§S10, §2.6).
     private static func stopManaging(portID: String, hub: HubActionsModel) -> RestorePlan? {
         guard let port = hub.snapshot(id: portID) else { return nil }
-        let core = StopManaging(port: OperationPort(port.port))
+        let core = StopManaging(port: OperationPort(port.port), note: port.baseline)
         return RestorePlan(
             kind: .stopManaging,
-            headline: LocalizedStringResource(core: core.headline),
+            headline: LocalizedStringResource(core: StopManaging.headline),
+            runningHeadline: LocalizedStringResource(core: StopManaging.runningHeadline),
             body: LocalizedStringResource(core: core.body),
-            primary: .stopManaging,
+            primary: .confirmStopManaging,
+            primaryIsDefault: !core.forgetsTheWayBack,
             port: port)
     }
 
@@ -189,7 +215,8 @@ enum RestorePlanning {
 
         return RestorePlan(
             kind: .all,
-            headline: LocalizedStringResource(core: core.headline),
+            headline: LocalizedStringResource(core: RestoreAll.headline),
+            runningHeadline: LocalizedStringResource(core: RestoreAll.runningHeadline),
             body: LocalizedStringResource(core: core.body),
             rows: ports.map { LocalizedStringResource(core: $0.port.positionName) },
             primary: .restore,

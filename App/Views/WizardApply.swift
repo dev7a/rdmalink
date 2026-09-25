@@ -7,7 +7,8 @@
 //  thirty-second permission is in hand.
 //
 //  `SetUpFlow.primary` returns `nil` here, so the footer's trailing button is
-//  gone rather than greyed, and `showsBack` turns `Back` off with it.
+//  gone rather than greyed, and `showsBack` turns the leading one off with
+//  it — for good: a refused S6's card holds every way out (§S6).
 //
 
 import SwiftUI
@@ -33,10 +34,16 @@ struct WizardApply: View {
             EmptyView()
         case .refused:
             VStack(alignment: .leading, spacing: 12) {
+                // §S6, §2.3 band 1: the card replaces the screen, so its
+                // headline leads it and carries the step label.
+                if let refusal = flow.applyRefusal {
+                    WizardRefusalCard(refusal: refusal, model: model, perform: perform)
+                }
                 // §S10's rule, applied to set-up: the summary never rounds up.
-                // A port that landed is stated before the refusal about the one
-                // that did not, so "Put back, safely" is never read as a claim
-                // about a Mac that is half-changed.
+                // The ports that landed are listed under the card, and the
+                // card leaves off its "Nothing has been changed." then
+                // (`SetUpFlow.applyRefusal`), so "Put back, safely" is never
+                // read as a claim about a Mac that is half-changed (§S6).
                 if !run.landedLines.isEmpty {
                     GroupedSection {
                         ForEach(Array(run.landedLines.enumerated()), id: \.offset) { index, line in
@@ -52,9 +59,6 @@ struct WizardApply: View {
                             .padding(.horizontal, 12)
                         }
                     }
-                }
-                if let refusal = run.refusal {
-                    WizardRefusalCard(refusal: refusal, model: model, perform: perform)
                 }
             }
         case .running, .finished:

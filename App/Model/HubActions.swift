@@ -17,17 +17,21 @@ import RDMALinkCore
 
 /// One thing the hub offers. Every title is the spec's own.
 enum HubAction: Sendable, Equatable, Identifiable {
-    /// The footer's default button and the Port menu's ⌘N, where the port is
-    /// the one already selected, when there is one — and a row's `Set Up…`,
-    /// which names its own (§S1).
+    /// With no port, the footer's default button and the Port menu's ⌘N,
+    /// which open the picker — with the port selected on the hub chosen when
+    /// set-up can take it; with one, a row's `Set Up…` or a double-click,
+    /// which name their port and open Review for it (§S1, §S4).
     case setUpPort(portID: String?)
     case identifyPort(portID: String?)
     case adopt(portID: String)
     case restore(portID: String)
     case returnToBridge(portID: String)
+    /// §S1: forgets the note of a port still on this Mac — adopted,
+    /// returned, or drifted — through S10's stop-managing form.
     case stopManaging(portID: String)
-    case setItUpAgain(portID: String)
-    case forgetThisPort(portID: String)
+    /// A drifted or returned row's `Set Up Again…`: the same run as `Set
+    /// Up…`, for a port that has been set up before (§S1).
+    case setUpAgain(portID: String)
     case showMe(portID: String)
     case restoreAll
     case changeLog
@@ -44,8 +48,7 @@ enum HubAction: Sendable, Equatable, Identifiable {
         case .restore(let port): "restore:\(port)"
         case .returnToBridge(let port): "return:\(port)"
         case .stopManaging(let port): "stop:\(port)"
-        case .setItUpAgain(let port): "again:\(port)"
-        case .forgetThisPort(let port): "forget:\(port)"
+        case .setUpAgain(let port): "again:\(port)"
         case .showMe(let port): "showMe:\(port)"
         case .restoreAll: "restoreAll"
         case .changeLog: "changeLog"
@@ -53,11 +56,11 @@ enum HubAction: Sendable, Equatable, Identifiable {
         }
     }
 
-    /// The button's words, verbatim from §S1, §S10 and §S11.
-    ///
-    /// `Set Up Port…` has a second form once a port is ready — the footer
-    /// picks between them, because only the footer knows (§S1's primary
-    /// action); the Port menu's item is always the first form.
+    /// The button's words, verbatim from §S1, §S10 and §S11. Every one that
+    /// opens somewhere the user still decides — a sheet, the set-up
+    /// assistant, Identify's watch — ends in an ellipsis, and the rest act on
+    /// the click (§1.3 rule 11). The footer draws this title too, so it and
+    /// the Port menu's ⌘N can never name one command two ways (§S1).
     var title: LocalizedStringResource {
         switch self {
         case .setUpPort: "Set Up Port…"
@@ -66,8 +69,7 @@ enum HubAction: Sendable, Equatable, Identifiable {
         case .restore: "Restore…"
         case .returnToBridge: "Return to Bridge…"
         case .stopManaging: "Stop Managing…"
-        case .setItUpAgain: "Set It Up Again"
-        case .forgetThisPort: "Forget This Port"
+        case .setUpAgain: "Set Up Again…"
         case .showMe: "Show Me"
         case .restoreAll: "Restore All Ports…"
         case .changeLog: "Change Log"
@@ -87,13 +89,14 @@ enum HubAction: Sendable, Equatable, Identifiable {
     }
 
     /// A way into the set-up assistant (S4–S7): the footer's and the Port
-    /// menu's `Set Up Port…`, a row's `Set Up…`, and `Set It Up Again`.
+    /// menu's `Set Up Port…`, a row's `Set Up…`, and `Set Up Again…`.
     /// §S1 offers every one of them on the footer's terms
-    /// (`HubFooterModel.offers(_:)`), and §S4 gives none of them to a row on
+    /// (`HubFooterModel.offers(_:)`), `HubActionsModel.perform` refuses every
+    /// one the footer would not allow, and §S4 gives none of them to a row on
     /// the picker, where the run is already under way.
     var opensSetUp: Bool {
         switch self {
-        case .setUpPort, .setItUpAgain: true
+        case .setUpPort, .setUpAgain: true
         default: false
         }
     }
@@ -120,7 +123,8 @@ enum RestoreSubject: Sendable, Equatable, Identifiable {
     case restore(portID: String)
     /// §7.5: any port that is out of the bridge, whoever took it out.
     case returnToBridge(portID: String)
-    /// An adopted port: RDMALink forgets its note and changes nothing.
+    /// An adopted, returned or drifted port: RDMALink forgets its note and
+    /// changes nothing.
     case stopManaging(portID: String)
     /// Every note there is, one password, one at a time.
     case all
@@ -143,11 +147,32 @@ enum RestoreSubject: Sendable, Equatable, Identifiable {
 }
 
 /// The hub's hand-off to the set-up flow (S4–S7), which is its own slice. The
-/// footer, the Port menu, a row's `Set Up…` and `Set It Up Again` set this
+/// footer, the Port menu, a row's `Set Up…` and `Set Up Again…` set this
 /// and nothing else.
-struct SetUpRequest: Sendable, Equatable {
-    /// The port the user already had in hand, when there was one.
-    var portID: String?
+///
+/// The run's shape is fixed here, when it starts, and never changes (§2.3
+/// band 1, §S4 "When this screen appears").
+enum SetUpRequest: Sendable, Equatable {
+    /// The footer's `Set Up Port…` and ⌘N, which name no port: the picker,
+    /// step 1 of 3. `suggested` is the port selected on the hub, which the
+    /// picker opens with chosen when set-up can take it.
+    case choose(suggested: String?)
+    /// A control that names its port — a row's `Set Up…` or `Set Up
+    /// Again…`, the drift row, the change log, R30, a double-click: Review,
+    /// step 1 of 2, with no picker in the run.
+    case port(String)
+}
+
+/// What of the set-up assistant is up, as the menus and the hub's own door
+/// see it (§2.6, §2.7: nothing re-enters a run).
+enum AssistantPresence: Sendable, Equatable {
+    /// S4 with Identify down: the one screen a sheet may open over, and only
+    /// for the route the picker names; `Identify Port…` starts its S4b.
+    /// `routed` is the dimmed row whose click printed R27's line — the row
+    /// the Port menu's `Restore…` and `Adopt…` mean here (§2.7).
+    case picker(routed: String?)
+    /// S4b, S5, S6 or S7: the Port menu offers nothing.
+    case underWay
 }
 
 /// How an operation ended.
@@ -182,6 +207,13 @@ struct OperationRun: Sendable, Equatable {
     }
 
     var isRunning: Bool { outcome == nil }
+
+    /// §S10: the checklist has started and the burst is writing — the first
+    /// step has been reported, which only happens once macOS has handed back
+    /// the permission. While only the password dialog is up every row is
+    /// still pending, nothing has been written, and closing or quitting
+    /// cancels as it always did.
+    var isWriting: Bool { isRunning && states.contains { $0 != .pending } }
 
     /// Restore All runs the same step once per port — three ports means three
     /// `checkBackInBridge` rows, all equal values — so a report lands on the

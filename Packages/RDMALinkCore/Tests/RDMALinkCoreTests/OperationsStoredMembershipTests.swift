@@ -43,7 +43,7 @@ struct OperationsStoredMembershipTests {
         // UX_SPEC §S5 row 2, the one-bridge form — not the "nothing to remove"
         // variant the kernel alone would have produced.
         let row = port.rows[1]
-        #expect(row.title == "Leave the Thunderbolt Bridge")
+        #expect(row.title == "Leave Thunderbolt Bridge")
         #expect(row.before == "In the bridge")
         #expect(row.after == "Standalone")
         #expect(row.body.contains("This port is a member of Thunderbolt Bridge."))

@@ -1129,7 +1129,7 @@ final class StageScene {
     /// review, apply, and restore, and whenever the port list's bridge row is
     /// hovered."
     private static func ribbonStrength(of link: StageRibbonLink, moment: StageMoment) -> Float {
-        // §S5's hover-to-preview: pointing at "Leave the Thunderbolt Bridge"
+        // §S5's hover-to-preview: pointing at "Leave Thunderbolt Bridge"
         // fades this receptacle's links away in front of you, before anything
         // has been agreed to.
         if let preview = moment.preview, preview.kind == .leaveBridge, link.touches(preview.id) {

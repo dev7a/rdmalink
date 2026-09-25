@@ -22,24 +22,36 @@ struct RefusalCard<Buttons: View>: View {
     let symbol: String
     var tint: RefusalTint = .secondary
     let headline: LocalizedStringResource
+    /// §6.1 rule 7: a refusal that follows a partial write states the
+    /// rollback first, before explaining anything else — under the headline,
+    /// which still leads the screen (§2.3 band 1), and ahead of the paragraph.
+    var lead: LocalizedStringResource?
     let message: LocalizedStringResource
     /// A second paragraph some refusals grow into — R24 after three tries.
     var extraMessage: LocalizedStringResource?
     /// Leading in the working area. Inside a sheet the card's buttons sit
     /// bottom-trailing like every other sheet's button row (§2.6).
     var buttonRowAlignment: Alignment = .leading
+    /// §6.1 rule 3: a card under a screen's own headline — the picker's R3,
+    /// R16 and R26, the hub's R3 tip and R22, a refusal under the Adopt
+    /// sheet's headline — steps its headline down to `.headline`, so no
+    /// screen has two headlines of equal weight. A card that replaces the
+    /// screen keeps `.title2` and, in the assistant, the step label on it.
+    var isNested = false
     @ViewBuilder var buttons: Buttons
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: symbol)
-                    .symbolRenderingMode(.hierarchical)
-                    .imageScale(.medium)
-                    .foregroundStyle(symbolStyle)
-                    .accessibilityHidden(true)
-                Text(headline)
-                    .font(.title2.weight(.semibold))
+            if isNested {
+                headlineRow
+            } else {
+                HeadlineRow { headlineRow }
+            }
+            if let lead {
+                Text(lead)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Text(message)
                 .font(.body)
@@ -56,6 +68,19 @@ struct RefusalCard<Buttons: View>: View {
                 .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var headlineRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: symbol)
+                .symbolRenderingMode(.hierarchical)
+                .imageScale(.medium)
+                .foregroundStyle(symbolStyle)
+                .accessibilityHidden(true)
+            Text(headline)
+                .font(isNested ? .headline : .title2.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var symbolStyle: AnyShapeStyle {

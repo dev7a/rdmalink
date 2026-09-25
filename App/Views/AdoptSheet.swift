@@ -96,17 +96,21 @@ struct AdoptSheet: View {
                 .padding(.horizontal, 12)
             }
         }
+        // §S9's two notes are Core's, which `AdoptPort.preview` hands the
+        // command-line tool too, so the sheet and the tool can never word
+        // them two ways.
         VStack(alignment: .leading, spacing: 6) {
-            Text("Adopting changes nothing and needs no password. RDMALink is only writing itself a note.")
+            Text(LocalizedStringResource(core: AdoptPort.note))
                 .fixedSize(horizontal: false, vertical: true)
-            Text("One thing to be straight about: RDMALink never saw this port before, so it doesn't know which bridge it came from. There's no exact \"put it back\" for an adopted port — Return to Bridge does the ordinary thing instead, and \"stop looking after it\" leaves the port exactly as it is.")
+            Text(LocalizedStringResource(core: AdoptPort.honestyNote))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .font(.callout)
         .foregroundStyle(.secondary)
+        // §2.6's row: `Cancel` just before the default.
         HStack(spacing: 10) {
             Spacer(minLength: 0)
-            Button("Leave As Is") { dismiss() }
+            Button("Cancel") { dismiss() }
                 .keyboardShortcut(.cancelAction)
             Button("Adopt") { adopt(port) }
                 .buttonStyle(.borderedProminent)
@@ -126,15 +130,16 @@ struct AdoptSheet: View {
                 .padding(.vertical, 8)
                 .padding(.horizontal, 12)
         }
-        Text("RDMALink keeps looking, and offers to adopt the port the moment it matches.")
+        Text(LocalizedStringResource(core: AdoptPort.watcherLine))
             .font(.callout)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+        // §2.6's row: `Cancel` just before the default.
         HStack(spacing: 10) {
             Spacer(minLength: 0)
-            Button("Leave As Is") { dismiss() }
-                .keyboardShortcut(.cancelAction)
             CopyButton(title: "Copy These Steps") { String(localized: AdoptFindings.steps(port)) }
+            Button("Cancel") { dismiss() }
+                .keyboardShortcut(.cancelAction)
             Button("Open Network Settings") {
                 WizardSettingsPane.open(WizardSettingsPane.network)
             }
@@ -164,10 +169,14 @@ struct AdoptSheet: View {
                 headline: LocalizedStringResource(core: refusal.headline),
                 message: LocalizedStringResource(core: refusal.body),
                 extraMessage: refusal.detail.map { LocalizedStringResource(core: $0) },
-                buttonRowAlignment: .trailing
+                buttonRowAlignment: .trailing,
+                // §6.1 rule 3: the sheet's own headline stays above it.
+                isNested: true
             ) {
+                // No default here, so `Cancel` takes the trailing slot
+                // (§2.6): the question the sheet asked is no longer on screen.
                 CopyDetailsButton { model.diagnosticsText(failingStep: refusal.code.rawValue) }
-                Button("Leave As Is") { dismiss() }
+                Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
         case .failed(let details):
@@ -185,7 +194,7 @@ struct AdoptSheet: View {
                 HStack(spacing: 10) {
                     Spacer(minLength: 0)
                     CopyDetailsButton { model.diagnosticsText(failingStep: "adopting a port") }
-                    Button("Leave As Is") { dismiss() }
+                    Button("Cancel") { dismiss() }
                         .keyboardShortcut(.cancelAction)
                 }
             }
@@ -204,87 +213,5 @@ struct AdoptSheet: View {
             }
             return .succeeded(headline: nil, body: LocalizedStringResource(core: confirmation))
         }
-    }
-}
-
-/// Which of §S9's two forms a port is in. A port that is not a match at all is
-/// neither, and is never offered this sheet.
-enum AdoptForm: Sendable, Equatable {
-    case fullMatch
-    case nearMatch([ConfigurationDifference])
-
-    init?(_ port: PortSnapshot) {
-        switch port.configuration {
-        case .readyForRDMA?:
-            // A port RDMALink already looks after has nothing to adopt. A
-            // return record is not that: its port has left the bridge and been
-            // given a matching service since, so the record describes nothing
-            // current, and adopting replaces it with the adopted note (the
-            // same replacement §7.5 step 5 describes for set-up).
-            guard port.baseline?.isReturned != false else { return nil }
-            self = .fullMatch
-        case .nearMatch(_, let differences)?:
-            // §7.3: Adopt is for a port that is "out of every bridge, its own
-            // service". A port still in a bridge is not that case, and §S9's
-            // near-match body opens by saying it is — so it is not offered
-            // this sheet rather than shown a sentence that contradicts itself.
-            // Core's `AdoptPort.preview` makes the same call.
-            guard !differences.contains(where: \.isBridgeMembership),
-                AdoptFindings.clause(for: differences) != nil
-            else { return nil }
-            self = .nearMatch(differences)
-        case .unconfigured?, .foreign?, nil:
-            return nil
-        }
-    }
-
-    var headline: LocalizedStringResource {
-        switch self {
-        case .fullMatch: "This port is already set up"
-        case .nearMatch: "Nearly a match"
-        }
-    }
-
-    func body(_ port: PortSnapshot) -> LocalizedStringResource {
-        let name = port.port.positionName
-        switch self {
-        case .fullMatch:
-            return "\(name) isn't in any bridge and already has its own service with IPv4 off and IPv6 link-local only. That's exactly what RDMALink would have made. Adopt it and RDMALink will keep an eye on it — without changing a thing."
-        case .nearMatch(let differences):
-            let clause = AdoptFindings.clause(for: differences) ?? ""
-            return "\(name) is out of every bridge and has its own service, but \(clause). RDMALink didn't make this service, so it won't rewrite it — but here's exactly what to change, and it'll adopt the port the moment it matches."
-        }
-    }
-}
-
-/// §S9's four findings rows, its steps, and the one clause its near-match body
-/// names the difference in.
-enum AdoptFindings {
-    /// **Service — Thunderbolt Bridge Free** · **IPv4 — Off** ·
-    /// **IPv6 — Link-local only** · **Bridge membership — None**.
-    static func rows(_ port: PortSnapshot) -> [LocalizedStringResource] {
-        [
-            "Service — \(port.serviceName ?? port.port.bsdName)",
-            "IPv4 — Off",
-            "IPv6 — Link-local only",
-            "Bridge membership — None",
-        ]
-    }
-
-    static func steps(_ port: PortSnapshot) -> LocalizedStringResource {
-        "In System Settings, open Network, choose \(port.serviceName ?? port.port.bsdName), then Details, then TCP/IP. Set Configure IPv6 to Link-local only. Set Configure IPv4 to Off."
-    }
-
-    /// §S9 writes the near-match body for one difference — IPv6 set to
-    /// Automatic — and the sentence it writes has a shape the other
-    /// differences fit: *"\<what\> is set to \<this\> rather than \<that\>"*.
-    /// The clauses are Core's, so the sheet and `AdoptPort.preview` can never
-    /// name the difference two different ways.
-    ///
-    /// Bridge membership is never one of them: the body's own first clause
-    /// says the port is out of every bridge (§1.3 rule 10).
-    /// **Owed from the spec owner:** the near-match body for each of them.
-    static func clause(for differences: [ConfigurationDifference]) -> String? {
-        ConfigurationDifference.serviceClause(in: differences)
     }
 }

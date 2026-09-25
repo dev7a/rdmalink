@@ -123,18 +123,13 @@ final class IdentifySession {
     static let timeoutBody: LocalizedStringResource =
         "Some devices don't announce themselves, and an empty port has nothing to announce. Choose a port from the list instead — or try again with a Mac on the other end."
 
-    /// §S4b writes the count in words for six, four and three. Any other
-    /// machine takes the digit in the same sentence. **Owed from the spec
-    /// owner:** the remaining counts.
+    /// §S4b writes the count in words for six, four and three, and any
+    /// other count is spelled out the same way (§1.3 rule 1).
     var statusLine: LocalizedStringResource? {
         switch outcome {
         case .watching:
-            switch watchedCount {
-            case 6: return "Watching all six ports…"
-            case 4: return "Watching all four ports…"
-            case 3: return "Watching all three ports…"
-            default: return "Watching all \(watchedCount) ports…"
-            }
+            let count = ThisMacPresentation.spelledOut(watchedCount, capitalized: false)
+            return "Watching all \(count) ports…"
         case let .unplugged(port):
             return "Got it — that's \(port.positionName). Plug it back in whenever you're ready."
         case .replugged, .ambiguous, .usbOnly, .timedOut:
@@ -182,6 +177,18 @@ final class IdentifySession {
         case .unplugged, .replugged: .useThisPort
         case .ambiguous, .usbOnly: .identifyAgain
         case .timedOut: .chooseFromList
+        }
+    }
+
+    /// §S4b's other buttons, which sit in the footer just before the default
+    /// (§2.3 band 4). Each outcome offers every way on but the one the
+    /// default already is.
+    var secondaryActions: [WizardAction] {
+        switch outcome {
+        case .watching: []
+        case .unplugged, .replugged: [.identifyAgain, .chooseFromList]
+        case .ambiguous, .usbOnly: [.chooseFromList]
+        case .timedOut: [.identifyAgain]
         }
     }
 
@@ -252,7 +259,8 @@ final class IdentifySession {
         }
     }
 
-    /// `Identify Again`, and the way out of every dead end this screen has.
+    /// `Identify Again…`, and the way out of every dead end this screen has:
+    /// the watch starts over, and the unplugging is the user's to do again.
     func restart() {
         outcome = .watching
         showsNudge = false

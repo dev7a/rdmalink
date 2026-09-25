@@ -43,9 +43,9 @@ struct SituationRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 // §6.2 R31: the row still states the situation on a Mac
                 // RDMALink does not recognize, but its way out — `Show Me`,
-                // `Set It Up Again`, `Forget This Port` — is absent, because
+                // `Set Up Again…`, `Stop Managing…` — is absent, because
                 // there is no model to show and nothing is written.
-                // §S1: the drift row's `Set It Up Again` is the port row's
+                // §S1: the drift row's `Set Up Again…` is the port row's
                 // beside it, on the footer's terms — absent in R23's
                 // read-only mode, disabled while two Macs are connected.
                 if let hub, !hub.isUnrecognized {

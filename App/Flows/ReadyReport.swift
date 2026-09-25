@@ -52,7 +52,7 @@ struct ReadyReport: Sendable, Equatable {
 
         if hasAddress {
             self.headline = "\(position) is ready"
-            self.body = "The port has left the Thunderbolt Bridge and has its own link-local address. It'll carry RDMA as soon as the other Mac is set up the same way."
+            self.body = "The port has left Thunderbolt Bridge and has its own link-local address. It'll carry RDMA as soon as the other Mac is set up the same way."
         } else if link == .macLinkComingUp {
             self.headline = "\(position) is ready"
             self.body = "Another Mac is here and the link is still coming up. The address usually takes a few seconds."

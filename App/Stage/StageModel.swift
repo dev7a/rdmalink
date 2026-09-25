@@ -175,7 +175,7 @@ enum StageIdentify: Equatable, Sendable {
 enum StagePreview: String, Equatable, Sendable, CaseIterable {
     /// **Save how to undo this** — a bookmark glyph at the stage's trailing edge.
     case note
-    /// **Leave the Thunderbolt Bridge** — this receptacle's ribbon links fade
+    /// **Leave Thunderbolt Bridge** — this receptacle's ribbon links fade
     /// away and the segmented ring's gaps widen a hair.
     case leaveBridge
     /// **Get its own network service** — a small accent node beside the

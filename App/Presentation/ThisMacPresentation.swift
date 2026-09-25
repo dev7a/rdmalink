@@ -55,10 +55,17 @@ enum ThisMacPresentation {
     /// The RDMA row, or `nil` while the switch has not been read. The app
     /// never states a status it has not observed (§1.3 rule 10), and the spec
     /// has no copy for "unknown".
-    static func rdmaRow(_ state: RDMASwitchState) -> ThisMacRowModel? {
+    ///
+    /// - Parameter isReadOnly: R23's Thunderbolt 4 Mac or R31's unrecognized
+    ///   one, where RDMALink sets nothing up. "Turn it on to finish" would
+    ///   invite a step that finishes nothing there, so the row states the
+    ///   switch and carries no button (§S1).
+    static func rdmaRow(_ state: RDMASwitchState, isReadOnly: Bool = false) -> ThisMacRowModel? {
         switch state {
         case .unobserved:
             return nil
+        case .off where isReadOnly:
+            return ThisMacRowModel(id: "rdma", text: "RDMA over Thunderbolt — Off")
         case .off:
             return ThisMacRowModel(
                 id: "rdma",
@@ -153,17 +160,12 @@ enum ThisMacPresentation {
     /// locale would land a French "cinq" or "et" inside an English sentence;
     /// the spelling is pinned to the sentence's own language until the app is
     /// genuinely localized.
-    static let english = Locale(identifier: "en_US")
+    static let english = Counts.english
 
-    /// `Four`, `Six` — the spec writes these counts in words (§S1).
+    /// `Four`, `Six` — every count in the app's copy is words, in a button
+    /// or a counter as in a sentence (§1.3 rule 1). Core's one `.spellOut`
+    /// formatter, so the app and Core never write one count two ways.
     static func spelledOut(_ count: Int, capitalized: Bool = true) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .spellOut
-        formatter.locale = english
-        guard let words = formatter.string(from: NSNumber(value: count)) else {
-            return count.formatted()
-        }
-        guard capitalized else { return words }
-        return words.prefix(1).localizedUppercase + words.dropFirst()
+        Counts.spelledOut(count, capitalized: capitalized)
     }
 }

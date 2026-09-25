@@ -33,7 +33,6 @@ final class HubActionsModel {
     /// never available on different terms.
     var footer = HubFooterModel(
         primary: nil,
-        primaryTitle: "Set Up Port…",
         isPrimaryEnabled: false,
         disabledReason: nil,
         offersRestore: true
@@ -41,6 +40,16 @@ final class HubActionsModel {
 
     /// The set-up flow's inbox (S4–S7). Written here, taken by the flow.
     var pendingSetUp: SetUpRequest?
+
+    /// The Port menu's `Identify Port…` on the picker: S4b is the flow's, so
+    /// this is its inbox too (§S4b, §2.7). The window takes it.
+    var pendingIdentify = false
+
+    /// Whether the set-up assistant is up, and how far, mirrored from the
+    /// flow by the window (`SetUpFlow.presence`). `nil` is the hub. While it
+    /// is set nothing re-enters the run: `canPerform` and `perform` answer
+    /// no to everything but the picker's own route (§2.6, §2.7).
+    var assistant: AssistantPresence?
 
     /// The live checklist, while an operation is running or has just ended.
     private(set) var run: OperationRun?
@@ -114,11 +123,11 @@ final class HubActionsModel {
         snapshot(id: id)?.baseline
     }
 
-    /// §2.8: "Whenever any baseline exists, the footer of the hub carries
-    /// `Restore…`" — any baseline `Restore…` can put something back from,
-    /// which a return record is not (§7.5 step 5). A note for a port that is
-    /// not on this Mac any more still counts, which is why the store's own
-    /// list is consulted and not only the live ports.
+    /// §2.8: "Whenever any restorable note exists — one that records a
+    /// set-up to undo; a return record (§7.5) is not one — the footer of the
+    /// hub carries `Restore…`". A note for a port that is not on this Mac any
+    /// more still counts, which is why the store's own list is consulted and
+    /// not only the live ports.
     var hasRestorableNote: Bool {
         !restorable.isEmpty || !restorablePorts.isEmpty
     }
@@ -133,17 +142,43 @@ final class HubActionsModel {
         !note.isReturned
     }
 
-    /// §2.8: "Restore is never hidden." The footer's and the Port menu's
-    /// `Restore…` mean the port in hand when there is one, the only noted port
-    /// when there is only one, and §S10's Restore All when there is neither —
-    /// the sheet that can name them all.
-    var restoreAction: HubAction {
+    /// The one port `Restore…` means, when it means one: the port in hand,
+    /// or the only noted port. The Port menu's `Restore…` is this or
+    /// unavailable, because `Restore All Ports…` sits right under it and one
+    /// sheet has one name there (§2.7, §2.8).
+    ///
+    /// On the picker it means the dimmed row last clicked and nothing else —
+    /// the one route a sheet may open over the assistant for (§2.6, §2.7) —
+    /// and `canPerform` answers for it there.
+    var restoreOnePort: HubAction? {
+        if case .picker(let routed)? = assistant {
+            return routed.map { .restore(portID: $0) }
+        }
         if let selected = selectedPort, selected.baseline.map(Self.isRestorable) == true {
             return .restore(portID: selected.id)
         }
         let ports = restorablePorts
         if ports.count == 1, let only = ports.first { return .restore(portID: only.id) }
-        return .restoreAll
+        return nil
+    }
+
+    /// §2.8: "Restore is never hidden." The footer's `Restore…` means one
+    /// port when there is one to mean, and §S10's Restore All when there is
+    /// not — the sheet that can name them all, which nothing beside the
+    /// footer's button offers.
+    var restoreAction: HubAction { restoreOnePort ?? .restoreAll }
+
+    /// §S1: the set-up action a port's own row offers — `Set Up…` or `Set Up
+    /// Again…` — when the footer offers set-up at all, or `nil`. The change
+    /// log's and R30's buttons show exactly this and no other, so they are
+    /// never on different terms from the row; each draws itself disabled by
+    /// `footer.allows`, and `perform` refuses by it too. Nothing while the
+    /// assistant is up: a run is never entered twice (§2.7).
+    func setUpAction(forRowOf portID: String) -> HubAction? {
+        guard assistant == nil, let port = snapshot(id: portID) else { return nil }
+        return PortRowPresentation(snapshot: port).actions.first {
+            $0.opensSetUp && footer.offers($0)
+        }
     }
 
     /// The port the stage and the list agree is selected (§2.4). The Port menu
@@ -154,15 +189,61 @@ final class HubActionsModel {
         return snapshot(id: id)
     }
 
+    /// The port the Port menu's per-port items — `Adopt…`, `Return to
+    /// Bridge…`, `Stop Managing…` — act on (§2.7). On the hub, the one
+    /// selected. On the picker, the dimmed row whose click printed R27's line:
+    /// the picker's selection is always a port it can choose, which has no
+    /// route, so "that row's `Restore…`, `Return to Bridge…` or `Adopt…`" is
+    /// the row that was routed. Nothing while the run is under way.
+    var menuPortID: String? {
+        switch assistant {
+        case nil: selectedPort?.id
+        case .picker(let routed)?: routed
+        case .underWay?: nil
+        }
+    }
+
     /// Whether an action has anything to act on. One answer for the row
     /// buttons, the footer and the Port menu (§2.7: the menu is the same shape
     /// on every machine, and unavailable rather than missing).
     func canPerform(_ action: HubAction) -> Bool {
+        // §2.6: a sheet is never replaced from outside it. While one is up —
+        // on the hub or over the picker — the menus, ⌘N, ⌘I and ⌘L all answer
+        // no: `open(_:)` would drop the checklist it may be running, and on
+        // the picker ⌘I would start S4b under it. The sheet's own buttons
+        // (R19's, R28's and R30's `Stop Managing…`, R30's `Set Up Again…`)
+        // go straight to `perform`, which has its own guard.
+        if sheet != nil { return false }
+        // §2.7: nothing re-enters a run. While the assistant is up the only
+        // things on offer are the picker's own — the route it names for a
+        // dimmed row and its Identify — and on S4b to S7 nothing at all.
+        // `Change Log` would take the working area the assistant holds, so
+        // it waits for the assistant to close like every other item here.
+        if let assistant {
+            guard case .picker = assistant else { return false }
+            switch action {
+            case .identifyPort:
+                return true
+            case .restore(let portID), .adopt(let portID), .returnToBridge(let portID):
+                guard let port = snapshot(id: portID),
+                    let route = ChoosePortReport.route(for: port),
+                    ChoosePortReport.namedAction(for: route, snapshot: port) == action
+                else { return false }
+                return canPerformOnTheHub(action)
+            default:
+                return false
+            }
+        }
+        return canPerformOnTheHub(action)
+    }
+
+    /// The answer when the assistant is down.
+    private func canPerformOnTheHub(_ action: HubAction) -> Bool {
         // R31 first, as Core asks it first: the change log is the one thing
         // §6.2 R31 leaves working, and it only reads.
         if isUnrecognized { return action == .changeLog }
         switch action {
-        case .setUpPort, .setItUpAgain:
+        case .setUpPort, .setUpAgain:
             return footer.allows(action)
         case .identifyPort(let portID):
             let port = portID.flatMap(snapshot(id:)) ?? selectedPort
@@ -194,18 +275,20 @@ final class HubActionsModel {
             }
             return port.isOutOfEveryBridge
         case .stopManaging(let portID):
-            // §7.5 step 5: `Forget This Port` clears a return record. §S1
-            // gives the returned row no button for it, so it is reached the
-            // way an adopted port's is — the Port menu's `Stop Managing…`,
-            // whose sheet says exactly what it does: forgets the note and
-            // changes nothing. It is keyed on the note, not on what the port
-            // is doing now: a return record whose port has since left the
-            // bridge reads as no note in the row, and this is the one door
-            // left through which it can be cleared.
-            guard let note = snapshot(id: portID)?.baseline else { return false }
-            return note.isAdopted || note.isReturned
-        case .forgetThisPort(let portID):
-            return snapshot(id: portID)?.baseline != nil
+            // §S1: `Stop Managing…` forgets the note of a port still on this
+            // Mac and changes nothing on it — an adopted port's, a return
+            // record's (§7.5 step 5), or a drifted port's, whose situation
+            // row offers it. §S1 gives the returned row no button for it, so
+            // that one is reached through the Port menu. It is keyed on the
+            // note, not on what the port is doing now: a return record whose
+            // port has since left the bridge reads as no note in the row,
+            // and this is the one door left through which it can be cleared.
+            //
+            // Never a port RDMALink set up that is still ready, whose way
+            // back is `Restore…`, and never one that needs a hand, whose note
+            // is the only record of where it came from (§S1).
+            guard let port = snapshot(id: portID), let note = port.baseline else { return false }
+            return note.isAdopted || note.isReturned || port.readiness == .drifted
         case .showMe(let portID):
             return snapshot(id: portID) != nil
         case .restoreAll:
@@ -242,12 +325,37 @@ final class HubActionsModel {
         // unavailable. This is the one door they all go through, so it is
         // shut as well (§6.2 R31, §2.7).
         guard !isUnrecognized || action == .changeLog else { return }
+        // §2.6, §S6, §S10: a write is never cut off. While a sheet's
+        // checklist runs nothing may replace the sheet or start a run beside
+        // it — `open(_:)` would drop the checklist mid-burst, turn the
+        // window's close button back on and let a second burst start. No
+        // sheet shows a button then; this is the door's own answer. A sheet's
+        // `Stop Managing…` and `Set Up Again…` still come through: no run is
+        // live when a refusal offers them.
+        guard run?.isRunning != true else { return }
+        // §2.6, §2.7: nothing re-enters a run. A button over the assistant
+        // that would open a second sheet or a second run is refused here as
+        // well as drawn unavailable, so no caller can go round the menu.
+        if assistant != nil, !canPerform(action) { return }
+        // §S1: one door for set-up. A set-up the footer would not take — two
+        // Macs connected (R1), or none offered at all (R23) — is refused
+        // whoever raises it: a row, the drift row, the change log, R30.
+        if action.opensSetUp, !footer.allows(action) { return }
         switch action {
         case .setUpPort(let portID):
-            pendingSetUp = SetUpRequest(portID: portID ?? stage?.selectedID)
-        case .setItUpAgain(let portID):
-            pendingSetUp = SetUpRequest(portID: portID)
+            // A control that names its port opens Review for it; the footer
+            // and ⌘N name none and open the picker, with the hub's selection
+            // offered to it (§S4 "When this screen appears").
+            pendingSetUp = portID.map(SetUpRequest.port) ?? .choose(suggested: stage?.selectedID)
+        case .setUpAgain(let portID):
+            pendingSetUp = .port(portID)
         case .identifyPort(let portID):
+            // On the picker ⌘I is the picker's own Identify (§S4b); on the
+            // hub it is still the camera move (§10: the watch there is owed).
+            if case .picker? = assistant {
+                pendingIdentify = true
+                return
+            }
             identify(portID ?? stage?.selectedID)
         case .adopt(let portID):
             open(.adopt(portID: portID))
@@ -263,9 +371,6 @@ final class HubActionsModel {
             showMe(portID)
         case .changeLog:
             openChangeLog()
-        case .forgetThisPort(let portID):
-            guard let port = snapshot(id: portID) else { return }
-            forget(bsdName: port.port.bsdName, positionName: port.port.positionName)
         case .forgetThisNote(let bsdName):
             let positionName = log.first { $0.port == bsdName }?.positionName ?? bsdName
             forget(bsdName: bsdName, positionName: positionName)
@@ -372,18 +477,22 @@ final class HubActionsModel {
 
     // MARK: - Forgetting a note
 
-    /// §S1's `Forget This Port` and §S11's `Forget This Note`. It deletes
-    /// RDMALink's own note and writes the log entry that says so. Nothing on
-    /// the system is touched, and no password is asked for.
+    /// §S11's `Forget This Note`, for a port that is not on this Mac any
+    /// more: the port is gone, so there is nothing to manage and no sheet to
+    /// open over it, and it acts on the click. It deletes RDMALink's own note
+    /// and writes the log entry that says so. Nothing on the system is
+    /// touched, and no password is asked for. A note for a port that is still
+    /// here goes through `Stop Managing…` and its sheet instead (§S1).
     private func forget(bsdName: String, positionName: String) {
         let store = store
         let log = changeLog
         Task {
             await Task.detached(priority: .userInitiated) {
                 try? store.delete(port: bsdName)
-                // §S11 has no sentence for a note cleared after drift. This is
-                // the closest the spec gives — the stopped-looking-after line —
-                // and a sentence of its own is **owed from the spec owner**.
+                // §S11 has no sentence for a note cleared after its port went.
+                // This is the closest the spec gives — the stopped-looking-
+                // after line — and a sentence of its own is **owed from the
+                // spec owner**.
                 let entry = ChangeEntry(
                     port: bsdName,
                     positionName: positionName,
@@ -482,7 +591,7 @@ final class HubActionsModel {
 
     /// The sheet is gone; nothing from its run outlives it.
     ///
-    /// One sheet can replace another — R19's `Stop Managing This Port` does
+    /// One sheet can replace another — R19's `Stop Managing…` does
     /// exactly that — and the old one's `onDisappear` lands after the new one
     /// has asked for its own reading, so a dismissal that something else has
     /// already answered clears nothing.

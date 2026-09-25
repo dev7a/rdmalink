@@ -210,7 +210,7 @@ struct OperationsRestoreTests {
                 environment: Fixtures.environment(store: store), progress: { _, _ in })
         } throws: { ($0 as? Refusal)?.code == .noteIsAReturnRecord }
         #expect(writer.calls == [.lock], "nothing is written, and no service is touched")
-        #expect(try store.load(port: "en6") == note, "the record stays for Set It Up Again")
+        #expect(try store.load(port: "en6") == note, "the record stays for Set Up Again")
     }
 
     @Test("R30's adopted form: an adopted note is named for what it is, and nothing is written")
@@ -378,9 +378,14 @@ struct OperationsRestoreTests {
             world: Fixtures.world(
                 ifconfig: Fixtures.standalone,
                 services: [Self.service(id: "ABC", name: "RDMA — Back, far left")]))
-        #expect(plan.headline == "Put Back, far left the way it was?")
+        #expect(plan.headline == "Put this port back the way it was?")
+        #expect(RestorePort.runningHeadline == "Putting this port back")
+        #expect(ReturnToBridge.headline() == "Return this port to Thunderbolt Bridge?"
+                && ReturnToBridge.runningHeadline() == "Returning this port to Thunderbolt Bridge")
+        #expect(RestoreAll.headline == "Put every port back?"
+                && RestoreAll.runningHeadline == "Putting every port back")
         #expect(plan.body.hasPrefix(
-            "RDMALink will delete the service it made and return the port to Thunderbolt Bridge — exactly as it was on "))
+            "RDMALink will delete the service it made and return Back, far left to Thunderbolt Bridge — exactly as it was on "))
         #expect(plan.rows == [
             "Delete the service RDMA — Back, far left",
             "Add the port back to Thunderbolt Bridge",

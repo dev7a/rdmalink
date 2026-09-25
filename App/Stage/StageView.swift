@@ -22,8 +22,9 @@ struct StageView: View {
     /// §S4's ⌘-click and ⇧-click, on the one screen that has a selection to
     /// extend. Absent elsewhere, so a modified click is an ordinary one.
     var onExtendClick: ((StagePort) -> Void)?
-    /// §S1: "double-clicking a configurable one starts set-up for it". Set
-    /// by the hub only; `nil` inside a run, where the picker owns the choice.
+    /// §S1: "double-clicking a configurable one … opens Review for it" — a
+    /// named run, step 1 of 2. Set by the hub only; `nil` inside a run, where
+    /// the picker owns the choice.
     var onDoubleClick: ((StagePort) -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
@@ -536,6 +537,13 @@ struct StageView: View {
 
     /// One element per receptacle, in physical order — the container's order is
     /// the list's order and the machine's order, on every screen.
+    ///
+    /// **Owed:** §8.2's custom actions. Each element has only its default
+    /// action, which selects. §8.2 gives it **Select**, **Show Me**, and the
+    /// row's own buttons by their titles without the ellipsis — built from
+    /// `PortRowPresentation.actions`, filtered by `HubFooterModel.offers` and
+    /// unavailable by `allows`, so the stage and the list cannot offer one
+    /// port two different ways.
     private var accessibilityElements: some View {
         VStack(spacing: 0) {
             ForEach(model.ports) { port in

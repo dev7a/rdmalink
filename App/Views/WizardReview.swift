@@ -3,12 +3,13 @@
 //
 //  S5 — Here's what will change (UX_SPEC §S5). The promise screen: everything
 //  the app is about to do, in plain words, with the technical truth one
-//  disclosure away, and the last chance to back out before any password —
+//  checkbox away, and the last chance to back out before any password —
 //  which its default button asks for straight away.
 //
 //  Every string in the sections is Core's `SetUpPortsPlan`, which holds §S5's
-//  table verbatim. Above them: the pre-selection line when the pick was made
-//  for the user (§S4), and §S3's four checks as the Checked group. A refusal
+//  table verbatim. Above them: §S3's four checks as the Checked group — and
+//  never a pre-selection line, because the choice was made before this
+//  screen, on the picker or by the control that named the port (§S4). A refusal
 //  **replaces** the sections and the footer's primary button is removed
 //  entirely rather than disabled (§6.1 rule 6) — which `SetUpFlow.primary`
 //  does by returning `nil` — while a check that said no only disables it.
@@ -31,13 +32,27 @@ struct WizardReview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let refusal = flow.reviewRefusal {
+                // A card replaces the screen, headline and all (§6.1 rule 3).
+                // While macOS's password dialog is up it is inert: the burst
+                // is waiting on the dialog, and no button here could cancel
+                // it (`SetUpFlow.goBack`) — the screen "says nothing over it"
+                // (§S5).
                 WizardRefusalCard(refusal: refusal, model: model, perform: perform)
-            } else if let plan = flow.reviewPlan {
-                sections(plan)
+                    .disabled(flow.isAuthorizing)
             } else {
-                // The plan is a read, and the app never states a change it has
-                // not worked out yet (§1.3 rule 10).
-                ProgressView().controlSize(.small)
+                // §S5: the headline and the body depend on nothing the plan
+                // says, so they are drawn at once, and the spinner stands
+                // where the Checked group and the sections will go — the app
+                // never states a change it has not worked out yet (§1.3 rule
+                // 10).
+                WizardHeadline(
+                    headline: LocalizedStringResource(core: SetUpPortsPlan.headline),
+                    message: LocalizedStringResource(core: SetUpPortsPlan.body))
+                if let plan = flow.reviewPlan {
+                    sections(plan)
+                } else {
+                    ProgressView().controlSize(.small)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -50,15 +65,6 @@ struct WizardReview: View {
 
     private func sections(_ plan: SetUpPortsPlan) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            WizardHeadline(
-                headline: LocalizedStringResource(core: SetUpPortsPlan.headline),
-                message: LocalizedStringResource(core: SetUpPortsPlan.body))
-            if let line = flow.reviewPreSelectionLine {
-                Text(line)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             WizardChecksGroup(report: flow.checks, perform: perform)
             ForEach(plan.ports, id: \.port.bsdName) { port in
                 WizardReviewSection(plan: port) { change, isHovering in
@@ -79,9 +85,16 @@ struct WizardReview: View {
             } label: {
                 Text(SetUpPortsPlan.whatRDMALinkWontTouchLabel).font(.callout)
             }
-            // Bound to the same preference as Settings and the View menu, so
-            // turning it on here turns it on everywhere (§1.3 rule 6).
-            DisclosureGroup(isExpanded: $showsTechnicalNames) {
+            // §S5: a checkbox, not a disclosure, because that is what it is —
+            // bound to the same preference as Settings' switch and the View
+            // menu's item, so turning it on here turns technical names on
+            // everywhere (§1.3 rule 6), which a disclosure triangle never
+            // does. The technical lines sit beneath it while it is on.
+            Toggle(isOn: $showsTechnicalNames) {
+                Text("Show technical names").font(.callout)
+            }
+            .toggleStyle(.checkbox)
+            if showsTechnicalNames {
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(technicalLines(plan), id: \.id) { line in
                         Text(line.text)
@@ -92,9 +105,7 @@ struct WizardReview: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 4)
-            } label: {
-                Text("Show technical names").font(.callout)
+                .transition(.opacity)
             }
         }
     }
@@ -137,7 +148,9 @@ struct WizardReviewSection: View {
                 }
             }
             ForEach(Array(plan.warnings.enumerated()), id: \.offset) { _, warning in
-                // Never blocking and never scary: a line, not an alarm.
+                // Never blocking and never scary: a line, not an alarm. The
+                // orange symbol because the user has something to do — switch
+                // RDMA on (§3.1).
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "exclamationmark.circle")
                         .symbolRenderingMode(.hierarchical)
@@ -148,6 +161,14 @@ struct WizardReviewSection: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+            // What is plugged in only informs: drawn as the picker draws the
+            // same sentence, `.callout` secondary with no symbol (§S4, §S5).
+            ForEach(Array(plan.informationalLines.enumerated()), id: \.offset) { _, line in
+                Text(line)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

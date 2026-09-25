@@ -77,9 +77,16 @@ public struct SetUpPortPlan: Sendable, Equatable {
     public var bridgeNames: [String]
     /// The four rows, in order.
     public var rows: [ReviewRow]
-    /// Warning rows. Never blocking.
+    /// Warning rows, led by the orange symbol: something the user has to do
+    /// before the port carries RDMA — switch RDMA on (§S5, §3.1). Never
+    /// blocking.
     public var warnings: [String]
-    /// The `Show technical names` disclosure, one fact per line.
+    /// Informational lines, drawn with no symbol: what is plugged in, which
+    /// changes nothing and asks nothing of the user. The same sentences the
+    /// picker prints (``SetUpPorts/informationalLine(for:naming:)``).
+    public var informationalLines: [String]
+    /// The lines under Review's `Show technical names` checkbox, one fact per
+    /// line.
     public var technicalNames: [String]
     /// The refusal that replaces this section, when there is one.
     public var refusal: Refusal?
@@ -97,9 +104,10 @@ public struct SetUpPortsPlan: Sendable, Equatable {
         "Nothing has happened yet. When you're ready, macOS will ask for an administrator's name and password once — it doesn't have to be yours, and RDMALink never sees or stores it — and every change is made in one go."
     public static let footnote =
         "Your Wi-Fi, your Ethernet, and every other network service are untouched."
-    public static let whatRDMALinkWontTouchLabel = "What RDMALink Won't Touch"
+    /// A disclosure's label is a label, so it is sentence case (§1.3 rule 1).
+    public static let whatRDMALinkWontTouchLabel = "What RDMALink won't touch"
     public static let whatRDMALinkWontTouch = """
-        Your other Thunderbolt ports. The Thunderbolt Bridge itself — RDMALink \
+        Your other Thunderbolt ports. Thunderbolt Bridge itself — RDMALink \
         never deletes or recreates a bridge, it only removes a member. Wi-Fi. \
         Ethernet. File sharing, the firewall, and everything else on this Mac. \
         The RDMA system setting, which is yours to switch.
@@ -129,8 +137,14 @@ public struct SetUpPortsPlan: Sendable, Equatable {
     /// The button's name whatever is in the way. S5 keeps the button and
     /// *disables* it while one of §S3's checks (R1, R2, R4) says no, because
     /// those clear by themselves; a refusal removes it (UX_SPEC §S5).
+    ///
+    /// The count is spelled out — `Set Up Two Ports` — so the button and the
+    /// headline S6 draws after it ("Setting up two ports") name one count
+    /// one way (§1.3 rule 1).
     public var buttonTitle: String {
-        ports.count == 1 ? "Set Up Port" : "Set Up \(ports.count) Ports"
+        ports.count == 1
+            ? "Set Up Port"
+            : "Set Up \(Counts.spelledOut(ports.count, capitalized: true)) Ports"
     }
 }
 
@@ -145,6 +159,22 @@ public struct SetUpPortResult: Sendable, Equatable {
     public var leftBridges: [String]
     /// What it took for the kernel to agree the port is out of every bridge.
     public var agreement: KernelAgreement
+
+    public init(
+        bsdName: String,
+        positionName: String,
+        serviceName: String,
+        createdServiceID: String,
+        leftBridges: [String],
+        agreement: KernelAgreement
+    ) {
+        self.bsdName = bsdName
+        self.positionName = positionName
+        self.serviceName = serviceName
+        self.createdServiceID = createdServiceID
+        self.leftBridges = leftBridges
+        self.agreement = agreement
+    }
 }
 
 /// The port a multi-port burst stopped on, and why.
@@ -278,7 +308,8 @@ public struct SetUpPorts: Sendable {
             bridgesToLeave: bridges,
             bridgeNames: named,
             rows: Self.rows(serviceName: serviceName, bridgeNames: named),
-            warnings: Self.warnings(port: port, rdma: world.rdma),
+            warnings: Self.warnings(rdma: world.rdma),
+            informationalLines: Self.informationalLine(for: port.link).map { [$0] } ?? [],
             technicalNames: Self.technicalNames(
                 port: port, serviceName: serviceName, bridges: bridges,
                 world: world),
@@ -313,9 +344,11 @@ public struct SetUpPorts: Sendable {
         ]
     }
 
-    /// Row 2, which has three forms: one bridge, two, or none.
+    /// Row 2, which has three forms: one bridge, two, or none. "Thunderbolt
+    /// Bridge" is a name and takes no article (§1.3 rule 12), and S6's step
+    /// 2 is this title word for word (``OperationStep/leaveBridge(named:)``).
     static func bridgeRow(_ names: [String]) -> ReviewRow {
-        let title = "Leave the Thunderbolt Bridge"
+        let title = "Leave Thunderbolt Bridge"
         guard let first = names.first else {
             return ReviewRow(
                 title: title,
@@ -339,31 +372,58 @@ public struct SetUpPorts: Sendable {
     }
 
     /// The warning rows. Never blocking — they say what will still be true
-    /// afterwards, which is not the same as something being in the way.
-    static func warnings(port: OperationPort, rdma: RDMAStatus) -> [String] {
-        var found: [String] = []
-        if rdma == .off || rdma == .unknown {
-            found.append("""
-                RDMA over Thunderbolt is still off. The port will be ready; \
-                RDMA will start using it after you turn that on and restart.
-                """)
-        }
-        switch port.link {
-        case .empty:
-            found.append("Nothing is plugged into this port yet. It'll be ready and waiting.")
-        case .device:
-            found.append("""
-                There's a dock or a display in this port. It'll keep working \
-                exactly as it does now — RDMA will use the port once a Mac is \
-                on the other end.
-                """)
-        case .macLinked, .macLinkComingUp:
-            break
-        }
-        return found
+    /// afterwards, which is not the same as something being in the way — but
+    /// each asks something of the user, so each is led by the orange symbol
+    /// (§3.1: orange means the user needs to act).
+    static func warnings(rdma: RDMAStatus) -> [String] {
+        guard rdma == .off || rdma == .unknown else { return [] }
+        return ["""
+            RDMA over Thunderbolt is still off. The port will be ready; RDMA \
+            will start using it after you turn that on and restart.
+            """]
     }
 
-    /// The `Show technical names` disclosure, one fact per line.
+    /// §S4's and §S5's informational line for what is plugged into a port,
+    /// or `nil` when a Mac is. One sentence per fact, the same on both
+    /// screens, drawn with no symbol: it asks nothing of the user.
+    ///
+    /// - Parameter positionName: the port's name, when the line has to say
+    ///   which port it is about — the picker, with more than one chosen.
+    ///   Without it the line says "this port", as Review's section, headed
+    ///   by the name, and the picker with one port chosen both can.
+    public static func informationalLine(
+        for link: LinkState, naming positionName: String? = nil
+    ) -> String? {
+        switch (link, positionName) {
+        case (.empty, nil):
+            return """
+                Nothing is plugged into this port yet. That's fine — the address \
+                appears when a Mac arrives.
+                """
+        case (.empty, let name?):
+            return """
+                Nothing is plugged into \(name) yet. That's fine — the address \
+                appears when a Mac arrives.
+                """
+        case (.device, nil):
+            return """
+                There's a dock or a display in this port. It'll keep working \
+                exactly as it does now — RDMA will use the port once a Mac is on \
+                the other end.
+                """
+        case (.device, let name?):
+            return """
+                There's a dock or a display in \(name). It'll keep working \
+                exactly as it does now — RDMA will use the port once a Mac is on \
+                the other end.
+                """
+        case (.macLinked, _), (.macLinkComingUp, _):
+            return nil
+        }
+    }
+
+    /// The lines under Review's `Show technical names` checkbox, one fact per
+    /// line.
     static func technicalNames(
         port: OperationPort,
         serviceName: String,
@@ -456,6 +516,17 @@ public struct SetUpPorts: Sendable {
             // Adopt is the one case left, and no screen offers a button to it.
             throw NetworkConfigurationError.missing("a port that can be set up")
         }
+        // A note kept because the port needs putting back by hand is the only
+        // record of where it came from, and every port below starts by
+        // writing a fresh note. The app never offers a set-up for such a port
+        // (UX_SPEC §S1); this is the same answer from the one place every
+        // set-up passes through, before anything is written.
+        for portPlan in plan.ports {
+            if let kept = try? environment.store.load(port: portPlan.port.bsdName),
+                let refusal = Self.keptForAHand(kept, plan: portPlan, world: world) {
+                throw refusal
+            }
+        }
 
         var results: [SetUpPortResult] = []
         var unfinished: SetUpPortFailure?
@@ -497,6 +568,33 @@ public struct SetUpPorts: Sendable {
                 + Double(elapsed.components.attoseconds) / 1e18)
     }
 
+    /// UX_SPEC §6.2 R20, raised by set-up: `kept` records the bridges the port
+    /// came from — a note R11 or R20 kept on purpose, or one whose service was
+    /// removed by hand since (UX_SPEC §7.4) — and the port is
+    /// now in none of them and has no service of its own. Setting it up would
+    /// write a fresh note over that record, after which nothing could put the
+    /// port back where it was. R20's copy is this state exactly: the service
+    /// is gone, the bridge isn't listing the port, and the note is kept.
+    ///
+    /// `nil` for every other note: a drifted port back in its bridge, a return
+    /// record and an adoption record are all set up again over their notes as
+    /// §7.4 and §7.5 describe.
+    ///
+    /// Public so the command-line preview can say what the burst would: the
+    /// check lives in the burst because it reads the note, which the preview
+    /// does not (UX_SPEC §S1, §6.2 R20).
+    public static func keptForAHand(
+        _ kept: PortBaseline, plan: SetUpPortPlan, world: ObservedWorld
+    ) -> Refusal? {
+        guard !kept.isAdopted, !kept.isReturned, let first = kept.bridges.first,
+            plan.bridgesToLeave.isEmpty, plan.refusal == nil, !plan.routesToAdopt
+        else { return nil }
+        return Refusals.notBackInBridge(
+            port: plan.port.observed,
+            bridgeName: world.name(ofBridge: first.bridgeName),
+            removedService: true)
+    }
+
     /// What the review screen's promise actually rests on, so R17 fires on a
     /// change that matters and stays quiet about one that does not.
     static func whatMoved(from reviewed: SetUpPortsPlan?, to now: SetUpPortsPlan) -> String? {
@@ -532,7 +630,7 @@ public struct SetUpPorts: Sendable {
         // exactly what makes R9's and R12's "changed nothing at all" literally
         // true — and while it is true the note must not outlive the attempt,
         // because a leftover note claims a port is managed that nothing
-        // touched: the hub would read `.drifted`, offer `Set It Up Again` over
+        // touched: the hub would read `.drifted`, offer `Set Up Again…` over
         // an ordinary bridged port, and turn on a `Restore…` that throws.
         //
         // A note that was already there — a return record (§7.5) or a drifted

@@ -16,11 +16,6 @@ import RDMALinkCore
 struct WizardReady: View {
     let flow: SetUpFlow
     let model: InventoryModel
-    let perform: (WizardAction) -> Void
-    /// `What to Do on the Other Mac`, which closes the assistant and opens
-    /// §S8's screen in its place. Absent by default rather than present and
-    /// inert.
-    var showOtherMac: (() -> Void)?
 
     var body: some View {
         // Worked out once per body evaluation, not once per line.
@@ -42,9 +37,8 @@ struct WizardReady: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            if let showOtherMac {
-                Button("What to Do on the Other Mac", action: showOtherMac)
-            }
+            // `What to Do on the Other Mac` and `Done` are the footer's
+            // (§S7, §2.3 band 4).
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.smooth(duration: 0.25), value: report.blocks)

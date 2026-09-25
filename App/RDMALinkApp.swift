@@ -19,6 +19,8 @@ struct RDMALinkApp: App {
     /// `WindowGroup` is what removes File › New Window.
     static let mainWindowID = "rdmalink.main"
 
+    /// §S6, §S10: quitting waits for a burst to land (`BurstGate`).
+    @NSApplicationDelegateAdaptor(RDMALinkAppDelegate.self) private var appDelegate
     @Environment(\.openWindow) private var openWindow
     @State private var router = HubRouter()
     @AppStorage(AppSettings.showTechnicalNames) private var showsTechnicalNames = false
@@ -59,23 +61,23 @@ struct RDMALinkApp: App {
                 ChangeLogCommand()
             }
             CommandGroup(replacing: .help) {
-                // §2.7 lists four items. "RDMALink Help" and "What RDMA over
-                // Thunderbolt Is" are meant to have different destinations, and
-                // there is no help book yet — so the first item *is* §S13's
-                // explainer, deliberately, and the second is not duplicated
-                // onto the same sheet. §2.2 makes the toolbar's Help button
-                // open the first item, which is therefore the explainer too.
-                // It carries ⌘? and a divider sets it apart from the rest, as
-                // in every Mac app's Help menu.
-                // **Owed:** a real help destination, and the second item back.
-                Button("RDMALink Help") { show(.whatThisAllMeans) }
-                    .keyboardShortcut("?", modifiers: .command)
+                // §2.7: `RDMALink Help` opens §S13, whose first section is
+                // what RDMA over Thunderbolt is, so the menu has no second
+                // item for it. §2.2 makes the toolbar's Help button open this
+                // item too. It carries ⌘? and a divider sets it apart from
+                // the rest, as in every Mac app's Help menu.
+                // It waits while one of the window's sheets is up, and only
+                // then (§2.6).
+                HelpCommand { show(.whatThisAllMeans) }
                 Divider()
                 // §S8: a screen in the working area, not a sheet, so it is
-                // routed like the change log and not like the item above it.
-                Button("What to Do on the Other Mac") { showOtherMac() }
-                // §S12's save, the same one Settings and the change log use.
-                SaveDiagnosticsCommand()
+                // routed like the change log and not like the item above it —
+                // and, like it, unavailable while the assistant holds the
+                // working area (§2.7).
+                OtherMacCommand(router: router) { showOtherMac() }
+                // §S12's save, the same one Settings and the change log use —
+                // unavailable while a sheet or the assistant is up (§2.7).
+                SaveDiagnosticsCommand(router: router)
             }
         }
 
@@ -110,14 +112,18 @@ struct RDMALinkApp: App {
 /// the menu is the same shape on every machine. On an unrecognized Mac there
 /// is no chassis and so no camera (§6.2 R31: "No selector, legend, callout or
 /// view buttons"), and every item here is unavailable the same way.
+///
+/// The faces are one group of views of which one is showing, as Finder's
+/// View › as Icons … as Gallery are: nouns, in the port list's own face names
+/// (§2.3 band 3), with a checkmark on the face the stage is turned to (§2.7).
 private struct StageViewCommands: View {
     @FocusedValue(\.stageModel) private var stage: StageModel?
 
     var body: some View {
         face("Back", .back, "1")
         face("Front", .front, "2")
-        face("Left", .left, "3")
-        face("Right", .right, "4")
+        face("Left Side", .left, "3")
+        face("Right Side", .right, "4")
         Divider()
         // Both camera items follow the face items: unavailable, not missing,
         // when there is no chassis to move the camera around (§6.2 R31, §2.7).
@@ -135,11 +141,16 @@ private struct StageViewCommands: View {
         .disabled(stage?.chassis == nil)
     }
 
+    /// A menu `Toggle` draws the checkmark. Choosing the face already
+    /// showing leaves it showing — a view is chosen, never switched off.
     private func face(
         _ title: LocalizedStringResource, _ face: PortFace, _ key: KeyEquivalent
     ) -> some View {
-        Button(title) { stage?.turnTo(face) }
+        let isRelevant = stage?.relevantFaces.contains(face) == true
+        return Toggle(title, isOn: Binding(
+            get: { isRelevant && stage?.currentFace == face },
+            set: { _ in stage?.turnTo(face) }))
             .keyboardShortcut(key, modifiers: .command)
-            .disabled(stage?.relevantFaces.contains(face) != true)
+            .disabled(!isRelevant)
     }
 }
