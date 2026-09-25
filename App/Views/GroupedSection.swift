@@ -41,3 +41,17 @@ struct RowDivider: View {
         Divider().padding(.leading, leadingInset)
     }
 }
+
+extension View {
+    /// §2.3 band 3: a small action beside a row's words — borderless, small,
+    /// and in the accent color. A borderless button draws its title in gray
+    /// in a key window, the same gray as the subtitle beside it, and
+    /// clickable text that looks like a label is never found. Port rows,
+    /// situation rows, the checks, the change log, Ready and `Show Me` all
+    /// take it from here.
+    func inlineAction() -> some View {
+        buttonStyle(.borderless)
+            .controlSize(.small)
+            .foregroundStyle(.tint)
+    }
+}

@@ -178,7 +178,7 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
     /// is not the place for.
     ///
     /// `Adopt…` stays because it is the only thing on the screen that reaches
-    /// S9: clicking the row prints R27's line — "Let me show you what I found"
+    /// S9: clicking the row prints R27's line — "Here's what RDMALink found"
     /// — and nothing else happens (`SetUpFlow.routeClick`), so filtering the
     /// button away would leave the sentence with nowhere to land (§1.3 rule 5).
     /// **Owed from the spec owner:** whether that click should open S9 itself,
@@ -287,7 +287,7 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
         case .returned:
             // §S1: "the link-state subtitle and the membership phrase stay".
             return PortRowDetail(
-                state: "Back in the bridge",
+                state: "Returned by RDMALink",
                 link: linkState(of: snapshot.port),
                 membership: membership(of: snapshot)
             )

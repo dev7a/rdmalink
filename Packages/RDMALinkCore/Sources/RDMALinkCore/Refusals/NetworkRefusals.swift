@@ -26,9 +26,9 @@ public enum Refusals {
 
     // MARK: - R31
 
-    /// **R31 — I don't recognize this Mac.** Read-only mode, not an error
-    /// (UX_SPEC §6.2 R31): fires when neither rule in §4.7 recognizes the
-    /// Mac, and never on one the identifier catalogue lists.
+    /// **R31 — RDMALink doesn't recognize this Mac.** Read-only mode, not an
+    /// error (UX_SPEC §6.2 R31): fires when neither rule in §4.7 recognizes
+    /// the Mac, and never on one the identifier catalogue lists.
     ///
     /// Every operation evaluates it **before any other refusal**, in preview
     /// and in perform, so the command-line tool's previews and `refusals`
@@ -39,7 +39,7 @@ public enum Refusals {
         guard !model.isRecognized else { return nil }
         return Refusal(
             code: .macNotRecognized,
-            headline: "I don't recognize this Mac",
+            headline: "RDMALink doesn't recognize this Mac",
             body: """
             RDMALink only draws, and only changes, Macs it knows — and this \
             isn't one of them. So there's no picture, and nothing here will be \
@@ -77,8 +77,8 @@ public enum Refusals {
             body: """
             Thunderbolt Bridge forwards Ethernet between Macs, and two cables \
             between the same pair can send traffic around in a loop. Unplug one \
-            cable and I'll pick this back up — the other one can go back in when \
-            we're done.
+            cable and RDMALink will pick this back up — the other one can go back \
+            in when you're done.
             """,
             detail: "\(englishList(linked.map(\.positionName))) each have a Mac on the end.",
             subjects: linked.map(\.bsdName)
@@ -292,7 +292,7 @@ public enum Refusals {
     public static func baselineUnwritable(detail: String? = nil) -> Refusal {
         Refusal(
             code: .baselineUnwritable,
-            headline: "I can't write down how things are right now",
+            headline: "RDMALink can't write down how things are right now",
             body: """
             RDMALink's notes live in your Library folder, and it can't save \
             there at the moment — which means it couldn't put things back \
@@ -320,7 +320,7 @@ public enum Refusals {
             There's \(found). It isn't RDMALink's and it isn't what a link \
             needs, and RDMALink won't quietly rewrite something you or someone \
             else set up on purpose. Remove it in Network settings if it's \
-            stale, or pick a different port.
+            stale, or choose another port.
             """,
             subjects: [port.bsdName]
         )
@@ -341,7 +341,7 @@ public enum Refusals {
             body: """
             The permission macOS gives RDMALink lasts about thirty seconds, and \
             it ran out before every change went through — so RDMALink put the \
-            port back exactly as it was. Let's go again; it usually flies through.
+            port back exactly as it was. Try again; it usually flies through.
             """,
             subjects: port.map { [$0.bsdName] } ?? []
         )
@@ -362,7 +362,7 @@ public enum Refusals {
             System Settings, or another app, is editing the network \
             configuration right now. RDMALink won't write over it — two things \
             writing network settings at once is how configurations get mangled. \
-            Close that and we'll try again.
+            Close that and RDMALink will try again.
             """,
             subjects: port.map { [$0.bsdName] } ?? []
         )
@@ -438,7 +438,8 @@ public enum Refusals {
 
     // MARK: - R15 and R17
 
-    /// **R15 — There's a bridge here I can't read.** Blocks review for that port.
+    /// **R15 — There's a bridge here RDMALink can't read.** Blocks review for
+    /// that port.
     ///
     /// Raised when the kernel lists the port in a bridge the stored
     /// configuration does not have, so there is no object to edit and no
@@ -456,7 +457,7 @@ public enum Refusals {
         guard !unreadable.isEmpty else { return nil }
         return Refusal(
             code: .bridgeUnreadable,
-            headline: "There's a bridge here I can't make sense of",
+            headline: "There's a bridge here RDMALink can't make sense of",
             body: """
             \(port.positionName) belongs to a bridge whose settings RDMALink \
             can't read properly, and a port has to be out of every bridge — \
@@ -508,7 +509,7 @@ public enum Refusals {
             headline: "Something is still using this link",
             body: """
             The volume \(first.name) is mounted over Thunderbolt. Eject it in \
-            Finder so nothing gets interrupted, then we'll carry on.
+            Finder so nothing gets interrupted, then RDMALink will carry on.
             """,
             // The spec gives the plural its own line rather than bending the
             // body, so a second volume is named in the detail and nowhere else.
@@ -528,7 +529,7 @@ public enum Refusals {
     public static func undoNoteMissing(port: ObservedPort) -> Refusal {
         Refusal(
             code: .undoNoteMissing,
-            headline: "I can't remember how this looked",
+            headline: "RDMALink can't remember how this looked",
             body: """
             The note RDMALink wrote down for \(port.positionName) is missing, \
             and it won't guess at your network settings. You can remove the \
@@ -579,7 +580,7 @@ public enum Refusals {
 
     /// **R21 — The bridge it came from doesn't exist any more.** At Restore.
     ///
-    /// The offer is `Remove My Service Only`: deleting its own service is
+    /// The offer is `Remove Service Only`: deleting its own service is
     /// squarely RDMALink's own business, and recreating a bridge is not.
     public static func originalBridgeGone(port: ObservedPort, bridgeName: String) -> Refusal {
         Refusal(
@@ -609,8 +610,8 @@ public enum Refusals {
             body: """
             This Mac has no Thunderbolt Bridge at the moment. RDMALink never \
             creates one — recreate it in System Settings, under Network › \
-            Manage Virtual Interfaces, and I'll offer the return the moment it \
-            exists.
+            Manage Virtual Interfaces, and RDMALink will offer the return the \
+            moment it exists.
             """,
             subjects: [port.bsdName]
         )

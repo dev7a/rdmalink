@@ -5,7 +5,7 @@
 //  slides in from the trailing side with a single thin connecting line between
 //  the two. The near port carries its solid accent ring; the far port is
 //  hollow and unlit. Nothing is written on either box, and the ghost never
-//  gains detail, ever — it is explicitly *a Mac I can't see*. When the far end
+//  gains detail, ever — it is explicitly *a Mac the app can't see*. When the far end
 //  answers on the link, a returning pulse travels back along the line and
 //  blooms at the near receptacle, once."
 //

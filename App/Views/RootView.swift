@@ -63,14 +63,20 @@ struct RootView: View {
         // hub's actions, and the menu bar is outside this view tree.
         .focusedSceneValue(\.stageModel, stage)
         .focusedSceneValue(\.hubActions, actions)
+        // §2.7: ⌘R is the View menu's `Check Again`, and it re-checks exactly
+        // as the toolbar button does.
+        .focusedSceneValue(\.recheck, recheck)
         .toolbar {
+            // §2.2: two items, each with a verb-first tooltip. `Help` takes
+            // the plain `questionmark` — the toolbar group already draws the
+            // container the circled symbol would draw a second time.
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Check Again", systemImage: "arrow.clockwise") { recheck() }
-                .keyboardShortcut("r", modifiers: .command)
-                .help("Re-runs the full probe.")
-                Button("Help", systemImage: "questionmark.circle") {
+                    .help("Check this Mac's ports and settings again")
+                Button("Help", systemImage: "questionmark") {
                     router.sheet = .whatThisAllMeans
                 }
+                .help("Learn what RDMALink changes and why")
             }
         }
         .sheet(item: $router.sheet) { sheet in
@@ -205,11 +211,11 @@ struct RootView: View {
         guard flow == nil else { return nil }
         return { port in
             guard port.isThunderbolt,
-                  actions.canPerform(.setUpAPort(portID: port.id)),
+                  actions.canPerform(.setUpPort(portID: port.id)),
                   let snapshot = actions.snapshot(id: port.id),
                   ChoosePortReport.route(for: snapshot) == nil
             else { return }
-            actions.perform(.setUpAPort(portID: port.id))
+            actions.perform(.setUpPort(portID: port.id))
         }
     }
 
@@ -241,8 +247,9 @@ struct RootView: View {
         // §S1's rows and situation rows raise their own actions, wherever the
         // list is drawn.
         .environment(actions)
-        // §2.6: Adopt, Restore and Restore All Ports are the three sheets this
-        // slice owns. The other two are S13 and the system's own dialog.
+        // §2.6: Adopt, Restore and Restore All Ports are three of the four
+        // sheets the app draws; S13 is the fourth. The system draws the rest:
+        // the authorization dialog, and the diagnostics save panel and alert.
         .sheet(item: $actions.sheet) { sheet in
             switch sheet {
             case .adopt(let portID):
@@ -356,8 +363,9 @@ struct RootView: View {
             token: preflightToken)
     }
 
-    /// `Check Again`, ⌘R, and the Checked group's own button: re-run the full
-    /// probe **and** the checks' reads, and say so on screen while it happens.
+    /// `Check Again` in the toolbar and the View menu (⌘R), and the Checked
+    /// group's own button: re-run the full probe **and** the checks' reads,
+    /// and say so on screen while it happens.
     private func recheck() {
         if flow != nil {
             isRechecking = true

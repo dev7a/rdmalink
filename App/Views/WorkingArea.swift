@@ -145,8 +145,7 @@ struct StageChangeNotice: View {
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Show Me", action: showMe)
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
+                    .inlineAction()
                 Spacer(minLength: 0)
             }
             .transition(.opacity)
@@ -166,8 +165,10 @@ struct StageChangeNotice: View {
 /// R3 — a cable is in, or the pointer went to, a USB-only port.
 ///
 /// A tip, not a block: nothing in the window is unavailable while it is up, and
-/// its default button is the recovery §6.2 names — the camera arcs to the back
-/// face, which is where the Thunderbolt receptacles are.
+/// its first button is the recovery §6.2 names — the camera arcs to the back
+/// face, which is where the Thunderbolt receptacles are. On the hub it is a
+/// plain button: the footer's primary is already the window's one default
+/// (§6.2 R3).
 struct USBPortTipCard: View {
     let message: LocalizedStringResource
     let model: InventoryModel
@@ -184,9 +185,7 @@ struct USBPortTipCard: View {
             headline: USBPortTip.headline,
             message: message
         ) {
-            Button("Turn the Mac Around", action: turnAndBreathe)
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
+            Button("Show Thunderbolt Ports", action: turnAndBreathe)
             Button("Check Again") { Task { await model.refresh() } }
         }
         .padding(.top, 2)
@@ -218,7 +217,7 @@ struct NoRDMADevicesRefusal: View {
     }
 }
 
-/// R24 — I can't see the Thunderbolt hardware. No partial mode: without
+/// R24 — RDMALink can't see the Thunderbolt hardware. No partial mode: without
 /// hardware truth the app does nothing at all.
 struct NoHardwareWorkingArea: View {
     let model: InventoryModel
@@ -227,7 +226,7 @@ struct NoHardwareWorkingArea: View {
         RefusalCard(
             symbol: "exclamationmark.circle",
             tint: .attention,
-            headline: "I can't see this Mac's Thunderbolt hardware",
+            headline: "RDMALink can't see this Mac's Thunderbolt hardware",
             message: "macOS isn't reporting any Thunderbolt controllers, which RDMALink needs before it will touch anything. A restart often sorts this out.",
             extraMessage: model.noHardwareAttempts >= 3
                 ? "Three tries, same result. Restarting usually clears this up."

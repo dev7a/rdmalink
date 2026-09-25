@@ -48,8 +48,7 @@ struct SituationRow: View {
                 if let hub, !hub.isUnrecognized {
                     ForEach(situation.actions) { action in
                         Button(action.title) { hub.perform(action) }
-                            .buttonStyle(.borderless)
-                            .controlSize(.small)
+                            .inlineAction()
                     }
                 }
             }

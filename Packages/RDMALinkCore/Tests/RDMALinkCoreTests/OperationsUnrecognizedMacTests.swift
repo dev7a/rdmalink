@@ -6,7 +6,7 @@ import Testing
 /// operation refuses **first** — before the note, before the bridge, before
 /// any other refusal — and nothing that writes, notes included, runs. "The
 /// app hiding the buttons is not the only guard."
-@Suite("R31 — I don't recognize this Mac")
+@Suite("R31 — RDMALink doesn't recognize this Mac")
 struct OperationsUnrecognizedMacTests {
 
     private static let readyService = NetworkServiceInfo(
@@ -36,7 +36,7 @@ struct OperationsUnrecognizedMacTests {
         let refusal = try #require(Refusals.macRecognized(Fixtures.unrecognized))
         #expect(refusal.code == .macNotRecognized)
         #expect(refusal.code.rawValue == "R31")
-        #expect(refusal.headline == "I don't recognize this Mac")
+        #expect(refusal.headline == "RDMALink doesn't recognize this Mac")
         #expect(refusal.body == "RDMALink only draws, and only changes, Macs it knows — and this "
             + "isn't one of them. So there's no picture, and nothing here will be changed. The "
             + "ports below are listed the way macOS reports them, and everything you see is real.")

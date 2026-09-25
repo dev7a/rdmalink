@@ -120,7 +120,7 @@ check(all.adoptable.map(\.port.bsdName) == ["en2"], "adoptable is set up elsewhe
 // MARK: §4.3 / §S1: the returned row.
 
 let returnedRow = PortRowPresentation(snapshot: returned)
-check(text(returnedRow.detail.state) == "Back in the bridge", "returned row state")
+check(text(returnedRow.detail.state) == "Returned by RDMALink", "returned row state")
 check(returnedRow.detail.link.map(text) == "Nothing plugged in", "returned row keeps the link subtitle")
 check(returnedRow.detail.membership.map(text) == "In the Thunderbolt Bridge",
       "returned row keeps the membership phrase")
@@ -130,7 +130,7 @@ check(returnedRow.symbol == "arrow.uturn.backward.circle" && returnedRow.symbolS
 check(returnedRow.actions == [.setItUpAgain(portID: "en5")], "returned row offers Set It Up Again only")
 check(returnedRow.compactBadge == nil, "returned row has no Ready badge")
 check(returnedRow.accessibilityLabel
-      == "Back, far left. Thunderbolt port. Back in the bridge. Nothing plugged in. In the Thunderbolt Bridge.",
+      == "Back, far left. Thunderbolt port. Returned by RDMALink. Nothing plugged in. In the Thunderbolt Bridge.",
       "returned row accessibility label carries link and membership")
 let returnedLinked = snapshot(port("en5", "Back, far left", link: .macLinked, bridges: [bridge0]),
                               configuration: .unconfigured(bridges: ["bridge0"]), baseline: returnRecord)
@@ -230,7 +230,7 @@ check(both.disabledReason.map(text) == "Unplug one end of that cable to continue
 findings.portsLoopedBack = []
 let r1 = PreflightReport(findings)
 check(r1.rows[0].finding.map(text)
-      == "Two Macs are connected, on Back, far left and Back, far right. Unplug one and I'll pick this back up.",
+      == "Two Macs are connected, on Back, far left and Back, far right. Unplug one and RDMALink will pick this back up.",
       "R1 row finding is §S3's")
 check(r1.disabledReason.map(text) == "Unplug one of the two cables to continue.", "R1 disabled-button reason")
 check(r1.attentionPortIDs == ["en5", "en6"], "R1 rings the ports in the loop")
@@ -252,7 +252,7 @@ check(PreflightFindings(ports: [cable[0]]).portsLoopedBack.isEmpty, "one end alo
 // R2's refusal card: self-clearing, no button, R1's symbol.
 let r2 = WizardRefusal(Refusals.loopedBackIntoThisMac(cable.map(\.observed))!)
 check(r2.code == "R2" && r2.actions.isEmpty && r2.symbol == "cable.connector", "R2 card has no button")
-check(r2.watchingLine.map(text) == "I'll keep watching — when this is sorted I'll carry straight on.",
+check(r2.watchingLine.map(text) == "RDMALink is watching — once this is sorted it carries straight on.",
       "R2 card keeps watching")
 check(text(r2.headline) == "Both ends of that cable are in this Mac", "R2 card headline is §6.2's")
 
@@ -285,12 +285,38 @@ check(!OtherMacReport(ports: [snapshot(port("en6", "Back, left middle", link: .m
 func titles(_ code: RefusalCode) -> [String] {
     RestoreRefusals.actions(for: code).map { text($0.title) }
 }
-check(titles(.undoNoteMissing) == ["Stop Managing This Port", "Copy These Steps", "Open Network Settings"],
-      "R19: Open Network Settings (default) · Copy These Steps · Stop Managing This Port")
-check(titles(.notBackInBridge) == ["Copy These Steps", "Open Network Settings", "Try Again"],
-      "R20: Try Again (default) · Open Network Settings · Copy These Steps")
-check(titles(.originalBridgeGone) == ["Leave Everything Alone", "Remove My Service Only"],
-      "R21: Remove My Service Only (default) · Leave Everything Alone")
+check(titles(.undoNoteMissing) == ["Stop Managing This Port", "Copy These Steps", "Cancel", "Open Network Settings"],
+      "R19: Open Network Settings (default) · Cancel · Copy These Steps · Stop Managing This Port")
+check(titles(.notBackInBridge) == ["Copy These Steps", "Open Network Settings", "Cancel", "Try Again"],
+      "R20: Try Again (default) · Cancel · Open Network Settings · Copy These Steps")
+check(titles(.originalBridgeGone) == ["Leave Everything Alone", "Remove Service Only"],
+      "R21: Remove Service Only · Leave Everything Alone")
+// §2.6: a sheet's default is never an action that removes something the user
+// didn't ask to remove, and the way out is Escape's, never Return's.
+func defaultTitle(_ code: RefusalCode) -> String? {
+    RestoreAction.defaultAction(in: RestoreRefusals.actions(for: code)).map { text($0.title) }
+}
+check(defaultTitle(.originalBridgeGone) == nil,
+      "R21: no default — Remove Service Only is never pressed by Return")
+check(defaultTitle(.createdServiceEdited) == nil,
+      "R28: no default — Stop Managing… forgets the note a Restore needs")
+check(RestoreAction.leaveEverythingAlone.isCancel && RestoreAction.cancel.isCancel
+      && !RestoreAction.removeServiceOnly.isCancel,
+      "Leave Everything Alone and Cancel are the sheet's Escape")
+check(defaultTitle(.undoNoteMissing) == "Open Network Settings"
+      && defaultTitle(.notBackInBridge) == "Try Again"
+      && defaultTitle(.noteIsAReturnRecord) == "Set It Up Again",
+      "every other row's default is §6.2's")
+check(RestoreAction.defaultAction(in: [.copyDetails, .cancel]) == nil,
+      "a row whose last button is Cancel has no default: Cancel is Escape's")
+for code in [RefusalCode.volumeMounted, .undoNoteMissing, .notBackInBridge, .originalBridgeGone,
+             .noBridgeToReturnTo, .createdServiceEdited, .noteIsAReturnRecord, .networkBusy,
+             .credentialExpired] {
+    // §2.6 and §6.1 rule 10: exactly one — never two, and never none, so the
+    // way out is a button as well as Escape.
+    check(RestoreRefusals.actions(for: code).filter(\.isCancel).count == 1,
+          "every row has exactly one Escape button: \(code)")
+}
 check(titles(.createdServiceEdited) == ["Leave Everything Alone", "Open Network Settings", "Stop Managing…"],
       "R28: Stop Managing… · Open Network Settings · Leave Everything Alone, and no Copy Details")
 check(titles(.noteIsAReturnRecord) == ["Cancel", "Stop Managing…", "Set It Up Again"],
@@ -335,7 +361,7 @@ check(plainCallout.technical == nil, "no technical line while technical names ar
 check(StageCalloutText(presentation: PortRowPresentation(snapshot: plain), showsTechnicalNames: true).technical
       == "en3 · bridge0", "the technical line is the row's suffix when technical names are on")
 check(StageCalloutText(presentation: returnedRow, showsTechnicalNames: false).detail
-      == "Back in the bridge · Nothing plugged in · In the Thunderbolt Bridge",
+      == "Returned by RDMALink · Nothing plugged in · In the Thunderbolt Bridge",
       "the returned row's three phrases come through with their middle dots")
 check(StageCalloutText(presentation: PortRowPresentation(snapshot: addressed), showsTechnicalNames: false).detail
       == "Ready for RDMA · fe80::a2d1:73b4:9e0c:5f16%en6", "the address goes on the end as the row draws it")
@@ -360,7 +386,7 @@ let unrecognized = HardwareModel(identifier: "Mac99,99", marketingName: "Mac", c
 let studio = HardwareModel(identifier: "Mac15,14", marketingName: "Mac Studio", chip: "M3 Ultra",
                            archetype: .studioSix)
 let r31 = HubPresentation.copy(hardware: unrecognized, ports: [managed, outside])
-check(text(r31.headline) == "I don't recognize this Mac", "R31 headline is §6.2's")
+check(text(r31.headline) == "RDMALink doesn't recognize this Mac", "R31 headline is §6.2's")
 check(text(r31.body)
       == "RDMALink only draws, and only changes, Macs it knows — and this isn't one of them. So there's no picture, and nothing here will be changed. The ports below are listed the way macOS reports them, and everything you see is real.",
       "R31 body is §6.2's, verbatim")
@@ -371,7 +397,7 @@ check(text(HubPresentation.copy(hardware: studio, ports: [managed]).headline) ==
 let tb4Unrecognized = HardwareModel(identifier: "Mac16,1", marketingName: "MacBook Pro", chip: "M4",
                                     archetype: .unknown)
 check(tb4Unrecognized.isThunderbolt4, "the fixture is Thunderbolt 4 by the table")
-check(text(HubPresentation.copy(hardware: tb4Unrecognized, ports: []).headline) == "I don't recognize this Mac",
+check(text(HubPresentation.copy(hardware: tb4Unrecognized, ports: []).headline) == "RDMALink doesn't recognize this Mac",
       "R31 wins over R23")
 let tb4 = HardwareModel(identifier: "Mac16,1", marketingName: "MacBook Pro", chip: "M4", archetype: .notebook)
 check(text(HubPresentation.copy(hardware: tb4, ports: []).headline) == "Nothing to configure here",
@@ -386,7 +412,7 @@ check(r31Footer.primary == nil && !r31Footer.offersRestore,
 let tb4Footer = HubPresentation.footer(hardware: tb4, ports: [managed])
 check(tb4Footer.primary == nil && tb4Footer.offersRestore, "R23: no primary, and Restore… stays")
 let hubFooter = HubPresentation.footer(hardware: studio, ports: [managed])
-check(hubFooter.primary == .setUpAPort(portID: nil) && hubFooter.offersRestore
+check(hubFooter.primary == .setUpPort(portID: nil) && hubFooter.offersRestore
       && text(hubFooter.primaryTitle) == "Set Up Another Port…", "S1's footer on a recognized Mac")
 
 // The stage: no chassis, so nothing to turn, select or light.
@@ -401,7 +427,7 @@ check(stage.relevantFaces.isEmpty, "R31: no face selector")
 stage.turnTo(.front)
 stage.fit()
 check(stage.narration == nil && stage.cameraRequest == nil,
-      "R31: no camera move, and no \"Let me turn it around\"")
+      "R31: no camera move, and no \"Turning the Mac around\"")
 stage.noteUnseenChange(on: .front)
 check(stage.unseenChange == nil, "R31: no \"Something changed\" line for a face nobody can look at")
 check(ReceptacleCatalogue.chassis(for: .unknown) == nil, "the catalogue has no chassis for an unrecognized Mac")
@@ -495,6 +521,8 @@ check(plannedFarLeft.canProceed && plannedFarLeft.buttonTitle == "Set Up Port", 
 let fromHub = makeFlow(ports: [farLeftPort, leftMiddle])
 fromHub.open(choosing: "en5")
 check(fromHub.step == .review && fromHub.openedOn == .review, "hub choice: opens on review")
+check(text(fromHub.backTitle) == "Back",
+      "§2.3 band 4: a run that opens on S5 keeps Back — it goes to the picker, it doesn't leave")
 check(text(fromHub.stepCaption) == "Step 1 of 2", "hub choice: Step 1 of 2")
 check(fromHub.selection == ["en5"] && !fromHub.pickedForTheUser && fromHub.reviewPreSelectionLine == nil,
       "hub choice: the port is the one chosen, and nobody picked for the user")
@@ -506,10 +534,12 @@ let picked = makeFlow(ports: [farLeftPort, leftMiddle])
 picked.open(choosing: nil)
 check(picked.step == .review && picked.selection == ["en6"] && picked.pickedForTheUser, "pre-selection: opens on review")
 check(picked.reviewPreSelectionLine.map(text)
-      == "I've picked Back, left middle for you, because that's the port with another Mac on the end of it. Choose a different one if you'd rather.",
+      == "RDMALink has picked Back, left middle for you, because that's the port with another Mac on the end of it. Choose a different one if you'd rather.",
       "pre-selection: §S4's line is stated on S5")
 check(text(picked.stepCaption) == "Step 1 of 2", "pre-selection: Step 1 of 2")
 picked.goBack()
+check(text(picked.backTitle) == "Cancel",
+      "§2.3 band 4: on the picker the leading button leaves the assistant, so it reads Cancel")
 check(picked.step == .choose && picked.openedOn == .choose && picked.selection == ["en6"] && !picked.pickedForTheUser,
       "Back from S5 is the picker, with the selection intact and now the user's")
 check(text(picked.stepCaption) == "Step 1 of 3", "back on the picker: Step 1 of 3")
@@ -535,6 +565,10 @@ check(pickedThenAnother.checks.unsatisfiedCount == 1 && pickedThenAnother.checks
 // Nothing chosen and no candidate, or two: the run opens on the picker.
 let noCandidate = makeFlow(ports: [farLeftPort])
 noCandidate.open(choosing: nil)
+check(text(noCandidate.backTitle) == "Cancel", "a run that opens on the picker: Cancel, not Back")
+noCandidate.beginIdentify()
+check(text(noCandidate.backTitle) == "Cancel", "§S4b: Identify keeps its own Cancel")
+noCandidate.cancelIdentify()
 check(noCandidate.step == .choose && noCandidate.selection.isEmpty && text(noCandidate.stepCaption) == "Step 1 of 3",
       "no Mac on any port: opens on choose")
 let twoCandidates = makeFlow(ports: [farLeftPort, leftMiddle, rightMiddle])
@@ -542,7 +576,7 @@ twoCandidates.open(choosing: nil)
 check(twoCandidates.step == .choose && twoCandidates.selection.isEmpty && !twoCandidates.pickedForTheUser,
       "two Macs on the end: opens on choose, nothing picked")
 check(twoCandidates.choose.preSelectionLine.map(text)
-      == "Two ports have a Mac on the end. I haven't picked for you — choose the one with the cable you mean.",
+      == "Two ports have a Mac on the end. RDMALink hasn't picked for you — choose the one with the cable you mean.",
       "two candidates: the picker says why it didn't pick")
 check(twoCandidates.primary?.isEnabled == false, "nothing chosen: Continue is disabled")
 
@@ -663,6 +697,23 @@ check(picker(usbOnly).isDimmed
 check(picker(foreign).isDimmed
       && text(picker(foreign).detail.state) == text(PortRowPresentation(snapshot: foreign).detail.state),
       "R16's row is dimmed but keeps the hub's subtitle: §S4 has no sentence for it")
+
+// §6.2 R16 on the picker: `Choose Another Port` puts the card away and leaves
+// the user choosing. Only `Cancel` leaves the assistant (§2.3 band 4).
+var r16LeftTheAssistant = false
+let r16 = SetUpFlow(
+    planner: { _ in plannedFarLeft },
+    runner: { _ in AsyncThrowingStream { $0.finish() } },
+    finish: { r16LeftTheAssistant = true })
+r16.update(ports: [farLeftPort, foreign], hardware: studio, switchState: .unobserved, findings: satisfied)
+r16.open(choosing: nil)
+r16.select("en8")
+check(r16.step == .choose && r16.refusal?.code == "R16", "R16: a click on a foreign static-IPv4 port raises R16 on the picker")
+r16.chooseAnotherPort()
+check(r16.step == .choose && r16.refusal == nil && !r16LeftTheAssistant,
+      "R16: Choose Another Port puts the card away and stays on the picker")
+r16.goBack()
+check(r16LeftTheAssistant, "…where Cancel is what leaves the assistant")
 
 // A selectable row is the hub's row, untouched: §S4's selectable subtitles are
 // §S1's, and the screen is still a picker for it.

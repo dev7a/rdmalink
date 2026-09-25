@@ -97,8 +97,8 @@ public struct SetUpPortsPlan: Sendable, Equatable {
         "Nothing has happened yet. When you're ready, macOS will ask for an administrator's name and password once — it doesn't have to be yours, and RDMALink never sees or stores it — and every change is made in one go."
     public static let footnote =
         "Your Wi-Fi, your Ethernet, and every other network service are untouched."
-    public static let whatIWontTouchLabel = "What I Won't Touch"
-    public static let whatIWontTouch = """
+    public static let whatRDMALinkWontTouchLabel = "What RDMALink Won't Touch"
+    public static let whatRDMALinkWontTouch = """
         Your other Thunderbolt ports. The Thunderbolt Bridge itself — RDMALink \
         never deletes or recreates a bridge, it only removes a member. Wi-Fi. \
         Ethernet. File sharing, the firewall, and everything else on this Mac. \
@@ -538,7 +538,7 @@ public struct SetUpPorts: Sendable {
         // A note that was already there — a return record (§7.5) or a drifted
         // one — is put back rather than deleted, because "changed nothing at
         // all" includes the note: the return record is what lets the row still
-        // read "Back in the bridge" after a set-up that never got going.
+        // read "Returned by RDMALink" after a set-up that never got going.
         var changedSomething = false
         let previous = try? environment.store.load(port: port.bsdName)
         do {

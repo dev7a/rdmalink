@@ -196,7 +196,7 @@ struct StagePreviewIntent: Equatable, Sendable {
 /// rounded box at 40 % slides in from the trailing side with a single thin
 /// line between the two, and when the far end answers a pulse travels back
 /// along the line and blooms at the near receptacle, once. The ghost never
-/// gains detail, ever — it is explicitly *a Mac I can't see*.
+/// gains detail, ever — it is explicitly *a Mac the app can't see*.
 struct StageHandoff: Equatable, Sendable {
     /// The receptacle "this link" is on — the near port, which carries the
     /// line. `nil` when RDMALink has set up no port yet: the ghost still
@@ -580,7 +580,7 @@ final class StageModel {
         handoff = intent
         if face != currentFace {
             currentFace = face
-            say("Let me turn it around", showing: face)
+            say("Turning the Mac around", showing: face)
         }
         if wasStaged != face { request(.handoff(face)) }
     }
@@ -599,7 +599,7 @@ final class StageModel {
     func turnTo(_ face: PortFace) {
         guard face != currentFace else { return }
         currentFace = face
-        say("Let me turn it around", showing: face)
+        say("Turning the Mac around", showing: face)
         request(.turn(face))
     }
 
@@ -613,7 +613,7 @@ final class StageModel {
     func turnSquareOn(to face: PortFace) {
         if face != currentFace {
             currentFace = face
-            say("Let me turn it around", showing: face)
+            say("Turning the Mac around", showing: face)
         }
         request(.squareOn(face))
     }
@@ -666,7 +666,7 @@ final class StageModel {
 
     /// Every camera intent passes through here, and none is raised without a
     /// chassis to move around (§6.2 R31: "no selector, legend, callout or
-    /// view buttons", and no "Let me turn it around" either).
+    /// view buttons", and no "Turning the Mac around" either).
     private func request(_ kind: StageCameraRequest.Kind) {
         guard chassis != nil else { return }
         requestToken += 1

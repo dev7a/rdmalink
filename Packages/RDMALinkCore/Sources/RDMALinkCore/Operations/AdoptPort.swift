@@ -59,7 +59,8 @@ public struct AdoptPort: Sendable {
         instead, and "stop looking after it" leaves the port exactly as it is.
         """
     public static let watcherLine = """
-        I'll keep looking. When it matches, I'll offer to adopt it.
+        RDMALink keeps looking, and offers to adopt the port the moment it \
+        matches.
         """
 
     public let port: OperationPort

@@ -2,8 +2,8 @@ import Darwin
 
 /// A hardware read that did not happen.
 ///
-/// The app turns this into R24 ("I can't see this Mac's Thunderbolt hardware"),
-/// and ``description`` is what `Copy Details` carries.
+/// The app turns this into R24 ("RDMALink can't see this Mac's Thunderbolt
+/// hardware"), and ``description`` is what `Copy Details` carries.
 public struct InventoryError: Error, Sendable, Equatable, CustomStringConvertible {
     /// What was being attempted, in technical words.
     public var step: String

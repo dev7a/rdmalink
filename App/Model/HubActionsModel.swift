@@ -33,7 +33,7 @@ final class HubActionsModel {
     /// never available on different terms.
     var footer = HubFooterModel(
         primary: nil,
-        primaryTitle: "Set Up a Port…",
+        primaryTitle: "Set Up Port…",
         isPrimaryEnabled: false,
         disabledReason: nil,
         offersRestore: true
@@ -64,9 +64,10 @@ final class HubActionsModel {
     /// UX_SPEC §6.2 R31: neither rule in §4.7 recognizes this Mac. Nothing
     /// that writes is offered anywhere — set-up, Restore, Adopt, Return to
     /// Bridge, Stop Managing, Forget, notes included — and Identify is not
-    /// offered either, because there is no model for it to point at. The
-    /// buttons are absent, not disabled; Core refuses too, so the hiding is
-    /// not the only guard.
+    /// offered either, because there is no model for it to point at. In the
+    /// window the buttons are absent, not disabled; the Port menu keeps every
+    /// item and disables it (§2.7). `canPerform` and `perform` both say no
+    /// here, and Core refuses too, so neither is the only guard.
     var isUnrecognized: Bool { hardware?.isRecognized == false }
 
     /// What a sheet is reading right now: the kernel's bridge membership, the
@@ -92,7 +93,7 @@ final class HubActionsModel {
 
     init() {}
 
-    /// The window hands over the stage once; `Show Me` and `Identify a Port…`
+    /// The window hands over the stage once; `Show Me` and `Identify Port…`
     /// are camera moves and nothing else.
     func attach(stage: StageModel) {
         self.stage = stage
@@ -161,9 +162,9 @@ final class HubActionsModel {
         // §6.2 R31 leaves working, and it only reads.
         if isUnrecognized { return action == .changeLog }
         switch action {
-        case .setUpAPort, .setItUpAgain:
+        case .setUpPort, .setItUpAgain:
             return footer.primary != nil && footer.isPrimaryEnabled
-        case .identifyAPort(let portID):
+        case .identifyPort(let portID):
             let port = portID.flatMap(snapshot(id:)) ?? selectedPort
             return port?.port.isThunderbolt == true
         case .adopt(let portID):
@@ -236,15 +237,17 @@ final class HubActionsModel {
     // MARK: - Raising an action
 
     func perform(_ action: HubAction) {
-        // Every surface that raises an action is absent on an unrecognized
-        // Mac; this is the one door they all go through, so it is shut too.
+        // On an unrecognized Mac every surface in the window that raises an
+        // action is absent, and the Port menu's items are present but
+        // unavailable. This is the one door they all go through, so it is
+        // shut as well (§6.2 R31, §2.7).
         guard !isUnrecognized || action == .changeLog else { return }
         switch action {
-        case .setUpAPort(let portID):
+        case .setUpPort(let portID):
             pendingSetUp = SetUpRequest(portID: portID ?? stage?.selectedID)
         case .setItUpAgain(let portID):
             pendingSetUp = SetUpRequest(portID: portID)
-        case .identifyAPort(let portID):
+        case .identifyPort(let portID):
             identify(portID ?? stage?.selectedID)
         case .adopt(let portID):
             open(.adopt(portID: portID))
@@ -291,7 +294,7 @@ final class HubActionsModel {
         stage?.select(portID)
     }
 
-    /// §2.7's `Identify a Port…`: the port is selected, the Mac turns to it,
+    /// §2.7's `Identify Port…`: the port is selected, the Mac turns to it,
     /// and the receptacle breathes once. It changes nothing.
     private func identify(_ portID: String?) {
         guard let portID, let stage else { return }

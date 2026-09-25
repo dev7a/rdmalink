@@ -104,7 +104,7 @@ struct OperationsRestoreTests {
         } throws: { error in
             let refusal = error as? Refusal
             return refusal?.code == .undoNoteMissing
-                && refusal?.headline == "I can't remember how this looked"
+                && refusal?.headline == "RDMALink can't remember how this looked"
         }
         #expect(writer.calls == [.lock])
     }
@@ -308,7 +308,7 @@ struct OperationsRestoreTests {
         #expect((try? store.load(port: "en6")) == nil)
     }
 
-    @Test("R21: a bridge that has gone is offered Remove My Service Only")
+    @Test("R21: a bridge that has gone is offered Remove Service Only")
     func offersServiceOnlyWhenTheBridgeIsGone() throws {
         let store = Fixtures.store()
         defer { try? FileManager.default.removeItem(at: store.directory) }

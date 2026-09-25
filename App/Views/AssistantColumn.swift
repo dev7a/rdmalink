@@ -160,8 +160,11 @@ struct AssistantColumn: View {
                 WizardFooter(flow: flow)
                     .padding(.top, 12)
             } else if model.phase == .ready {
-                HubActionsFooter(footer: actions.footer, hub: actions, router: router)
-                    .padding(.top, 12)
+                HubActionsFooter(
+                    footer: actions.footer, hub: actions, router: router,
+                    primaryIsDefault: !router.showsOtherMac && !actions.showsChangeLog
+                )
+                .padding(.top, 12)
             }
         }
         .padding(24)

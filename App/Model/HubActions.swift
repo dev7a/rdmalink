@@ -19,8 +19,8 @@ import RDMALinkCore
 enum HubAction: Sendable, Equatable, Identifiable {
     /// The footer's default button and the Port menu's ⌘N. The port is the one
     /// already selected, when there is one.
-    case setUpAPort(portID: String?)
-    case identifyAPort(portID: String?)
+    case setUpPort(portID: String?)
+    case identifyPort(portID: String?)
     case adopt(portID: String)
     case restore(portID: String)
     case returnToBridge(portID: String)
@@ -37,8 +37,8 @@ enum HubAction: Sendable, Equatable, Identifiable {
 
     var id: String {
         switch self {
-        case .setUpAPort(let port): "setUp:\(port ?? "")"
-        case .identifyAPort(let port): "identify:\(port ?? "")"
+        case .setUpPort(let port): "setUp:\(port ?? "")"
+        case .identifyPort(let port): "identify:\(port ?? "")"
         case .adopt(let port): "adopt:\(port)"
         case .restore(let port): "restore:\(port)"
         case .returnToBridge(let port): "return:\(port)"
@@ -54,13 +54,13 @@ enum HubAction: Sendable, Equatable, Identifiable {
 
     /// The button's words, verbatim from §S1, §S10 and §S11.
     ///
-    /// `Set Up a Port…` has a second form once a port is ready — the footer
+    /// `Set Up Port…` has a second form once a port is ready — the footer
     /// picks between them, because only the footer knows (§S1's primary
     /// action); the Port menu's item is always the first form.
     var title: LocalizedStringResource {
         switch self {
-        case .setUpAPort: "Set Up a Port…"
-        case .identifyAPort: "Identify a Port…"
+        case .setUpPort: "Set Up Port…"
+        case .identifyPort: "Identify Port…"
         case .adopt: "Adopt…"
         case .restore: "Restore…"
         case .returnToBridge: "Return to Bridge…"
@@ -76,7 +76,8 @@ enum HubAction: Sendable, Equatable, Identifiable {
 }
 
 /// §2.6's sheets that belong to this slice: Adopt, Restore and Restore All
-/// Ports. The other two are the system's authorization dialog and S13.
+/// Ports, three of the four the app draws. S13 is the fourth, and the system
+/// draws the authorization dialog and the diagnostics save panel and alert.
 enum HubSheet: Sendable, Equatable, Identifiable {
     case adopt(portID: String)
     case restore(RestoreSubject)

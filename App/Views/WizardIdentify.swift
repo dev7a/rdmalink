@@ -68,8 +68,8 @@ struct WizardIdentify: View {
     private func secondaryActions(for session: IdentifySession) -> [WizardAction] {
         switch session.outcome {
         case .watching: []
-        case .unplugged, .replugged: [.identifyAgain, .pickFromTheList]
-        case .ambiguous, .usbOnly: [.pickFromTheList]
+        case .unplugged, .replugged: [.identifyAgain, .chooseFromList]
+        case .ambiguous, .usbOnly: [.chooseFromList]
         case .timedOut: [.identifyAgain]
         }
     }

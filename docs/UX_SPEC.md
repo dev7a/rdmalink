@@ -14,18 +14,18 @@ Copy is US English. Every string is a separate localizable resource; no sentence
 
 ### 1.1 North star
 
-> It feels like a patient friend who already knows your Mac, turns it around so you can see the right port, tells you exactly what it is about to change, asks once, and can put everything back.
+> It feels like a patient, well-made tool that already knows your Mac: it turns the Mac around so you can see the right port, tells you exactly what it is about to change, asks once, and can put everything back.
 
 ### 1.2 What the app is, structurally
 
 Migration Assistant fused with System Settings. A linear assistant that **explains before it acts, checks preconditions itself, and never asks the user to promise anything it could measure**, wrapped around a calm status hub you return to and can read at a glance on the fifth launch.
 
-The RealityKit model is the hero because it is the fastest way to answer *"which physical hole do I put the cable in."* It is therefore wordless, lit like a product shot and not a toy: no idle spinning, no particles, no floor reflections, no sound. Every motion in the scene is either feedback for something the user did, or the app narrating its own camera move **in words first** ("Let me turn it around").
+The RealityKit model is the hero because it is the fastest way to answer *"which physical hole do I put the cable in."* It is therefore wordless, lit like a product shot and not a toy: no idle spinning, no particles, no floor reflections, no sound. Every motion in the scene is either feedback for something the user did, or the app narrating its own camera move **in words first** ("Turning the Mac around").
 
 ### 1.3 Tone rules (binding on all copy)
 
 1. **Sentence case for all body, headlines, labels, and list rows. Title Case for buttons.**
-2. **The app speaks in the first person, sparingly.** "I'll wait." "Let me turn it around." "I can't see the other Mac from here." It is a competent colleague, not a mascot. No exclamation marks anywhere in the app. No jokes at the user's expense. No "Oops."
+2. **The app never says "I", "we" or "let's".** When a sentence needs someone to act, that someone is **RDMALink**; otherwise say what happens ("Watching every port."). It is a competent tool, not a mascot or a colleague. No exclamation marks anywhere in the app. No jokes at the user's expense. No "Oops."
 3. **Never scary.** No red fills, no alarm banners, no sirens, no "WARNING". A refusal is a closed door with the handle pointed out, not an alarm.
 4. **Never a promise the app could measure.** There is not one attestation checkbox and not one "I have checked that…" button in the entire app. If the app can observe it, the app observes it.
 5. **No escape hatch.** There is no "Continue Anyway", no "I understand the risks", no option-key bypass, and no disabled-but-present primary button on a refusal — a refusal removes the primary action entirely, because a disabled button is still an invitation to hunt for the modifier key.
@@ -51,10 +51,12 @@ One window, no sidebar, no tabs, no document model, no menu bar extra, no notifi
 
 Unified toolbar, two items, nothing else. No step indicator, no branding, no rail, no "This Mac" badge: that the app only ever changes the Mac it runs on is implied by everything on screen, and the window subtitle already names the machine.
 
-| Position | Item | Symbol | Behavior |
-|---|---|---|---|
-| Trailing | `Check Again` | `arrow.clockwise` | Re-runs the full probe. Always enabled. A reassurance, not a requirement — a one-second state diff runs underneath at all times. |
-| Trailing | `Help` | `questionmark.circle` | Opens the Help menu's first item. |
+| Position | Item | Symbol | Tooltip | Behavior |
+|---|---|---|---|---|
+| Trailing | `Check Again` | `arrow.clockwise` | **Check this Mac's ports and settings again** | Re-runs the full probe. Always enabled. A reassurance, not a requirement — a one-second state diff runs underneath at all times. Its shortcut, ⌘R, belongs to the View menu's `Check Again` (§2.7), which does the same thing; the button declares none of its own. |
+| Trailing | `Help` | `questionmark` | **Learn what RDMALink changes and why** | Opens the Help menu's first item. The plain `questionmark`, not the circled one: the toolbar group already draws the container. |
+
+The toolbar's tooltips are verb-first, sentence case, no period.
 
 ### 2.3 Body layout
 
@@ -65,18 +67,19 @@ A horizontal split: **STAGE** on the left, **ASSISTANT COLUMN** on the right.
 
 **STAGE** — the `RealityView`, edge-to-edge, with two floating controls and nothing else:
 
-- **Bottom-center:** the face selector — a segmented control inside a `Capsule` of `.regularMaterial`, Maps-style. `Back / Front` on Mac Studio and Mac mini; `Left / Right` on notebooks (`Back` is offered only if that face carries ports; on current notebooks it does not, so it is absent rather than empty). Hidden entirely when the model has one relevant face (Mac mini with no cable in front). On an unrecognized Mac (R31) the stage has no chrome at all: no selector, no Fit or Reset View, no legend, no callout.
-- **Bottom-trailing:** two small borderless buttons, `Fit` (`arrow.up.left.and.arrow.down.right`) and `Reset View`.
+- **Bottom-center:** the face selector — a segmented control inside a Liquid Glass capsule (`.glassEffect(.regular, in: .capsule)`), Maps-style. `Back / Front` on Mac Studio and Mac mini; `Left / Right` on notebooks (`Back` is offered only if that face carries ports; on current notebooks it does not, so it is absent rather than empty). Hidden entirely when the model has one relevant face (Mac mini with no cable in front). On an unrecognized Mac (R31) the stage has no chrome at all: no selector, no Fit or Reset View, no legend, no callout.
+- **Bottom-trailing:** two small borderless buttons in one Liquid Glass capsule, icons on both: `Fit` (`arrow.up.left.and.arrow.down.right`) and `Reset View` (`arrow.counterclockwise`).
+- These two are the stage's only controls, so they are the two drawn in Liquid Glass, as macOS draws controls floating over content. Under Reduce Transparency they fall back to an opaque `.windowBackground` capsule, and under Increase Contrast they gain a hairline (§3.6). The narration capsule and the receptacle callout float too, but they are labels, not controls, and stay on `.regularMaterial` (§3.1).
 
 **ASSISTANT COLUMN** — a `VStack` on `.windowBackground` with 24 pt margins, in four fixed bands, top to bottom:
 
 1. **Header row.** Step title leading, `Step 2 of 3` in `.caption` secondary trailing. It is a **label, never a progress bar**, and it is absent on the hub, the change log, and settings. It counts the screens of the current run: a set-up that opens on the picker has three steps (Choose, Review, Ready); one whose port was already chosen on the hub, or picked for the user because exactly one port has a Mac on the end, opens on Review and has two. Setting up (S6) keeps Review's label while it runs.
 2. **Working area.** `.title2` semibold headline, `.body` secondary explanatory text, then the step's controls (grouped inset lists, `Form` rows, value blocks). This is the only band that changes between steps.
 3. **The port list.** A permanent, grouped inset list of **every receptacle on this Mac** — Thunderbolt and USB-only alike — in physical order, grouped by face (`Back`, `Front`, or `Left side`, `Right side`). It is present on every screen of the main window, in every step. **It never reorders and never resizes a row; only badges, subtitles, and trailing controls change**, cross-fading in 180 ms. It has two densities:
-   - **Full** (hub, Choose a port, Identify): symbol, title, `.callout` secondary subtitle carrying state and bridge membership, optional trailing borderless button.
+   - **Full** (hub, Choose a port, Identify): symbol, title, `.callout` secondary subtitle carrying state and bridge membership, optional trailing borderless button in the accent color. Every small inline action beside a row's words — a port row's, a situation row's, a check row's, the Checked group's `Check Again`, a change-log entry's, Ready's `Turn It On…` and `Copy Address`, `Show Me` — takes the accent the same way, so it reads as something to click and not as one more gray label. So does S4's borderless `Identify Port…` above the list, at its regular size.
    - **Compact** (RDMA, preflight, review, apply, done, other Mac, change log): symbol, title, and a short trailing badge only. Same rows, same order, same place, less ink.
    - It scrolls independently if it cannot fit; it is never truncated away.
-4. **Footer.** A separator, then `Back` leading and the primary button trailing with `.keyboardShortcut(.defaultAction)`. Between them, contextual `.caption` secondary text where a step needs it (`2 ports selected`). Directly **above** the separator, when the primary is disabled, the reason is printed in `.callout` `.orange`.
+4. **Footer.** A separator, then `Back` leading and the primary button trailing with `.keyboardShortcut(.defaultAction)`. `Back` moves between steps and never dismisses: where going back would leave the assistant — on the picker (S4), which has no step before it — the same button reads `Cancel`. Either way it is `.cancelAction`. A run that opens on S5 keeps `Back` there, because it goes to the picker (§S4). Between them, contextual `.caption` secondary text where a step needs it (`2 ports selected`). Directly **above** the separator, when the primary is disabled, the reason is printed in `.callout` `.primary`, led by the attention symbol — `exclamationmark.circle`, hierarchical, `.orange` — which is hidden from VoiceOver because the words carry the meaning. The text itself is never orange (§3.1).
 
 ### 2.4 Why the list is always there
 
@@ -86,11 +89,17 @@ Selecting a row highlights the matching receptacle on the model; hovering or sel
 
 The wizard advances by replacing **only the working area** with a push transition (leading-edge slide, 0.25 s, `.smooth`). The stage stays put and re-poses; the port list stays put and re-densifies; the footer stays put and re-labels. The model is continuous across every step, which is what makes the app feel like one place rather than eight screens.
 
-The hub (steady state) uses the identical layout, with the footer holding `Set Up a Port…` instead of `Continue`, so there is no shape change between browsing and configuring.
+The hub (steady state) uses the identical layout, with the footer holding `Set Up Port…` instead of `Continue`, so there is no shape change between browsing and configuring.
 
 ### 2.6 Sheets
 
-Sheets are used for exactly five things: **Adopt**, **Restore**, **Restore All Ports**, the macOS authorization dialog (system-owned), and **What This All Means**. Everything else — including every refusal — appears inline in the working area, so the port list and the model stay visible and can point at the thing in the way. Sheets are 480–520 pt wide, standard `.sheet`, headline, body, content, right-aligned button row.
+The app draws sheets for exactly four things: **Adopt**, **Restore**, **Restore All Ports** and **What This All Means**. The system owns the rest: the macOS authorization dialog, and the save panel for a diagnostics file with its failure alert (§S12). Everything else — including every refusal — appears inline in the working area, so the port list and the model stay visible and can point at the thing in the way. Sheets are 480–520 pt wide, standard `.sheet`, headline, body, content, right-aligned button row.
+
+- **A refusal raised inside a sheet** (§6.1 rule 1) keeps that shape: its buttons sit bottom-trailing like every other sheet's button row. The same refusal card in the working area keeps its row leading.
+- **A button row too wide for its sheet breaks onto two lines**, both trailing: the last two buttons, the default's place among them, keep the bottom line, and the rest sit on the line above. No button title is ever truncated.
+- **A sheet's default button is never an action that removes something the user didn't ask to remove.** Where the button in the default slot would be one of those — R21's `Remove Service Only`; R28's `Stop Managing…`, which forgets the note that makes putting the port back possible; and the same `Stop Managing…` in R30's adopted-note form, which forgets the note when the user asked for a Restore — the sheet has no default at all and Return presses nothing.
+- **Escape is the way out.** Every sheet closes on Escape, as a macOS sheet does. `Cancel`, `Leave As Is` and `Leave Everything Alone` are the sheet's `.cancelAction`, wherever in the row they sit, and every refusal raised inside a sheet keeps one of them in its row, so the way out is also a button (§6.1 rule 10). A sheet whose only button is `Done` — What This All Means, a Restore sheet's confirmation — closes on Escape too. The one time Escape does nothing is while a sheet's work is running: nothing on screen then is a control, and Escape would be a cancel the app cannot honor (§S6). No sheet has two defaults or two cancels.
+- **A sheet taller than the window scrolls its content; its button row does not.** Every sheet fits a window at §2.1's 600 pt minimum.
 
 ### 2.7 Menus
 
@@ -98,16 +107,16 @@ Sheets are used for exactly five things: **Adopt**, **Restore**, **Restore All P
 |---|---|
 | **RDMALink** | About RDMALink · Settings… ⌘, · Services · Hide · Quit RDMALink ⌘Q |
 | **Edit** | Undo ⌘Z (text fields only) · Cut/Copy/Paste — Copy works on the address, on every refusal's details, and on the change log |
-| **Port** | Set Up a Port… ⌘N · Identify a Port… ⌘I · Adopt… · Restore… · Restore All Ports… · Return to Bridge… · Stop Managing… |
-| **View** | Back ⌘1 · Front ⌘2 · Left ⌘3 · Right ⌘4 · Fit ⌘0 · Reset View ⇧⌘0 · Show Technical Names ⌘T · Hide Legend / Show Legend ⌘K · Change Log ⌘L |
+| **Port** | Set Up Port… ⌘N · Identify Port… ⌘I · Adopt… · Restore… · Restore All Ports… · Return to Bridge… · Stop Managing… — every item present on every Mac and unavailable when it has nothing to act on; on an unrecognized Mac (R31) all of them are unavailable |
+| **View** | Check Again ⌘R · — · Back ⌘1 · Front ⌘2 · Left ⌘3 · Right ⌘4 · Fit ⌘0 · Reset View ⇧⌘0 · Show Technical Names / Hide Technical Names ⌘T · Hide Legend / Show Legend ⌘K · Change Log ⌘L |
 | **Window** | standard |
-| **Help** | RDMALink Help · What RDMA over Thunderbolt Is · What to Do on the Other Mac · Save a Diagnostics File… |
+| **Help** | RDMALink Help ⌘? · — · What RDMA over Thunderbolt Is · What to Do on the Other Mac · Save Diagnostics File… (saved as §S12 describes) |
 
-`⌘R` re-checks (same as `Check Again`). Settings is a separate small window with a single General pane and therefore **no tab bar**, per HIG.
+The two View items that switch something on and off are one idiom: a button whose title says what it will do — `Show Technical Names`, which then reads `Hide Technical Names`, and `Hide Legend`, which then reads `Show Legend` — never a checkmark. (Settings keeps its switch, labelled **Show technical names**.) `Check Again` ⌘R is the first of the app's View items — after the system's toolbar items, above the face items and a divider — and the one home of ⌘R; the toolbar's `Check Again` runs the same re-check. Settings is a separate small window with a single General pane and therefore **no tab bar**, per HIG.
 
 ### 2.8 Persistent affordances
 
-- **Restore is never hidden.** Whenever any restorable note exists — one that records a set-up to undo; a return record (§7.5) is not one — the footer of the hub carries `Restore…` as a plain button beside the primary, and the Port menu's `Restore…` and `Restore All Ports…` are enabled. You never have to find a row first.
+- **Restore is never hidden.** Whenever any restorable note exists — one that records a set-up to undo; a return record (§7.5) is not one — the footer of the hub carries `Restore…` as a plain button beside the primary, and the Port menu's `Restore…` and `Restore All Ports…` are enabled. You never have to find a row first. The one exception is an unrecognized Mac (§6.2 R31): the footer holds `Quit` alone, and those two menu items are present and unavailable, like every Port menu item there (§2.7).
 - **Unfinished business survives quitting** and appears as a row on the hub the next launch, phrased as a situation and not an alarm: a port that needs putting back by hand, a restart still owed, a port that drifted.
 
 ---
@@ -125,10 +134,11 @@ No custom brand color. No gradients in chrome. The palette is the system's, expr
 | `text.primary` | `.primary` | headlines, row titles |
 | `text.secondary` | `.secondary` | body copy, row subtitles |
 | `text.tertiary` | `.tertiary` | technical suffixes, disabled rows |
-| `accent` | **the user's system accent color** (blue by default) | selection, the ready ring, the default button, the configured state |
-| `attention` | `.orange` | warning text and warning symbols **in the panel only** |
+| `accent` | **the user's system accent color** (blue by default) | selection, the ready ring, the default button, the configured state, inline borderless actions |
+| `attention` | `.orange` | warning **symbols** in the panel only — never text: system orange measures 2.3:1 on the light window background, and text needs 4.5:1. A warning sentence is `.primary` or `.secondary`, led by its orange symbol. |
 | `stop` | `.red` | **used nowhere.** Restore is not styled destructive, because it restores. There is no destructive confirmation in this app. |
-| `material.floating` | `.regularMaterial` | the two floating stage controls |
+| `material.floating` | Liquid Glass, `.glassEffect(.regular)` | the two floating stage controls — the face selector and the `Fit` / `Reset View` pair |
+| `material.label` | `.regularMaterial` | the labels that float over the stage — the narration capsule and the receptacle callout |
 
 **Nothing on the 3D model is ever orange, red, green, or any hue carrying meaning.** Warning is a panel job. A colored hole is unreadable at a glance and fails color-blind users. On the model, meaning is carried entirely by **ring geometry** (see §4).
 
@@ -258,7 +268,7 @@ This segmented ring is the same geometry that **closes during apply** and **re-o
 
 **Needs a look (drift) — a dashed ring** in `.secondary`. The service RDMALink created has gone, or the port is back in a bridge. Panel: `exclamationmark.circle` `.orange` · **"Not set up any more"**. Drift is only ever about a setup RDMALink made or adopted.
 
-**Returned to the bridge — the plain bridged ring.** A port RDMALink itself put back into Thunderbolt Bridge (§7.5) while its note is still there. Provenance is a panel matter: the ring says only that the port is in the bridge. Panel: `arrow.uturn.backward.circle` `.secondary` · **"Back in the bridge"** · trailing button `Set It Up Again`. It is not drift and raises no situation row.
+**Returned to the bridge — the plain bridged ring.** A port RDMALink itself put back into Thunderbolt Bridge (§7.5) while its note is still there. Provenance is a panel matter: the ring says only that the port is in the bridge. Panel: `arrow.uturn.backward.circle` `.secondary` · **"Returned by RDMALink"** · trailing button `Set It Up Again`. (Not "back in the bridge": `Back` is a face name, and the row's membership phrase already says the port is in the bridge.) It is not drift and raises no situation row.
 
 ### 4.4 The bridge ribbon
 
@@ -332,7 +342,7 @@ The rings say what the words say; two small aids make sure nobody has to guess w
 
 **States.** Probing (default, under 3 s) · Slow probe (over 3 s) · Hardware readable but model unrecognized → hub in generic mode · Cannot read Thunderbolt hardware → R24 · macOS older than 27 → R25.
 
-**3D behavior.** The correct chassis is present from the first frame at its resting three-quarter pose, facing the default face (back for desktops, left for notebooks), receptacles unlit and slightly recessed. No rotation, no float, no idle animation. When the probe completes, the receptacles **wake left to right with a 60 ms stagger over roughly 300 ms** — a single readable beat that says *I found them all* — then stillness. It happens once per launch and never repeats. Under Reduce Motion they appear together.
+**3D behavior.** The correct chassis is present from the first frame at its resting three-quarter pose, facing the default face (back for desktops, left for notebooks), receptacles unlit and slightly recessed. No rotation, no float, no idle animation. When the probe completes, the receptacles **wake left to right with a 60 ms stagger over roughly 300 ms** — a single readable beat that says *found them all* — then stillness. It happens once per launch and never repeats. Under Reduce Motion they appear together.
 
 ---
 
@@ -340,12 +350,12 @@ The rings say what the words say; two small aids make sure nobody has to guess w
 
 **Purpose.** What this Mac is, whether RDMA is on, which ports exist and what each is doing, what has already been set up, and what — if anything — is unfinished.
 
-**Layout.** Stage live. Working area: headline, one body line, then a grouped inset **This Mac** section of three read-only rows, plus any situation rows. Port list in **full** density below it. Footer: `Quit` as a plain button at the leading edge — the hub is the place people arrive back at when the work is done, and "Set Up Another Port…" is an offer, not a demand, so the way out is beside it and not only in the menu — then, trailing, `Set Up a Port…` as the default button with `Restore…` as a plain button beside it whenever any baseline exists. `Quit` quits the app exactly as ⌘Q does, asks nothing, and is present in every hub state, R23 and R31 included; it appears on no other screen. A `.caption` secondary link row under the list: `Change Log` · `What This All Means`.
+**Layout.** Stage live. Working area: headline, one body line, then a grouped inset **This Mac** section of three read-only rows, plus any situation rows. Port list in **full** density below it. Footer: `Quit` as a plain button at the leading edge — the hub is the place people arrive back at when the work is done, and "Set Up Another Port…" is an offer, not a demand, so the way out is beside it and not only in the menu — then, trailing, `Set Up Port…` as the default button with `Restore…` as a plain button beside it whenever any baseline exists. While the change log (§S11) or the other-Mac screen (§S8) holds the working area, that screen's `Done` is the window's one default and `Set Up Port…` stays in the footer as a plain button. `Quit` quits the app exactly as ⌘Q does, asks nothing, and is present in every hub state, R23 and R31 included; it appears on no other screen. A `.caption` link row under the list, in the link color: `Change Log` · `What This All Means`.
 
-**Primary action.** `Set Up a Port…` (first run) / `Set Up Another Port…` (once at least one port is ready).
+**Primary action.** `Set Up Port…` (first run) / `Set Up Another Port…` (once at least one port is ready).
 
 **Copy — headlines and body**
-- First run headline: **Let's set up a Thunderbolt link**
+- First run headline: **Set up a Thunderbolt link**
 - First run body: **RDMALink prepares one Thunderbolt port on this Mac so it can carry RDMA straight to another Mac. You'll do the same on the other Mac afterwards.**
 - One port ready: **One port is ready for RDMA**
 - Two or more ready: **Two ports are ready for RDMA**
@@ -371,8 +381,8 @@ The rings say what the words say; two small aids make sure nobody has to guess w
 - Needs a hand: **Back, far left needs putting back by hand.** *[Show Me]*
 - Drift: **Back, far left isn't set up any more.** · detail: **The network service RDMALink made is gone — it may have been removed in System Settings.** *[Set It Up Again]* *[Forget This Port]*
 - Restart owed: **RDMA is switched on and waiting for a restart. Restart whenever it suits you.**
-- USB tip: **There's a cable in a front port. Those carry USB, not Thunderbolt. Move it to one of the four ports on the back and I'll follow along.**
-- Two Macs tip: **Two Macs are connected. Leave just one cable in place while we work — two can send Ethernet traffic around in a loop.** Shown only when R1 would fire — two ports with a Mac on the end share a bridge — and never for cables on standalone ports.
+- USB tip: **There's a cable in a front port. Those carry USB, not Thunderbolt. Move it to one of the four ports on the back and RDMALink will follow along.**
+- Two Macs tip: **Two Macs are connected. Leave just one cable in place while you set up — two can send Ethernet traffic around in a loop.** Shown only when R1 would fire — two ports with a Mac on the end share a bridge — and never for cables on standalone ports.
 
 **Copy — port list section and rows**
 - Section headers: **Thunderbolt ports** · **Back** · **Front** · **Left side** · **Right side**
@@ -383,24 +393,24 @@ The rings say what the words say; two small aids make sure nobody has to guess w
 - Ready, nothing attached: **Ready for RDMA · the address appears when a Mac arrives**
 - Set up elsewhere: **Set up outside RDMALink** *[Adopt…]*
 - Drifted: **Not set up any more** *[Set It Up Again]*
-- Returned to the bridge by RDMALink (§7.5), note still there: **Back in the bridge** *[Set It Up Again]* — the link-state subtitle and the membership phrase stay; this is not drift and adds no situation row.
+- Returned to the bridge by RDMALink (§7.5), note still there: **Returned by RDMALink** *[Set It Up Again]* — the link-state subtitle and the membership phrase stay (**Returned by RDMALink · Nothing plugged in · In the Thunderbolt Bridge**); this is not drift and adds no situation row.
 - Trailing buttons, by state: *[Adopt…]* · *[Restore…]* · *[Return to Bridge…]* · *[Stop Managing…]* · *[Set It Up Again]*
 - Adopted or set up elsewhere (any port that is out of the bridge and that RDMALink did not set up): the row carries **Return to Bridge…**, so putting a port back never depends on how it was removed. A port RDMALink set up carries **Restore…** instead, which returns it exactly.
 
 **Copy — buttons**
-- **Quit** · **Set Up a Port…** · **Set Up Another Port…** · **Restore…** · **Check Again** · **Change Log** · **What This All Means** · **Turn It On…** · **Show Me** · **Forget This Port**
+- **Quit** · **Set Up Port…** · **Set Up Another Port…** · **Restore…** · **Check Again** · **Change Log** · **What This All Means** · **Turn It On…** · **Show Me** · **Forget This Port**
 
 **Copy — Thunderbolt 4 mode**
 - Headline: **Nothing to configure here**
 - Body: **This Mac has Thunderbolt 4 ports. RDMA over Thunderbolt needs Thunderbolt 5, so there's nothing for RDMALink to set up. You're welcome to look around — everything you see is real.**
-- The footer's primary button is **absent**, not disabled. `Identify a Port…` remains available in the Port menu, because it changes nothing and the app is still a useful map.
+- The footer's primary button is **absent**, not disabled. `Identify Port…` remains available in the Port menu, because it changes nothing and the app is still a useful map.
 
 **Copy — Unrecognized Mac (R31)**
-- Headline: **I don't recognize this Mac**
+- Headline: **RDMALink doesn't recognize this Mac**
 - Body: **RDMALink only draws, and only changes, Macs it knows — and this isn't one of them. So there's no picture, and nothing here will be changed. The ports below are listed the way macOS reports them, and everything you see is real.**
-- The footer holds `Quit` and nothing else, and no row has a button: nothing that writes — set-up, Restore, Adopt, Return to Bridge, Stop Managing — is offered, and `Identify a Port…` is absent from the Port menu because there is no model for it to point at. The stage shows R31's block (§6.2) in place of a model.
+- The footer holds `Quit` and nothing else, and no row has a button: nothing that writes — set-up, Restore, Adopt, Return to Bridge, Stop Managing — is offered in the window. The Port menu keeps its shape, as menus do: every item is present and unavailable, `Identify Port…` included, because there is no model for it to point at. The stage shows R31's block (§6.2) in place of a model.
 
-**States.** First run with RDMA on · First run with RDMA off · Restart pending · One or more ready · An adoptable port present · A drifted port present · A port needing a hand · Cable in a USB-only port · Two Macs connected (the tip row appears and `Set Up a Port…` is **disabled** with the reason printed above the footer separator) · Thunderbolt 4 read-only (R23) · Unrecognized Mac read-only (R31) · Live update arrives.
+**States.** First run with RDMA on · First run with RDMA off · Restart pending · One or more ready · An adoptable port present · A drifted port present · A port needing a hand · Cable in a USB-only port · Two Macs connected (the tip row appears and `Set Up Port…` is **disabled** with the reason printed above the footer separator) · Thunderbolt 4 read-only (R23) · Unrecognized Mac read-only (R31) · Live update arrives.
 
 **3D behavior.** Fully live. On an unrecognized Mac (R31) there is no model and the rows have nothing to light. Every receptacle carries its tracks. Hovering a row lifts the matching receptacle's glow to 40 %; hovering a receptacle highlights the row; hovering a bridge-membership subtitle draws the ribbon. Clicking a receptacle selects its row; double-clicking a configurable one starts set-up for it.
 
@@ -426,18 +436,18 @@ The camera **holds** the resting three-quarter pose and never moves on its own h
 - Restart-pending headline: **Almost there**
 - Restart-pending body: **RDMA is switched on, but it only takes effect after a restart. Restart whenever it suits you and come back.**
 - On headline: **RDMA over Thunderbolt is on**
-- On body: **Good. Now let's get a port ready for it.**
+- On body: **Good. Now get a port ready for it.**
 - Welcome-back headline (first launch after the restart): **Welcome back. RDMA over Thunderbolt is on.**
-- Welcome-back body: **I can see the RDMA devices now — one for each Thunderbolt controller. That was the part only you could do.**
+- Welcome-back body: **The RDMA devices are here now — one for each Thunderbolt controller. That was the part only you could do.**
 - On-but-nothing-appeared headline: **RDMA is on, but no RDMA devices appeared**
 - On-but-nothing-appeared body: **That usually means this Mac, or this version of macOS, doesn't offer RDMA over Thunderbolt. Setting up a port is still harmless and still undoable — it just won't have anything to carry yet.**
-- Fallback when System Settings won't open: **I couldn't open System Settings. Here are the steps to follow by hand.** *[Copy Steps]*
+- Fallback when System Settings won't open: **RDMALink couldn't open System Settings. Here are the steps to follow by hand.** *[Copy Steps]*
 - Buttons: **Open System Settings** · **Check Again** · **Set Up Ports First** · **Copy Steps**
 - Helper under `Set Up Ports First`: **You can prepare the ports now and turn RDMA on later. RDMALink will remind you.**
 
 **States.** Off · On in NVRAM but no devices yet · On and devices present (this screen is skipped entirely unless the user navigated here deliberately) · On after a restart but still no devices → R22 · Still off after a restart · System Settings could not be opened.
 
-**3D behavior.** The model stays on screen at 40 % opacity and zero saturation, still and quiet, as a reminder of where you are rather than a participant. No rings, no hover. When the user returns and the app re-detects, color and opacity come back over 300 ms — the visual equivalent of *right, where were we*.
+**3D behavior.** The model stays on screen at 40 % opacity and zero saturation, still and quiet, as a reminder of where you are rather than a participant. No rings, no hover. When the user returns and the app re-detects, color and opacity come back over 300 ms — the visual equivalent of picking up where it left off.
 
 ---
 
@@ -453,17 +463,17 @@ The camera **holds** the resting three-quarter pose and never moves on its own h
 
 | # | Title | Satisfied | Unsatisfied | Button |
 |---|---|---|---|---|
-| 1 | **One Thunderbolt cable to another Mac** | **Just one, in Back, far left. Perfect.** / **No other Mac is connected yet. That's fine — you can prepare a port now and plug in later.** / **Cables in Back, far left and Back, far right, and no bridge holds more than one of them — nothing can loop.** (two or more cables whose ports share no bridge: a finished set-up) | **Two Macs are connected, on Back, far left and Back, far right. Unplug one and I'll pick this back up.** / **Both ends of one cable are in this Mac, on Back, far left and Back, far right. Unplug one end and put it in the other Mac.** | — |
+| 1 | **One Thunderbolt cable to another Mac** | **Just one, in Back, far left. Perfect.** / **No other Mac is connected yet. That's fine — you can prepare a port now and plug in later.** / **Cables in Back, far left and Back, far right, and no bridge holds more than one of them — nothing can loop.** (two or more cables whose ports share no bridge: a finished set-up) | **Two Macs are connected, on Back, far left and Back, far right. Unplug one and RDMALink will pick this back up.** / **Both ends of one cable are in this Mac, on Back, far left and Back, far right. Unplug one end and put it in the other Mac.** | — |
 | 2 | **Nothing mounted over Thunderbolt** | **Nothing is mounted. Good.** | **The volume Vault is mounted over Thunderbolt. Eject it in Finder so nothing gets interrupted.** | **Show in Finder** |
-| 3 | **Another way to reach this Mac** | **Wi-Fi is connected, so changing a Thunderbolt port won't cut you off.** | **Right now, Thunderbolt is the only way this Mac is reachable. Changing a port can briefly interrupt the whole bridge — not just that one port — so connect Wi-Fi or Ethernet before we touch it.** | **Open Network Settings** |
-| 4 | **Room to save an undo note** | **RDMALink can save its notes, so anything it changes can be put back.** | **RDMALink can't write its notes folder, so it couldn't put things back afterwards. It won't change anything it can't undo.** | **Show the Notes Folder** |
+| 3 | **Another way to reach this Mac** | **Wi-Fi is connected, so changing a Thunderbolt port won't cut you off.** | **Right now, Thunderbolt is the only way this Mac is reachable. Changing a port can briefly interrupt the whole bridge — not just that one port — so connect Wi-Fi or Ethernet before RDMALink touches it.** | **Open Network Settings** |
+| 4 | **Room to save an undo note** | **RDMALink can save its notes, so anything it changes can be put back.** | **RDMALink can't write its notes folder, so it couldn't put things back afterwards. It won't change anything it can't undo.** | **Show Notes in Finder** |
 
 - Reasons printed above S5's footer separator while a check is unsatisfied (the default button is disabled, not removed, because these clear by themselves): **Unplug one of the two cables to continue.** · **Unplug one end of that cable to continue.** · **Eject Vault to continue.** · **Connect Wi-Fi or Ethernet to continue.** · **RDMALink needs somewhere to save its notes before it can continue.**
 - Button, in the group's header while something is unsatisfied: **Check Again**
 
 **States.** All four satisfied (collapsed) · Two Macs connected (R1) · Cable looped back into this Mac (R2) · No Mac connected (satisfied, with the gentle note) · A volume mounted over Thunderbolt (R4) · Only reachable over Thunderbolt (R5, **hard refusal**) · Baseline folder unwritable (R14, **hard refusal**) · Managed by a configuration profile (R13, hard refusal, replaces the whole of S5's working area) · Re-checking (rows animate individually, the default button greys for the duration) · A check flips live (unplugging the second cable satisfies row 1 in the same beat, with no click).
 
-**3D behavior.** When a check names a port, that receptacle takes a 1.5 pt attention ring in `.secondary` and a single 1.6 s breath, and the camera turns to the face it is on if it isn't already visible — with the working area printing **"Let me turn it around"** for the duration of the move. With two Macs connected, both receptacles ring simultaneously and a faint light thread leaves each one, **making the loop visible rather than described**; when the user unplugs one, its ring and thread fade and the check flips to satisfied in the same beat, with no click.
+**3D behavior.** When a check names a port, that receptacle takes a 1.5 pt attention ring in `.secondary` and a single 1.6 s breath, and the camera turns to the face it is on if it isn't already visible — with the working area printing **"Turning the Mac around"** for the duration of the move. With two Macs connected, both receptacles ring simultaneously and a faint light thread leaves each one, **making the loop visible rather than described**; when the user unplugs one, its ring and thread fade and the check flips to satisfied in the same beat, with no click.
 
 ---
 
@@ -471,26 +481,26 @@ The camera **holds** the resting three-quarter pose and never moves on its own h
 
 **Purpose.** Turn *"which hole"* into a two-second decision by making the model and the list one selection.
 
-**Layout.** Stage is the subject: full strength, face selector visible, hover states live. Working area: headline, body, the pre-selection rationale line if there is one, then a borderless `Identify a Port…` button, left-aligned. The port list is in **full** density and every row is a selection target; non-selectable rows are dimmed with an explanatory subtitle. Footer: `Back`, `Continue` as the default (disabled until a selectable port is chosen), and `2 ports selected` in `.caption` secondary on the leading side when more than one is chosen.
+**Layout.** Stage is the subject: full strength, face selector visible, hover states live. Working area: headline, body, the pre-selection rationale line if there is one, then a borderless `Identify Port…` button, left-aligned. The port list is in **full** density and every row is a selection target; non-selectable rows are dimmed with an explanatory subtitle. Footer: `Cancel` (Escape; the picker is a run's first step, so its way out leaves the assistant, and `Back` would promise a step that isn't there), `Continue` as the default (disabled until a selectable port is chosen), and `2 ports selected` in `.caption` secondary on the leading side when more than one is chosen.
 
-**When this screen appears.** The choice is made at the beginning, and only once. A port clicked on the hub before `Set Up a Port…`, a double-clicked receptacle, or a row's own set-up action skips this screen: the run opens on S5 with that port. So does **pre-selection**: if nothing was chosen and exactly one port has a Mac linked, it is picked, the run opens on S5, and the reason is stated there in words rather than assumed — `Back` from S5 is this screen, for anyone who'd rather choose. Otherwise the run opens here.
+**When this screen appears.** The choice is made at the beginning, and only once. A port clicked on the hub before `Set Up Port…`, a double-clicked receptacle, or a row's own set-up action skips this screen: the run opens on S5 with that port. So does **pre-selection**: if nothing was chosen and exactly one port has a Mac linked, it is picked, the run opens on S5, and the reason is stated there in words rather than assumed — `Back` from S5 is this screen, for anyone who'd rather choose. Otherwise the run opens here.
 
 **After this screen the choice is frozen.** On S5, S6 and S7 no row and no receptacle is a selection target: clicking one does nothing, the chosen port alone carries the accent ring and its badge, and the others are dimmed — the list and the model are status there, not a picker.
 
 **Copy.**
 - Headline: **Which port should carry RDMA?**
-- Body (desktop): **Click a port on the model, or pick one from the list. If it's on the other side, I'll turn the Mac around.**
+- Body (desktop): **Click a port on the model, or pick one from the list. If it's on the other side, RDMALink will turn the Mac around.**
 - Body (notebook): **Click a port on the model, or pick one from the list. Use the selector below the model to see the other side.**
-- Pre-selection line (shown on S5 when the pick was made for the user): **I've picked Back, middle left for you, because that's the port with another Mac on the end of it. Choose a different one if you'd rather.**
-- Pre-selection line (two candidates): **Two ports have a Mac on the end. I haven't picked for you — choose the one with the cable you mean.**
+- Pre-selection line (shown on S5 when the pick was made for the user): **RDMALink has picked Back, middle left for you, because that's the port with another Mac on the end of it. Choose a different one if you'd rather.**
+- Pre-selection line (two candidates): **Two ports have a Mac on the end. RDMALink hasn't picked for you — choose the one with the cable you mean.**
 - Selectable subtitles: **Linked to another Mac · In the Thunderbolt Bridge** · **Nothing plugged in · In the Thunderbolt Bridge** · **Another Mac is here. The link is still coming up.** · **A device is connected — not a Mac · Not in any bridge**
 - Dimmed subtitles: **USB only — this one isn't Thunderbolt** · **Already ready for RDMA** · **Set up outside RDMALink**
-- Inline message, USB receptacle clicked: **That's a USB port. The front ports on this Mac carry USB, not Thunderbolt — move the cable to one of the four on the back and I'll follow along.** *[Turn the Mac Around]*
+- Inline message, USB receptacle clicked: **That's a USB port. The front ports on this Mac carry USB, not Thunderbolt — move the cable to one of the four on the back and RDMALink will follow along.** *[Show Thunderbolt Ports]*
 - Informational line, dock attached: **There's a dock in this port. RDMALink can still prepare it — it will carry RDMA once a Mac is on the other end.**
 - Informational line, nothing attached: **Nothing is plugged in here yet. That's fine — the address appears when a Mac arrives.**
 - Multi-select note: **RDMALink will prepare both, one after the other, from the same password.**
 - Live-change line while selected: **Something changed on Back, middle left while you were choosing. It's still selected — have a look before you continue.**
-- Buttons: **Identify a Port…** · **Continue** · **Back** · **Turn the Mac Around**
+- Buttons: **Identify Port…** · **Continue** · **Cancel** · **Show Thunderbolt Ports**
 - Selection counter: **2 ports selected**
 
 **States.** Nothing selected · Pre-selected with reason · One selected · Several selected (⌘-click / ⇧-click) · USB receptacle clicked (R3) · Already-ready port clicked (row reads **Already ready for RDMA** and offers `Restore…`) · Hand-configured port clicked (routes to Adopt, S9 — **never to set-up**) · Port with a foreign static-IPv4 service (R16) · Port in an unreadable bridge (R15) · Dock or display attached (allowed, informational) · Identify active (S4b) · Live event mid-selection. (An unrecognized Mac never reaches this screen: R31 offers no set-up.)
@@ -511,17 +521,17 @@ Choosing a port on a hidden face triggers the narrated camera arc. The face sele
 
 **Copy.**
 - Headline: **Unplug it and plug it back in**
-- Body: **Take the cable out of the port you want to use, wait a moment, then put it back. I'll watch every port and light up the one that moved.**
+- Body: **Take the cable out of the port you want to use, wait a moment, then put it back. RDMALink watches every port and lights up the one that moved.**
 - Status, watching: **Watching all six ports…** / **Watching all four ports…** / **Watching all three ports…**
 - Status, unplug seen: **Got it — that's Back, far right. Plug it back in whenever you're ready.**
 - Replug headline: **That's the one**
 - Replug body: **Back, far right. If that's not what you expected, try again — no harm done.**
 - Nudge at 30 s after an unplug: **Still waiting for it to come back. Take your time.**
-- Ambiguous (two receptacles change within the same ~400 ms): **Two ports changed at the same moment** · **I'd only be guessing which one you meant, and I'd rather not. Let's try again — one cable at a time.**
+- Ambiguous (two receptacles change within the same ~400 ms): **Two ports changed at the same moment** · **RDMALink would only be guessing which one you meant, and it would rather not. Try again — one cable at a time.**
 - USB-only identified: **That's a USB port** · **Back, far right isn't it — that's Front, left, and the front ports on this Mac carry USB, not Thunderbolt. Try one of the ports on the back.**
-- Timeout headline (60 s, nothing seen): **I didn't see anything change**
-- Timeout body: **Some devices don't announce themselves, and an empty port has nothing to announce. Pick a port from the list instead — or try again with a Mac on the other end.**
-- Buttons: **Use This Port** · **Identify Again** · **Pick from the List** · **Cancel**
+- Timeout headline (60 s, nothing seen): **RDMALink didn't see anything change**
+- Timeout body: **Some devices don't announce themselves, and an empty port has nothing to announce. Choose a port from the list instead — or try again with a Mac on the other end.**
+- Buttons: **Use This Port** · **Identify Again** · **Choose from List** · **Cancel**
 
 **States.** Watching · Unplug seen · Replug seen · Unplug seen, no replug after 30 s · Nothing after 60 s · Ambiguous · USB-only identified · Caught by state diff rather than event (identical success) · Cancelled (returns to S4 with the previous selection intact).
 
@@ -529,7 +539,7 @@ Choosing a port on a hidden face triggers the narrated camera arc. The face sele
 
 The instant an unplug lands, **every other shimmer stops dead** and the changed receptacle takes a steady `.secondary` ring — the silence around the answer is the feedback. On replug it blooms to full accent over 250 ms with a single 8 % scale pulse **on the ring only**, the camera arcs square on, and the list row selects itself. Under Reduce Motion the shimmer is a static dim ring and the bloom is a cross-fade.
 
-Identify is **read-only, needs no password, and is always available** — including on Thunderbolt 4 Macs. It is not offered on an unrecognized Mac (R31): with no model there is nothing for it to point at, and the numbered rows already say what macOS says. It also defuses the identical-Macs trap directly: it answers about **this** Mac only, using **this** Mac's hardware events, so it cannot be confused by the twin on the shelf.
+Identify is **read-only, needs no password, and is always available** — including on Thunderbolt 4 Macs. It is not offered on an unrecognized Mac (R31) — its Port menu item is there and unavailable: with no model there is nothing for it to point at, and the numbered rows already say what macOS says. It also defuses the identical-Macs trap directly: it answers about **this** Mac only, using **this** Mac's hardware events, so it cannot be confused by the twin on the shelf.
 
 ---
 
@@ -537,7 +547,7 @@ Identify is **read-only, needs no password, and is always available** — includ
 
 **Purpose.** The promise screen. Everything the app is about to do, in plain words, with the technical truth one disclosure away, and the last chance to back out before any password is asked for.
 
-**Layout.** Stage holds the selected receptacle(s) lit and centered, camera square on the face. Working area: headline, one body line, the pre-selection line when the pick was made for the user (S4), then the **Checked** group (S3: one collapsed disclosure line when all four are satisfied, the four rows when one is not), then **one grouped inset section per selected port**, headed by the position name. Each section has four rows; each row is a symbol, a title, a `.callout` secondary sentence, and a **before → after pair of chips**. Below the sections: a footnote, a collapsed `What I Won't Touch` disclosure, and a `Show technical names` disclosure bound to the same preference as Settings. Port list compact, frozen (S4), with the target port(s) marked **About to change**. Footer: `Back` (to S4), and a default button naming exactly what it will do; pressing it asks macOS for the password straight away — there is no screen between this one and the work.
+**Layout.** Stage holds the selected receptacle(s) lit and centered, camera square on the face. Working area: headline, one body line, the pre-selection line when the pick was made for the user (S4), then the **Checked** group (S3: one collapsed disclosure line when all four are satisfied, the four rows when one is not), then **one grouped inset section per selected port**, headed by the position name. Each section has four rows; each row is a symbol, a title, a `.callout` secondary sentence, and a **before → after pair of chips**. Below the sections: a footnote, a collapsed `What RDMALink Won't Touch` disclosure, and a `Show technical names` disclosure bound to the same preference as Settings. Port list compact, frozen (S4), with the target port(s) marked **About to change**. Footer: `Back` (to S4 — a run that opened here goes to the picker too, rather than leaving), and a default button naming exactly what it will do; pressing it asks macOS for the password straight away — there is no screen between this one and the work.
 
 **Copy.**
 - Headline: **Here's what will change**
@@ -554,7 +564,7 @@ Identify is **read-only, needs no password, and is always available** — includ
 - Row 2 variant, two bridges: **It's also in an unused bridge, Thunderbolt Bridge 2. RDMALink removes it from that one too — a port has to be out of every bridge, even one that isn't being used.** Chips: **In two bridges → Standalone**
 - Row 2 variant, not in a bridge: **This port isn't in any bridge, so there's nothing to remove.** Chips: **Standalone → Standalone**
 - Footnote: **Your Wi-Fi, your Ethernet, and every other network service are untouched.**
-- Disclosure label: **What I Won't Touch**
+- Disclosure label: **What RDMALink Won't Touch**
 - Disclosure content: **Your other Thunderbolt ports. The Thunderbolt Bridge itself — RDMALink never deletes or recreates a bridge, it only removes a member. Wi-Fi. Ethernet. File sharing, the firewall, and everything else on this Mac. The RDMA system setting, which is yours to switch.**
 - Warning row, RDMA off: **RDMA over Thunderbolt is still off. The port will be ready; RDMA will start using it after you turn that on and restart.**
 - Warning row, nothing attached: **Nothing is plugged into this port yet. It'll be ready and waiting.**
@@ -635,7 +645,7 @@ You can watch each sentence mean something before you agree to it.
 
 **Purpose.** Close the loop the app cannot cross. Reached from S7 or from the Help menu. **This is a screen, not a sheet**, because the stage does the talking.
 
-**Layout.** Working area: headline, body, a numbered four-step list, a quiet note, and a button row. The stage performs the handoff.
+**Layout.** Working area: headline, body, a numbered four-step list, a quiet note, and a button row. `Done` is the window's default while the screen is up; the hub footer under the port list stays, its primary a plain button (§S1). The stage performs the handoff.
 
 **Copy.**
 - Headline: **Now the other Mac**
@@ -646,11 +656,11 @@ You can watch each sentence mean something before you agree to it.
 - Step 4: **When both sides are done, each Mac has its own address on this link. This one is fe80::a2d1:73b4:9e0c:5f16%en6.**
 - Step 4, address not known yet: **When both sides are done, each Mac has its own address on this link. This one's address appears as soon as a Mac is connected.**
 - Note: **Leave this one cable connected while you're over there — and keep it to one cable between the pair.**
-- Honesty line: **I can only see this Mac. Nothing I did crossed that cable — that's deliberate.**
+- Honesty line: **RDMALink can only see this Mac. Nothing it did crossed that cable — that's deliberate.**
 - Live line when the far end answers: **Something answered on this link. That's a good sign — the other end is awake.**
 - Buttons: **Copy These Steps** → **Copied** · **Done**
 
-**3D behavior — the ghost second Mac.** The camera pulls back and pans so this Mac occupies the leading third of the stage. A **featureless rounded box** at 40 % opacity slides in from the trailing side with a single thin connecting line between the two. The near port carries its solid accent ring; the far port is hollow and unlit. Nothing is written on either box, and **the ghost never gains detail, ever** — it is explicitly *a Mac I can't see*. When the far end answers on the link, a returning pulse travels back along the line and blooms at the near receptacle, once. That is the only animation in the app that means *the other Mac exists*, and it lands without a word of copy.
+**3D behavior — the ghost second Mac.** The camera pulls back and pans so this Mac occupies the leading third of the stage. A **featureless rounded box** at 40 % opacity slides in from the trailing side with a single thin connecting line between the two. The near port carries its solid accent ring; the far port is hollow and unlit. Nothing is written on either box, and **the ghost never gains detail, ever** — it is explicitly *a Mac the app can't see*. When the far end answers on the link, a returning pulse travels back along the line and blooms at the near receptacle, once. That is the only animation in the app that means *the other Mac exists*, and it lands without a word of copy.
 
 ---
 
@@ -674,7 +684,7 @@ You can watch each sentence mean something before you agree to it.
 - Body: **Back, far right is out of every bridge and has its own service, but IPv6 is set to Automatic rather than Link-local only. RDMALink didn't make this service, so it won't rewrite it — but here's exactly what to change, and it'll adopt the port the moment it matches.**
 - Steps: **In System Settings, open Network, choose Thunderbolt Bridge Free, then Details, then TCP/IP. Set Configure IPv6 to Link-local only. Set Configure IPv4 to Off.**
 - Buttons: **Open Network Settings** · **Copy These Steps** · **Leave As Is**
-- Watcher line: **I'll keep looking. When it matches, I'll offer to adopt it.**
+- Watcher line: **RDMALink keeps looking, and offers to adopt the port the moment it matches.**
 
 **States.** Full match · Near match · Not a match at all (no `Adopt…` button is ever offered; the hub subtitle simply describes what it found) · Adopted (the sheet closes and the hub row changes in place) · Already adopted (the row's trailing button reads `Stop Managing…`).
 
@@ -707,7 +717,7 @@ You can watch each sentence mean something before you agree to it.
 - Foreign-port button: **Return to Bridge**
 - Foreign-port success: **Back, far right is in Thunderbolt Bridge** · **The port is a member of Thunderbolt Bridge again and its standalone service is gone. Set It Up Again is one click away if you change your mind.**
 - Foreign port with **no** standalone service (a port taken out of the bridge by hand and left bare): body **RDMALink didn't set this port up, so it can't put things back exactly as they were — but it can do the ordinary thing: add the port to Thunderbolt Bridge. It writes down what it found first, so you can set the port up again afterwards.** · rows **Add the port to Thunderbolt Bridge** · **Check that it really is in the bridge** · **Leave every other setting alone** (no delete row, no delete step) · success **Back, far right is in Thunderbolt Bridge** · **The port is a member of Thunderbolt Bridge again. Set It Up Again is one click away if you change your mind.**
-- No bridge exists: headline **There's no Thunderbolt Bridge to return it to** · body **This Mac has no Thunderbolt Bridge at the moment. RDMALink never creates one — recreate it in System Settings, under Network › Manage Virtual Interfaces, and I'll offer the return the moment it exists.** · buttons **Open Network Settings** · **Cancel**
+- No bridge exists: headline **There's no Thunderbolt Bridge to return it to** · body **This Mac has no Thunderbolt Bridge at the moment. RDMALink never creates one — recreate it in System Settings, under Network › Manage Virtual Interfaces, and RDMALink will offer the return the moment it exists.** · buttons **Open Network Settings** · **Cancel**
 - Stop-managing headline (adopted port, keep the setup, forget the note): **Stop looking after Back, far right?**
 - Stop-managing body: **Stopping just means RDMALink forgets its note. The port and its settings stay exactly as they are.**
 - Stop-managing button: **Stop Managing**
@@ -726,7 +736,7 @@ You can watch each sentence mean something before you agree to it.
 
 **Purpose.** An always-available, timestamped, plain-English, **append-only** record of everything RDMALink has done to this Mac, each with its own way back.
 
-**Layout.** Reached with `Change Log` on the hub, `⌘L`, or the Help menu. The working area is replaced by a scrolling list, newest first. Each entry: date and time, the port's position name, one sentence, and a trailing action. Undone entries stay, greyed, with the action replaced by a note. The port list stays in place beside it. A footer line states where the notes live.
+**Layout.** Reached with `Change Log` on the hub, `⌘L`, or the View menu. The working area is replaced by a scrolling list, newest first. Each entry: date and time, the port's position name, one sentence, and a trailing action. Undone entries stay, greyed, with the action replaced by a note. The port list stays in place beside it. A footer line states where the notes live. `Done` is the window's default while the log is up; the hub footer under the port list stays, its primary a plain button (§S1).
 
 **Copy.**
 - Headline: **What RDMALink has changed on this Mac**
@@ -740,7 +750,7 @@ You can watch each sentence mean something before you agree to it.
 - Stopped entry: **RDMALink stopped looking after this port on 3 September at 15:12.**
 - Vanished port: **This port isn't on this Mac any more, so there's nothing left to put back. The note stays until you clear it.** *[Forget This Note]*
 - Footnote: **RDMALink keeps one small note per port, in your Library folder. They're only notes — they don't change anything on their own.**
-- Buttons: **Show the Notes in Finder** · **Save a Diagnostics File…** · **Done**
+- Buttons: **Show Notes in Finder** · **Save Diagnostics File…** (saved as §S12 describes) · **Done**
 
 **3D behavior.** The model rests at 70 % brightness. **Hovering a log entry lights the receptacle it refers to** at full brightness with a thin ring, so history is spatial — you can scroll the log and watch the ports light up in the order things happened. Entries for ports that no longer exist produce no highlight, and the row says so rather than leaving you hunting.
 
@@ -754,10 +764,12 @@ You can watch each sentence mean something before you agree to it.
 
 **Copy.**
 - Toggle: **Show technical names** · Help: **Adds names like en6 and the exact service names next to each port. The link address always shows in full, because tools need every character of it. Nothing is ever written on the picture of your Mac.**
-- Button: **Reveal Notes in Finder** · Help: **RDMALink keeps one small note per port it set up. That note is what makes putting things back possible — it's safe to back up and safe to leave alone.**
-- Button: **Save a Diagnostics File…** · Help: **A plain text file with what RDMALink can see on this Mac and what it has changed: the model, the chip, the macOS build, the ports, and any step that failed. No personal information, and nothing is sent anywhere — it's yours to keep or share.**
+- Button: **Show Notes in Finder** · Help: **RDMALink keeps one small note per port it set up. That note is what makes putting things back possible — it's safe to back up and safe to leave alone.**
+- Button: **Save Diagnostics File…** · Help: **A plain text file with what RDMALink can see on this Mac and what it has changed: the model, the chip, the macOS build, the ports, and any step that failed. No personal information, and nothing is sent anywhere — it's yours to keep or share.**
 
-**States.** Default · Technical names on (the main window updates live, no relaunch) · No notes saved yet (`Reveal Notes in Finder` is disabled with a help tooltip).
+**Saving a diagnostics file** works the same from all three places that offer it — here, the change log (§S11) and the Help menu (§2.7). The save panel is a sheet on the window it was asked from — on its own when no window is open, or when that window is itself a sheet or already has one, because a sheet never stacks on a sheet. A file that can't be written is never a silent failure: an alert on the same window, or on its own if that window has closed or taken a sheet in the meantime, says **The diagnostics file couldn't be saved.**, with the system's own reason as its informative text and one **OK** button — the alert only informs, so `OK` is the right single answer. Nothing is printed inline, in Settings or anywhere else.
+
+**States.** Default · Technical names on (the main window updates live, no relaunch) · No notes saved yet (`Show Notes in Finder` is disabled, and its tooltip says why: **RDMALink hasn't set up a port on this Mac yet, so there are no notes to show.**). An available button has no tooltip: its help is printed beneath it, and a tooltip would only repeat it (§8.4).
 
 **3D behavior.** None. Settings has no 3D content, and adding any would be exactly the sort of gimmick this app avoids.
 
@@ -767,7 +779,9 @@ You can watch each sentence mean something before you agree to it.
 
 **Purpose.** One short explainer for the curious that never becomes required reading. Reached from the hub, from the address footnote, and from the Help menu.
 
-**Layout.** Sheet, 560 pt wide, four short sections, one flat 2D illustration of two Macs and one cable (**not** the 3D model — the sheet is reading material, and mixing the live model in would imply the drawings are about this particular Mac). `Done`.
+**Layout.** Sheet, 560 pt wide, four short sections, one flat 2D illustration of two Macs and one cable (**not** the 3D model — the sheet is reading material, and mixing the live model in would imply the drawings are about this particular Mac). `Done`, the default; Escape closes the sheet too (§2.6).
+
+The headline, the illustration, the sections and the closing line scroll inside a region at most 480 pt tall; `Done` sits beneath it, outside the scroll, so the sheet is never taller than a window at §2.1's 600 pt minimum allows once the toolbar is taken off (§2.6).
 
 **The illustration.** Two plain rounded slabs — no logo, no trade dress, no product likeness — each with four small Thunderbolt receptacles along its facing edge. On each Mac the three receptacles still in the bridge are tied together by a soft translucent ribbon labelled **Thunderbolt Bridge** in `.caption` secondary; the fourth stands apart, ringed in the accent. One accent cable, a smooth curve with a gentle sag, runs between the two ringed receptacles, with **fe80::** set in `.caption` monospaced secondary above its middle. Those are the only words on it. Hairline strokes and control-background fills; the accent is used for the ring, the cable and, optionally, one small dot that travels slowly along the cable — stilled under Reduce Motion, and the picture is complete without it. It says what the four sections say, in one glance: the bridge stays, one port leaves it, one cable, one address.
 
@@ -777,7 +791,7 @@ You can watch each sentence mean something before you agree to it.
 - **Why take the port out of Thunderbolt Bridge?** — **The bridge joins your Thunderbolt ports into one ordinary network, which is lovely for file sharing and wrong for this. RDMA wants a cable that belongs to it alone, so RDMALink gives the port its own service and leaves the bridge otherwise untouched. A port has to be out of every bridge, even one that isn't switched on.**
 - **Why only one cable between two Macs?** — **The bridge works like a hub: whatever arrives on one Thunderbolt port is sent out of all the others. So a second Thunderbolt connection between the same two Macs — or a ring of Macs — with those ports still in the bridge gives traffic a way to go round and round for ever, eating processor time and dragging the network down. Apple says so in its technote on RDMA over Thunderbolt. One cable, no loop.**
 - Under that section, a `.caption` link: **Apple's technote on RDMA over Thunderbolt** → `https://developer.apple.com/documentation/technotes/tn3205-low-latency-communication-with-rdma-over-thunderbolt` (TN3205, which says a bridge forwards like a hub, that a loop lets frames travel indefinitely, and to keep looped ports out of the bridge). Opens in the default browser; the only link on the sheet.
-- **That fe80:: address** — **It's a link-local IPv6 address. It only means anything down that one cable, which is exactly what we want — the port is now its own small private network. That's also why IPv4 can be off entirely.**
+- **That fe80:: address** — **It's a link-local IPv6 address. It only means anything down that one cable, which is exactly the point — the port is now its own small private network. That's also why IPv4 can be off entirely.**
 - Closing line: **You don't need to know any of this to use RDMALink.**
 - Button: **Done**
 
@@ -796,11 +810,11 @@ Documented once so they all read the same.
 5. **The primary action is always a real action** — open the right settings pane, turn the model to the right port, show something in Finder, or re-check. **There is never a "Continue Anyway", never an "I understand the risks", never a hidden modifier key.** Where the condition is physical, the refusal has **no button at all**: it watches itself and clears.
 6. **On the review screen the primary button is removed, not disabled.**
 7. Every refusal that follows a partial write **states the rollback first**, before explaining anything else.
-8. `Copy Details` appears on every failure refusal and always includes the technical names regardless of the "Show technical names" toggle, plus the model, the chip, the macOS build, the failing step and the underlying reason — and nothing else. It is the same payload as `Save a Diagnostics File…`.
+8. `Copy Details` appears on every failure refusal and always includes the technical names regardless of the "Show technical names" toggle, plus the model, the chip, the macOS build, the failing step and the underlying reason — and nothing else. It is the same payload as `Save Diagnostics File…`.
 9. Self-clearing refusals cross-fade to a single line — **"Sorted. Carrying on."** — and the flow continues by itself.
-10. `Back` always remains, so the only ways out of a refusal are backwards or fixing the cause.
+10. `Back` — or `Cancel` on the picker, where going back leaves the assistant — always remains, so the only ways out of a refusal are backwards or fixing the cause.
 
-**Shared strings:** **Nothing has been changed.** · **I'll keep watching — when this is sorted I'll carry straight on.** · **Sorted. Carrying on.** · **Check Again** · **Copy Details** → **Copied** · **Back**
+**Shared strings:** **Nothing has been changed.** · **RDMALink is watching — once this is sorted it carries straight on.** · **Sorted. Carrying on.** · **Check Again** · **Copy Details** → **Copied** · **Back**
 
 ### 6.2 The refusals
 
@@ -808,7 +822,7 @@ Documented once so they all read the same.
 
 **R1 — Two Macs are connected (loop risk).** *Blocks preflight and any apply.* Fires when two or more receptacles with a Mac on the end are members of the same bridge, in the kernel or in the saved network settings. A port that is already standalone forwards nothing, so two cables on two standalone ports — a finished set-up — never trip it.
 - Headline: **Two Macs are connected**
-- Body: **Thunderbolt Bridge forwards Ethernet between Macs, and two cables between the same pair can send traffic around in a loop. Unplug one cable and I'll pick this back up — the other one can go back in when we're done.**
+- Body: **Thunderbolt Bridge forwards Ethernet between Macs, and two cables between the same pair can send traffic around in a loop. Unplug one cable and RDMALink will pick this back up — the other one can go back in when you're done.**
 - Detail: **Back, far left and Back, far right each have a Mac on the end.**
 - Buttons: none.
 - **Recovery:** both receptacles ring and show their light threads so the user can **see** the loop; the check flips to satisfied the moment one cable is pulled, with no click. No bypass exists anywhere in the interface.
@@ -825,16 +839,16 @@ Documented once so they all read the same.
 
 **R3 — A cable is in a USB-only port.** *A non-blocking tip on the hub; a hard refusal on click in Choose a port.*
 - Headline: **That's a USB port**
-- Body: **The front ports on this Mac carry USB, not Thunderbolt. Move the cable to one of the four Thunderbolt ports on the back and I'll follow along.**
+- Body: **The front ports on this Mac carry USB, not Thunderbolt. Move the cable to one of the four Thunderbolt ports on the back and RDMALink will follow along.**
 - Body (Mac mini): **The two ports at the front of a Mac mini carry USB, not Thunderbolt. The three on the back are the Thunderbolt ones.**
-- Buttons: **Turn the Mac Around** (default) · **Check Again**
+- Buttons: **Show Thunderbolt Ports** (default in Choose a port; a plain button in the hub's tip, because the hub footer's primary is already that window's one default) · **Check Again**
 - **Recovery:** the camera arcs to the back face and breathes the eligible receptacles once, in sequence; when the cable reappears in a Thunderbolt port the tip dismisses itself with **"Got it — that's a Thunderbolt port. Carry on."**
 
 ---
 
 **R4 — Something is still mounted over Thunderbolt.** *Blocks preflight and blocks Restore.*
 - Headline: **Something is still using this link**
-- Body: **The volume Vault is mounted over Thunderbolt. Eject it in Finder so nothing gets interrupted, then we'll carry on.**
+- Body: **The volume Vault is mounted over Thunderbolt. Eject it in Finder so nothing gets interrupted, then RDMALink will carry on.**
 - Detail (multiple): **Vault and Scratch are mounted over Thunderbolt.**
 - Buttons: **Show in Finder** (default)
 - Busy line: **Finder says something still has a file open on it. Quitting whatever is using it usually does the trick.**
@@ -867,7 +881,7 @@ Documented once so they all read the same.
 
 **R8 — The permission expired mid-burst.**
 - Headline: **That took a moment too long**
-- Body: **The permission macOS gives RDMALink lasts about thirty seconds, and it ran out before every change went through — so RDMALink put the port back exactly as it was. Let's go again; it usually flies through.**
+- Body: **The permission macOS gives RDMALink lasts about thirty seconds, and it ran out before every change went through — so RDMALink put the port back exactly as it was. Try again; it usually flies through.**
 - Buttons: **Try Again** (default) · **Done** · **Copy Details**
 - **Recovery:** the reversed checklist stays on screen as proof of the rollback, then the flow returns to S5 after re-verifying the world.
 
@@ -899,7 +913,7 @@ Documented once so they all read the same.
 
 **R12 — Another app is editing the network.**
 - Headline: **Something else has the network open**
-- Body: **System Settings, or another app, is editing the network configuration right now. RDMALink won't write over it — two things writing network settings at once is how configurations get mangled. Close that and we'll try again.**
+- Body: **System Settings, or another app, is editing the network configuration right now. RDMALink won't write over it — two things writing network settings at once is how configurations get mangled. Close that and RDMALink will try again.**
 - Buttons: **Check Again** (default) · **Quit System Settings** (shown only when System Settings is the holder) · **Back**
 - **Recovery:** the app polls quietly and the refusal clears itself when the lock does.
 
@@ -908,22 +922,22 @@ Documented once so they all read the same.
 **R13 — This Mac's network settings are managed.** *Blocks the entire configure path.*
 - Headline: **This Mac's network settings are managed for you**
 - Body: **A configuration profile on this Mac owns the network setup, and it will quietly put back anything RDMALink changes. It'd rather tell you now than have you wonder later why the link keeps vanishing. Whoever manages this Mac can make an exception for Thunderbolt.**
-- Buttons: **Show Me the Profile** (default) · **Copy Details for IT** · **Back**
+- Buttons: **Show Profile** (default) · **Copy Details for IT** · **Back**
 - **Recovery:** none offered, and no override. The refusal re-checks on window focus. Identify, the model, and the port list all keep working, so the app is still a useful map.
 
 ---
 
 **R14 — RDMALink can't save its undo note.** *Hard gate. Fires at preflight and again immediately before the first write.*
-- Headline: **I can't write down how things are right now**
+- Headline: **RDMALink can't write down how things are right now**
 - Body: **RDMALink's notes live in your Library folder, and it can't save there at the moment — which means it couldn't put things back afterwards. It won't change anything it can't undo.**
 - Detail: **2 KB is all it needs. There's 0 bytes free on Macintosh HD.** / **The folder isn't writable.**
-- Buttons: **Check Again** (default) · **Show the Notes Folder** · **Copy Details**
+- Buttons: **Check Again** (default) · **Show Notes in Finder** · **Copy Details**
 - **This is the refusal that protects every other promise in the app, and it comes before the password, not after.**
 
 ---
 
-**R15 — There's a bridge here I can't read.** *Blocks review for that port.*
-- Headline: **There's a bridge here I can't make sense of**
+**R15 — There's a bridge here RDMALink can't read.** *Blocks review for that port.*
+- Headline: **There's a bridge here RDMALink can't make sense of**
 - Body: **Back, far left belongs to a bridge whose settings RDMALink can't read properly, and a port has to be out of every bridge — even one that isn't switched on — before it can carry RDMA. It won't guess at this. Have a look in Network settings, under Manage Virtual Interfaces, and it'll check again when you're back.**
 - Buttons: **Open Network Settings** (default) · **Check Again** · **Copy Details**
 
@@ -931,8 +945,9 @@ Documented once so they all read the same.
 
 **R16 — This port already has a setup RDMALink didn't make.** *Blocks selection; distinct from Adopt.*
 - Headline: **This port already has a setup RDMALink didn't make**
-- Body: **There's a service on Back, far left with a fixed IPv4 address on it. It isn't RDMALink's and it isn't what a link needs, and RDMALink won't quietly rewrite something you or someone else set up on purpose. Remove it in Network settings if it's stale, or pick a different port.**
-- Buttons: **Open Network Settings** (default) · **Pick a Different Port** · **Copy Details**
+- Body: **There's a service on Back, far left with a fixed IPv4 address on it. It isn't RDMALink's and it isn't what a link needs, and RDMALink won't quietly rewrite something you or someone else set up on purpose. Remove it in Network settings if it's stale, or choose another port.**
+- Buttons: **Open Network Settings** (default) · **Choose Another Port** · **Copy Details**
+- **Recovery:** on the picker, `Choose Another Port` puts the card away and leaves you on the picker, as clicking a port that works does; only `Cancel` leaves the assistant (§2.3 band 4). Raised on S5, it goes back to the picker.
 
 ---
 
@@ -944,8 +959,8 @@ Documented once so they all read the same.
 
 ---
 
-**R18 — I don't know my way around this version of macOS.** *Blocks the entire configure path.*
-- Headline: **I don't know my way around this version of macOS**
+**R18 — RDMALink doesn't know its way around this version of macOS.** *Blocks the entire configure path.*
+- Headline: **RDMALink doesn't know its way around this version of macOS**
 - Body: **RDMALink knows how to take a port out of Thunderbolt Bridge on macOS 27.0 through 27.2, and this Mac is on 27.3. Rather than guess with your network settings, it'll stop here.**
 - Body, second paragraph: **You can do it by hand in System Settings: under Network, open Manage Virtual Interfaces and remove the port from Thunderbolt Bridge, then set IPv4 to Off and IPv6 to Link-local only on the port's own service. Come back afterwards and RDMALink will recognize it and offer to look after it.**
 - Buttons: **Open Network Settings** (default) · **Check for an Update** · **Copy Details**
@@ -954,9 +969,9 @@ Documented once so they all read the same.
 ---
 
 **R19 — The undo note is missing or unreadable.** *At Restore.*
-- Headline: **I can't remember how this looked**
+- Headline: **RDMALink can't remember how this looked**
 - Body: **The note RDMALink wrote down for Back, far left is missing, and it won't guess at your network settings. You can remove the service in System Settings, under Network, and add the port back to Thunderbolt Bridge yourself.**
-- Buttons: **Open Network Settings** (default) · **Copy These Steps** · **Stop Managing This Port**
+- Buttons: **Open Network Settings** (default) · **Cancel** · **Copy These Steps** · **Stop Managing This Port**. `Cancel` closes the sheet and changes nothing (§6.1 rule 10, §2.6).
 - **Recovery:** `Stop Managing This Port` clears only RDMALink's own record and touches nothing on the system, and its confirmation says exactly that.
 
 ---
@@ -965,7 +980,7 @@ Documented once so they all read the same.
 - Headline: **Not quite back yet**
 - Body: **The service is gone, but Thunderbolt Bridge isn't listing Back, far left yet. RDMALink has kept your undo note, so nothing is lost and it can try again whenever you like.**
 - Steps: **Try Again usually does it: RDMALink waits for the port to settle and writes the membership afresh. If it still isn't back, open System Settings › Network, choose Manage Virtual Interfaces, open Thunderbolt Bridge and add Back, far left yourself.**
-- Buttons: **Try Again** (default) · **Open Network Settings** · **Copy These Steps**
+- Buttons: **Try Again** (default) · **Cancel** · **Open Network Settings** · **Copy These Steps**. `Cancel` closes the sheet; the undo note is kept and the hub still offers `Restore…`, so closing loses nothing (§6.1 rule 10, §2.6).
 - **Recovery:** the baseline is **never** deleted until verification passes. The change log entry keeps its `Restore…` action. The ring on the model stops half-open and stays that way, matching the copy.
 
 ---
@@ -973,7 +988,7 @@ Documented once so they all read the same.
 **R21 — The bridge it came from doesn't exist any more.** *At Restore.*
 - Headline: **The bridge it came from doesn't exist any more**
 - Body: **Thunderbolt Bridge has been removed since RDMALink set this port up. It can still delete the service it made — that part is squarely its own — but it won't recreate a bridge, because that's a bigger decision than undoing its own work.**
-- Buttons: **Remove My Service Only** (default) · **Leave Everything Alone**
+- Buttons: **Remove Service Only** · **Leave Everything Alone** (Escape). **No default**: the user asked for the port to be put back whole, and the one action on offer deletes the service without putting it back, so Return presses nothing (§2.6). `Remove Service Only` is a plain button, not a red one — `stop` stays unused (§3.1).
 - Confirmation: **The service is gone and the port is standalone. RDMALink has kept your note, in case you rebuild that bridge and want the rest put back.**
 
 ---
@@ -994,8 +1009,8 @@ Documented once so they all read the same.
 
 ---
 
-**R24 — I can't see the Thunderbolt hardware.**
-- Headline: **I can't see this Mac's Thunderbolt hardware**
+**R24 — RDMALink can't see the Thunderbolt hardware.**
+- Headline: **RDMALink can't see this Mac's Thunderbolt hardware**
 - Body: **macOS isn't reporting any Thunderbolt controllers, which RDMALink needs before it will touch anything. A restart often sorts this out.**
 - Buttons: **Check Again** (default) · **Copy Details** · **Quit**
 - After three failures, the body gains: **Three tries, same result. Restarting usually clears this up.**
@@ -1013,14 +1028,14 @@ Documented once so they all read the same.
 
 **R26 — Every Thunderbolt port is occupied.** *A dead end handled kindly at Choose a port, not a refusal.*
 - Headline: **Every Thunderbolt port has something in it**
-- Body: **There's a display in Back, far left and docks in the other three. You can still prepare any of them — or free up the one you want for the link and I'll be ready.**
+- Body: **There's a display in Back, far left and docks in the other three. You can still prepare any of them — or free up the one you want for the link and RDMALink will be ready.**
 - Buttons: none; the card watches and clears itself.
 
 ---
 
 **R27 — Routing, not refusing.** Two cases never produce a refusal:
 - A port **already ready** that is clicked in Choose a port: the row reads **Already ready for RDMA** and offers `Restore…`. Inline line: **This one's already a link. Want to see how it's doing?**
-- A port **set up by hand** that is clicked: the app routes silently to Adopt (S9) with the line **This one's already done — and done properly. Let me show you what I found.** **There is no path anywhere in the app that rewrites a service the app did not create.**
+- A port **set up by hand** that is clicked: the app routes silently to Adopt (S9) with the line **This one's already done — and done properly. Here's what RDMALink found.** **There is no path anywhere in the app that rewrites a service the app did not create.**
 
 ---
 
@@ -1028,7 +1043,7 @@ Documented once so they all read the same.
 - Headline: **This port's service isn't the one RDMALink made any more**
 - Body: **The service RDMALink created on Back, far left has been changed since — it's carrying settings RDMALink didn't put there, and it won't quietly delete something you've made your own. Remove it yourself in Network settings if you're done with it, or tell RDMALink to stop looking after this port and it'll leave everything exactly where it is.**
 - Detail: the differences, as a list: **IPv4 is Manual, IPv6 is Automatic.**
-- Buttons: **Stop Managing…** · **Open Network Settings** · **Leave Everything Alone**
+- Buttons: **Stop Managing…** · **Open Network Settings** · **Leave Everything Alone** (Escape). **No default**: the user asked for the port to be put back, and `Stop Managing…` forgets the note that makes that possible, so Return presses nothing (§2.6).
 - **Recovery:** RDMALink matches its service by identifier, never by name, so a renamed service is still its own; only a changed configuration is refused. The note is kept.
 
 ---
@@ -1041,16 +1056,16 @@ Documented once so they all read the same.
 - Headline: **Nothing to put back**
 - Body: **RDMALink's note for Back, far left only records that it put the port back in Thunderbolt Bridge. There's nothing to undo — Set It Up Again takes the port out of the bridge, and Stop Managing forgets the note.**
 - Buttons: **Set It Up Again** (default) · **Stop Managing…** · **Cancel**
-- Adopted note (§7.3: an adopted port has no bridge history and nothing to put back): body **RDMALink's note for Back, far left only records that it adopted the port as it found it. There's nothing to undo — Stop Managing forgets the note, and the port keeps its setup.** · buttons **Stop Managing…** (default) · **Cancel**
+- Adopted note (§7.3: an adopted port has no bridge history and nothing to put back): body **RDMALink's note for Back, far left only records that it adopted the port as it found it. There's nothing to undo — Stop Managing forgets the note, and the port keeps its setup.** · buttons **Stop Managing…** · **Cancel** (Escape). **No default**: the user asked for a Restore, not for the note to go, and `Stop Managing…` forgets it, so Return presses nothing (§2.6).
 - **Recovery:** the note is kept; nothing is written.
 
 ---
 
-**R31 — I don't recognize this Mac.** *Read-only mode, not an error. Fires when neither rule in §4.7 recognizes the Mac; never on a Mac the identifier catalogue lists.*
-- Headline: **I don't recognize this Mac**
+**R31 — RDMALink doesn't recognize this Mac.** *Read-only mode, not an error. Fires when neither rule in §4.7 recognizes the Mac; never on a Mac the identifier catalogue lists.*
+- Headline: **RDMALink doesn't recognize this Mac**
 - Body: **RDMALink only draws, and only changes, Macs it knows — and this isn't one of them. So there's no picture, and nothing here will be changed. The ports below are listed the way macOS reports them, and everything you see is real.**
 - Stage: no model. In its place, centred, an unavailable-content block in the system's own style: symbol `desktopcomputer.trianglebadge.exclamationmark`, title **No picture for this Mac**, description **RDMALink doesn't recognize it, so it won't draw one.** No selector, legend, callout or view buttons.
-- Buttons: **Quit** only. Set-up, Restore, Adopt, Return to Bridge and Stop Managing are all **absent**, not disabled — RDMALink writes nothing on a Mac it does not recognize, notes included. Identify is not offered.
+- Buttons: **Quit** only. In the window, set-up, Restore, Adopt, Return to Bridge and Stop Managing are all **absent**, not disabled — RDMALink writes nothing on a Mac it does not recognize, notes included (§1.3 rule 5). Identify is not offered. The Port menu is the exception to *absent*, because a menu that empties itself is a thing to hunt for: every item stays and every one is unavailable, `Identify Port…` included (§2.7).
 - Every operation refuses with this code as well, so the command-line tool's previews and `refusals` say the same thing; the app hiding the buttons is not the only guard.
 - **Recovery:** the port list (numbered, §4.7) and the change log still work. A newer RDMALink may know this Mac.
 
@@ -1113,7 +1128,7 @@ opens the S10 sheet in its foreign-port form.
    the port is in the bridge; on a miss the note is kept and R20 applies.
 5. The change log records the return (**Put it back in Thunderbolt Bridge…**,
    S11), the note stays so the row can offer **Set It Up Again**, and the row
-   reads **Back in the bridge** (§4.3). A returned note is not one `Restore…`
+   reads **Returned by RDMALink** (§4.3). A returned note is not one `Restore…`
    lists — the port already has everything the note describes — and it is not
    drift; **Stop Managing…** in the Port menu clears it (its sheet says
    exactly what that means: only the note goes), and setting the port up
@@ -1127,7 +1142,7 @@ The hub is the steady state and needs no explaining on the fifth launch: three r
 - **Status is live.** Link state, bridge membership, service and address changes — including changes made in System Settings while RDMALink is open — land in the row and on the receptacle in place within a second, with a 180 ms badge cross-fade that never reorders or resizes a row, and nothing else moves.
 - Because docks and displays may not raise events, `Check Again` sits permanently in the toolbar **and** a quiet one-second state diff runs underneath anyway, so the toolbar button is a reassurance rather than a requirement.
 - If something changes on a face you are not looking at, the other face-selector segment takes a small accent dot and the panel offers a single inline `Show Me`. The app narrates rather than grabs.
-- **Drift is news, not failure.** If a service RDMALink created has disappeared, or the port is back in a bridge, the row reads **"Not set up any more"**, the hub carries **"Back, far left isn't set up any more"** with `Set It Up Again` and `Forget This Port`, and **a stale baseline is never silently reapplied to a world that moved.** A port RDMALink returned to the bridge (§7.5) is not drift: its row reads **Back in the bridge** and nothing is raised.
+- **Drift is news, not failure.** If a service RDMALink created has disappeared, or the port is back in a bridge, the row reads **"Not set up any more"**, the hub carries **"Back, far left isn't set up any more"** with `Set It Up Again` and `Forget This Port`, and **a stale baseline is never silently reapplied to a world that moved.** A port RDMALink returned to the bridge (§7.5) is not drift: its row reads **Returned by RDMALink** and nothing is raised.
 - **Unfinished business survives quitting** and is shown as a hub row the next launch, phrased as a situation rather than an alarm: a port needing a hand, a restart still owed, a drifted port, an adoptable port.
 - The **change log is append-only.** Undone entries stay, greyed, marked **"Already put back on 3 September at 15:10."** The record of what this app did to this Mac is never quietly rewritten.
 - There is no menu bar extra, no notification, no dock badge and no background agent.
@@ -1165,11 +1180,13 @@ Full keyboard access throughout, with real, visible focus rings — including on
 | Escape | Cancel any sheet, refusal or Identify — always backwards, never forwards |
 | ⌘1 ⌘2 ⌘3 ⌘4 | Back / Front / Left / Right |
 | ⌘0 / ⇧⌘0 | Fit / Reset View |
-| ⌘N | Set Up a Port |
-| ⌘I | Identify a Port |
-| ⌘T | Show Technical Names |
+| ⌘N | Set Up Port |
+| ⌘I | Identify Port |
+| ⌘T | Show Technical Names / Hide Technical Names |
+| ⌘K | Hide Legend / Show Legend |
 | ⌘L | Change Log |
-| ⌘R | Check Again |
+| ⌘R | Check Again (View menu) |
+| ⌘? | RDMALink Help |
 | ⌘C | Copy (address, refusal details, log entry) |
 | ⌘, | Settings |
 
@@ -1177,7 +1194,7 @@ Every default button is `.keyboardShortcut(.defaultAction)` and every cancel is 
 
 ### 8.4 Pointer targets
 
-Every receptacle's hit target is **at least 24 × 24 pt in screen space**, enforced by an invisible proxy collider, and **the camera dolly is floored** so a port can never become un-clickable at any zoom the user can reach. Standard cursors throughout, including `.operationNotAllowed` over USB-only receptacles and `.help` on the address footnote.
+Every receptacle's hit target is **at least 24 × 24 pt in screen space**, enforced by an invisible proxy collider, and **the camera dolly is floored** so a port can never become un-clickable at any zoom the user can reach. Standard cursors throughout, including `.operationNotAllowed` over USB-only receptacles. No tooltip repeats the text it sits on: S7's address footnote is on screen in full and carries none.
 
 ### 8.5 Dynamic Type and layout
 
@@ -1208,8 +1225,8 @@ All copy is localizable with no concatenated sentences. Position names and locat
 
 ## 9. Delight moments
 
-1. **"Let me turn it around."** The panel says it, then the camera arcs 180° over 0.7 s with a small dolly out and back, and the ports you need are facing you. It is the single most useful sentence in the app, and it feels like someone lifting the machine off the desk for you.
-2. **The ports wake up.** When the opening probe finishes, the receptacles light in physical order with a 60 ms stagger — one readable beat that says *I found all six* — then complete stillness. Once per launch, never repeated.
+1. **"Turning the Mac around."** The panel says it, then the camera arcs 180° over 0.7 s with a small dolly out and back, and the ports you need are facing you. It is the single most useful sentence in the app, and it feels like someone lifting the machine off the desk for you.
+2. **The ports wake up.** When the opening probe finishes, the receptacles light in physical order with a 60 ms stagger — one readable beat that says *found all six* — then complete stillness. Once per launch, never repeated.
 3. **The ribbon lets go.** Bridged ports are visibly tied together by a soft arc across the chassis. The instant the first write lands, the ribbon detaches from the chosen port and retracts into the others. A concept nobody enjoys reading about, understood in half a second without a word.
 4. **The ring closes as the work gets done.** Four arcs, four gaps; each gap closes as a real step completes, ending as one unbroken accent ring. Progress you can read from across the room, mapped to geometry rather than to a bar, and honest enough that a stall looks like a stall.
 5. **The rollback runs backwards.** If something fails, the same ring re-opens its gaps at the same pace and the ribbon springs back while the checklist reverses. Watching a mistake being undone in front of you is more reassuring than any sentence about it.
@@ -1237,4 +1254,4 @@ All copy is localizable with no concatenated sentences. Position names and locat
 
 4. **How many ports in one password burst.** The credential lasts about 30 s. One port takes roughly 1.8 s; multi-select currently allows any number. **Should there be a cap (say three) after which the app splits into a second password prompt with its own review, or should it try them all and rely on R8's rollback if the window closes?** Related: if port 1 succeeds and port 2 fails, should port 1's changes stand (currently yes, with a per-port result summary) or roll back too?
 
-5. **Terminology and one default.** Three words are load-bearing and worth your ear: **"Restore"** vs **"Put It Back"** (warmer, longer, harder to localize); **"Identify a Port…"** vs **"Find It for Me"** (friendlier, less standard); **"Adopt"** vs **"Look After This Port"**. And one behavioral default: **should `Set Up a Port…` be offered at all when nothing is plugged into any Thunderbolt port?** The spec currently offers it, on the grounds that preparing a port before the cable arrives is legitimate — but it does mean a brand-new user can complete the whole flow and see no address.
+5. **Terminology and one default.** Three words are load-bearing and worth your ear: **"Restore"** vs **"Put It Back"** (warmer, longer, harder to localize); **"Identify Port…"** vs **"Find It for Me"** (friendlier, less standard); **"Adopt"** vs **"Look After This Port"**. And one behavioral default: **should `Set Up Port…` be offered at all when nothing is plugged into any Thunderbolt port?** The spec currently offers it, on the grounds that preparing a port before the cable arrives is legitimate — but it does mean a brand-new user can complete the whole flow and see no address.

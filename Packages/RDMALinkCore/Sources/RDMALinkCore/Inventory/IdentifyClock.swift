@@ -10,7 +10,7 @@ import Foundation
 public enum IdentifyClock {
     /// "Still waiting for it to come back. Take your time."
     public static let nudgeAfter: Duration = .seconds(30)
-    /// "I didn't see anything change."
+    /// "RDMALink didn't see anything change."
     public static let timeoutAfter: Duration = .seconds(60)
 
     /// What the clock says, given what has happened so far.

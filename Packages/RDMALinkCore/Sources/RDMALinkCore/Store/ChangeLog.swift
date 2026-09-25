@@ -83,7 +83,7 @@ public struct ChangeEntry: Sendable, Codable, Equatable, Identifiable {
 
 /// The change log: a line of JSON per entry, appended and never rewritten.
 ///
-/// It lives beside the undo notes, so `Show the Notes in Finder` reveals both.
+/// It lives beside the undo notes, so `Show Notes in Finder` reveals both.
 /// There is deliberately no API here that edits or removes an entry: an entry
 /// that has been undone is answered by a later entry, not by editing the old
 /// one.

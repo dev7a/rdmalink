@@ -196,21 +196,22 @@ struct WizardWorkingArea: View {
         case .back, .cancel: flow.goBack()
         case .done: flow.goBack()
         case .checkAgain: recheck()
-        case .turnTheMacAround: turnAndBreathe()
+        case .showThunderboltPorts: turnAndBreathe()
         case .openNetworkSettings: WizardSettingsPane.open(WizardSettingsPane.network)
         case .openUsersAndGroups: WizardSettingsPane.open(WizardSettingsPane.usersAndGroups)
-        case .showMeTheProfile: WizardSettingsPane.open(WizardSettingsPane.profiles)
+        case .showProfile: WizardSettingsPane.open(WizardSettingsPane.profiles)
         case .quitSystemSettings: WizardSystemSettingsApp.quit()
-        case .showTheNotesFolder: WizardFinder.showNotesFolder()
+        case .showNotesInFinder: WizardFinder.showNotesFolder()
         case .showInFinder:
             guard let volume = flow.findings.mountedThunderboltVolumes?.first else { return }
             WizardFinder.showVolume(named: volume)
         case .tryAgain: flow.tryAgain()
-        case .takeAnotherLook, .pickADifferentPort: flow.goBack()
-        case .identifyAPort: flow.beginIdentify()
+        case .takeAnotherLook: flow.goBack()
+        case .chooseAnotherPort: flow.chooseAnotherPort()
+        case .identifyPort: flow.beginIdentify()
         case .identifyAgain: flow.identify?.restart()
         case .useThisPort: flow.useIdentifiedPort()
-        case .pickFromTheList: flow.dismissIdentify()
+        case .chooseFromList: flow.dismissIdentify()
         // Handled by `CopyDetailsButton`, which needs the payload and not an
         // intent (§6.1 rule 8).
         case .copyDetails, .copyDetailsForIT: break

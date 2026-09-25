@@ -88,7 +88,7 @@ struct OperationsNoteSafetyTests {
                 environment: Fixtures.environment(store: store), progress: { _, _ in })
         } throws: { ($0 as? Refusal) == Refusals.noteIsAnAdoptionRecord(port: Fixtures.port.observed) }
         #expect(writer.calls == [.lock])
-        #expect((try? store.load(port: "en6")) != nil, "the note is the user's, not ours")
+        #expect((try? store.load(port: "en6")) != nil, "the note is the user's, not RDMALink's")
     }
 
     @Test("A port set up while already standalone restores to standalone, and says so")

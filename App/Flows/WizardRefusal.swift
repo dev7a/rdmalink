@@ -23,25 +23,25 @@ import RDMALinkCore
 /// Identify. The view supplies the behaviour; the title comes from the spec
 /// and lives here, so the copy is checkable in one place.
 enum WizardAction: String, Sendable, Equatable, Hashable, Identifiable, CaseIterable {
-    case turnTheMacAround
+    case showThunderboltPorts
     case checkAgain
     case copyDetails
     case back
     case done
     case tryAgain
     case showInFinder
-    case showTheNotesFolder
+    case showNotesInFinder
     case openNetworkSettings
     case openUsersAndGroups
     case quitSystemSettings
-    case showMeTheProfile
+    case showProfile
     case copyDetailsForIT
-    case pickADifferentPort
+    case chooseAnotherPort
     case takeAnotherLook
-    case pickFromTheList
+    case chooseFromList
     case useThisPort
     case identifyAgain
-    case identifyAPort
+    case identifyPort
     case cancel
     case `continue`
 
@@ -50,25 +50,25 @@ enum WizardAction: String, Sendable, Equatable, Hashable, Identifiable, CaseIter
     /// §1.3 rule 1: Title Case for buttons.
     var title: LocalizedStringResource {
         switch self {
-        case .turnTheMacAround: "Turn the Mac Around"
+        case .showThunderboltPorts: "Show Thunderbolt Ports"
         case .checkAgain: "Check Again"
         case .copyDetails: "Copy Details"
         case .back: "Back"
         case .done: "Done"
         case .tryAgain: "Try Again"
         case .showInFinder: "Show in Finder"
-        case .showTheNotesFolder: "Show the Notes Folder"
+        case .showNotesInFinder: "Show Notes in Finder"
         case .openNetworkSettings: "Open Network Settings"
         case .openUsersAndGroups: "Open Users & Groups"
         case .quitSystemSettings: "Quit System Settings"
-        case .showMeTheProfile: "Show Me the Profile"
+        case .showProfile: "Show Profile"
         case .copyDetailsForIT: "Copy Details for IT"
-        case .pickADifferentPort: "Pick a Different Port"
+        case .chooseAnotherPort: "Choose Another Port"
         case .takeAnotherLook: "Take Another Look"
-        case .pickFromTheList: "Pick from the List"
+        case .chooseFromList: "Choose from List"
         case .useThisPort: "Use This Port"
         case .identifyAgain: "Identify Again"
-        case .identifyAPort: "Identify a Port…"
+        case .identifyPort: "Identify Port…"
         case .cancel: "Cancel"
         case .continue: "Continue"
         }
@@ -135,7 +135,7 @@ struct WizardRefusal: Sendable, Equatable, Identifiable {
 enum WizardRefusalStrings {
     static let nothingChanged: LocalizedStringResource = "Nothing has been changed."
     static let keepWatching: LocalizedStringResource =
-        "I'll keep watching — when this is sorted I'll carry straight on."
+        "RDMALink is watching — once this is sorted it carries straight on."
     /// Rule 9: a self-clearing refusal cross-fades to this one line and the
     /// flow carries on by itself.
     static let sortedCarryingOn: LocalizedStringResource = "Sorted. Carrying on."
@@ -155,8 +155,8 @@ enum WizardRefusals {
             headline: "That's a USB port",
             body: isMacMini
                 ? "The two ports at the front of a Mac mini carry USB, not Thunderbolt. The three on the back are the Thunderbolt ones."
-                : "The front ports on this Mac carry USB, not Thunderbolt. Move the cable to one of the four Thunderbolt ports on the back and I'll follow along.",
-            actions: [.turnTheMacAround, .checkAgain]
+                : "The front ports on this Mac carry USB, not Thunderbolt. Move the cable to one of the four Thunderbolt ports on the back and RDMALink will follow along.",
+            actions: [.showThunderboltPorts, .checkAgain]
         )
     }
 
@@ -193,7 +193,7 @@ enum WizardRefusals {
     static let credentialExpired = WizardRefusal(
         code: "R8",
         headline: "That took a moment too long",
-        body: "The permission macOS gives RDMALink lasts about thirty seconds, and it ran out before every change went through — so RDMALink put the port back exactly as it was. Let's go again; it usually flies through.",
+        body: "The permission macOS gives RDMALink lasts about thirty seconds, and it ran out before every change went through — so RDMALink put the port back exactly as it was. Try again; it usually flies through.",
         rollbackLine: WizardRefusalStrings.nothingChanged,
         actions: [.tryAgain, .done, .copyDetails]
     )
@@ -247,7 +247,7 @@ enum WizardRefusals {
         WizardRefusal(
             code: "R12",
             headline: "Something else has the network open",
-            body: "System Settings, or another app, is editing the network configuration right now. RDMALink won't write over it — two things writing network settings at once is how configurations get mangled. Close that and we'll try again.",
+            body: "System Settings, or another app, is editing the network configuration right now. RDMALink won't write over it — two things writing network settings at once is how configurations get mangled. Close that and RDMALink will try again.",
             actions: bySystemSettings
                 ? [.checkAgain, .quitSystemSettings, .back]
                 : [.checkAgain, .back]
@@ -261,7 +261,7 @@ enum WizardRefusals {
         symbol: "building.2",
         headline: "This Mac's network settings are managed for you",
         body: "A configuration profile on this Mac owns the network setup, and it will quietly put back anything RDMALink changes. It'd rather tell you now than have you wonder later why the link keeps vanishing. Whoever manages this Mac can make an exception for Thunderbolt.",
-        actions: [.showMeTheProfile, .copyDetailsForIT, .back]
+        actions: [.showProfile, .copyDetailsForIT, .back]
     )
 
     /// The refusal that protects every other promise in the app, and it comes
@@ -270,10 +270,10 @@ enum WizardRefusals {
         WizardRefusal(
             code: "R14",
             isAttention: true,
-            headline: "I can't write down how things are right now",
+            headline: "RDMALink can't write down how things are right now",
             body: "RDMALink's notes live in your Library folder, and it can't save there at the moment — which means it couldn't put things back afterwards. It won't change anything it can't undo.",
             detail: detail(for: writability),
-            actions: [.checkAgain, .showTheNotesFolder, .copyDetails]
+            actions: [.checkAgain, .showNotesInFinder, .copyDetails]
         )
     }
 
@@ -289,7 +289,7 @@ enum WizardRefusals {
     static func unreadableBridge(positionName: String, portBSDName: String) -> WizardRefusal {
         WizardRefusal(
             code: "R15",
-            headline: "There's a bridge here I can't make sense of",
+            headline: "There's a bridge here RDMALink can't make sense of",
             body: "\(positionName) belongs to a bridge whose settings RDMALink can't read properly, and a port has to be out of every bridge — even one that isn't switched on — before it can carry RDMA. It won't guess at this. Have a look in Network settings, under Manage Virtual Interfaces, and it'll check again when you're back.",
             actions: [.openNetworkSettings, .checkAgain, .copyDetails],
             subjects: [portBSDName]
@@ -300,8 +300,8 @@ enum WizardRefusals {
         WizardRefusal(
             code: "R16",
             headline: "This port already has a setup RDMALink didn't make",
-            body: "There's a service on \(positionName) with a fixed IPv4 address on it. It isn't RDMALink's and it isn't what a link needs, and RDMALink won't quietly rewrite something you or someone else set up on purpose. Remove it in Network settings if it's stale, or pick a different port.",
-            actions: [.openNetworkSettings, .pickADifferentPort, .copyDetails],
+            body: "There's a service on \(positionName) with a fixed IPv4 address on it. It isn't RDMALink's and it isn't what a link needs, and RDMALink won't quietly rewrite something you or someone else set up on purpose. Remove it in Network settings if it's stale, or choose another port.",
+            actions: [.openNetworkSettings, .chooseAnotherPort, .copyDetails],
             subjects: [portBSDName]
         )
     }
@@ -332,7 +332,7 @@ enum WizardRefusals {
             code: "R26",
             symbol: "cable.connector",
             headline: "Every Thunderbolt port has something in it",
-            body: "You can still prepare any of them — or free up the one you want for the link and I'll be ready.",
+            body: "You can still prepare any of them — or free up the one you want for the link and RDMALink will be ready.",
             detail: detail,
             watchingLine: WizardRefusalStrings.keepWatching
         )
@@ -347,7 +347,7 @@ enum WizardRefusals {
 
     /// A port somebody set up by hand: the app routes silently to Adopt.
     static let alreadyDoneProperly: LocalizedStringResource =
-        "This one's already done — and done properly. Let me show you what I found."
+        "This one's already done — and done properly. Here's what RDMALink found."
 }
 
 // MARK: - Core's refusals
@@ -424,14 +424,14 @@ extension WizardRefusal {
         case .rolledBack: [.tryAgain, .done, .copyDetails]
         case .credentialExpired: [.tryAgain, .done, .copyDetails]
         // §6.2 R12's `Quit System Settings` appears "only when System Settings
-        // is the holder", which `SCPreferencesLock` does not tell us, so the
+        // is the holder", which `SCPreferencesLock` does not report, so the
         // two actions that are always honest stand.
         // **Owed from Core:** which process holds the configuration.
         case .networkBusy: [.checkAgain, .back]
         case .rollbackFailed: [.openNetworkSettings, .copyDetails, .checkAgain]
-        case .baselineUnwritable: [.checkAgain, .showTheNotesFolder, .copyDetails]
+        case .baselineUnwritable: [.checkAgain, .showNotesInFinder, .copyDetails]
         case .bridgeUnreadable: [.openNetworkSettings, .checkAgain, .copyDetails]
-        case .foreignService: [.openNetworkSettings, .pickADifferentPort, .copyDetails]
+        case .foreignService: [.openNetworkSettings, .chooseAnotherPort, .copyDetails]
         case .topologyChanged: [.takeAnotherLook]
         // R19–R21 and R28–R30 are raised inside the Restore and Adopt sheets,
         // which own their own button rows (§6.1 rule 1's one exception). If one
@@ -443,7 +443,7 @@ extension WizardRefusal {
         // §6.2 R31: "Buttons: none." It never reaches the assistant — an
         // unrecognized Mac has no way into S3 (§S4) — and if one did, the
         // only honest button is the way out §6.1 rule 10 leaves on every
-        // refusal. Not an empty row: that would print "I'll keep watching",
+        // refusal. Not an empty row: that would print "RDMALink is watching",
         // and R31 never clears.
         case .macNotRecognized: [.back]
         }

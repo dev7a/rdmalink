@@ -175,13 +175,13 @@ struct PreflightRow: Sendable, Equatable, Identifiable {
     enum Action: Sendable, Equatable {
         case showInFinder
         case openNetworkSettings
-        case showTheNotesFolder
+        case showNotesInFinder
 
         var wizardAction: WizardAction {
             switch self {
             case .showInFinder: .showInFinder
             case .openNetworkSettings: .openNetworkSettings
-            case .showTheNotesFolder: .showTheNotesFolder
+            case .showNotesInFinder: .showNotesInFinder
             }
         }
     }
@@ -203,8 +203,9 @@ struct PreflightReport: Sendable, Equatable {
     var rows: [PreflightRow]
     /// R13 replaces the whole of S5's working area. Nothing else here does.
     var replacement: WizardRefusal?
-    /// Printed in `.callout` `.orange` directly above the footer separator,
-    /// and only when the default button is disabled because a check said no.
+    /// Printed in `.callout` `.primary`, behind the orange attention symbol,
+    /// directly above the footer separator, and only when the default button
+    /// is disabled because a check said no.
     var disabledReason: LocalizedStringResource?
     /// Every check satisfied and none being re-run: the default button is
     /// live. Disabled rather than removed, because these clear by themselves.
@@ -323,7 +324,7 @@ struct PreflightReport: Sendable, Equatable {
             let named = loop.map(\.positionName).formatted(.list(type: .and).locale(ThisMacPresentation.english))
             return PreflightRow(
                 check: .oneCable, state: .unsatisfied, title: title,
-                finding: "Two Macs are connected, on \(named). Unplug one and I'll pick this back up."
+                finding: "Two Macs are connected, on \(named). Unplug one and RDMALink will pick this back up."
             )
         }
     }
@@ -383,7 +384,7 @@ struct PreflightReport: Sendable, Equatable {
         case .thunderboltOnly:
             return PreflightRow(
                 check: .anotherRoute, state: .unsatisfied, title: title,
-                finding: "Right now, Thunderbolt is the only way this Mac is reachable. Changing a port can briefly interrupt the whole bridge — not just that one port — so connect Wi-Fi or Ethernet before we touch it.",
+                finding: "Right now, Thunderbolt is the only way this Mac is reachable. Changing a port can briefly interrupt the whole bridge — not just that one port — so connect Wi-Fi or Ethernet before RDMALink touches it.",
                 action: .openNetworkSettings
             )
         }
@@ -400,7 +401,7 @@ struct PreflightReport: Sendable, Equatable {
             return PreflightRow(
                 check: .undoNote, state: .unsatisfied, title: title,
                 finding: "RDMALink can't write its notes folder, so it couldn't put things back afterwards. It won't change anything it can't undo.",
-                action: .showTheNotesFolder
+                action: .showNotesInFinder
             )
         }
         return PreflightRow(

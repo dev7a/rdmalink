@@ -365,7 +365,7 @@ func runRestore(_ bsdName: String?) throws {
         print("")
         print("In the way:")
         show(refusal)
-        if plan.mayRemoveServiceOnly { print("  offer: Remove My Service Only") }
+        if plan.mayRemoveServiceOnly { print("  offer: Remove Service Only") }
     }
     // §7.3: an adopted note is the same answer in R30's other form, and the
     // tool says in its own words which action is left.

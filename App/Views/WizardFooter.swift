@@ -1,11 +1,12 @@
 //
 //  WizardFooter.swift
 //
-//  Band 4 while the assistant is up (UX_SPEC §2.3): a separator, `Back`
-//  leading and the primary trailing with `.keyboardShortcut(.defaultAction)`,
+//  Band 4 while the assistant is up (UX_SPEC §2.3): a separator, `Back` —
+//  `Cancel` on the picker, where it leaves the assistant — leading, and the
+//  primary trailing with `.keyboardShortcut(.defaultAction)`,
 //  contextual `.caption` secondary text between them, and — directly **above**
 //  the separator — the reason the primary is unavailable, in `.callout`
-//  `.orange`.
+//  `.primary` behind an orange attention symbol.
 //
 //  The primary is **absent**, not greyed, whenever a refusal has taken the
 //  screen: a disabled button is still an invitation to hunt for the modifier
@@ -20,10 +21,7 @@ struct WizardFooter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let reason = flow.disabledReason {
-                Text(reason)
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+                FooterReason(reason: reason)
                     .padding(.bottom, 10)
                     .transition(.opacity)
             }
@@ -49,5 +47,27 @@ struct WizardFooter: View {
             .padding(.top, 10)
         }
         .animation(.smooth(duration: 0.18), value: flow.step)
+    }
+}
+
+/// §2.3 band 4: why the primary is unavailable, directly above the separator.
+/// The words are `.callout` `.primary` and carry the meaning, so the orange
+/// symbol in front of them is hidden from VoiceOver. The text is never orange
+/// itself: system orange measures 2.3:1 on the light window background, and
+/// text needs 4.5:1 (§3.1). The hub's footer prints its reason the same way.
+struct FooterReason: View {
+    let reason: LocalizedStringResource
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "exclamationmark.circle")
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+            Text(reason)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.callout)
     }
 }

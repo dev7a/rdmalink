@@ -260,7 +260,7 @@ public struct PortBaseline: Sendable, Codable, Equatable {
     /// it describes: it is a member of the bridge it was put back into — by
     /// either read, since a port is in a bridge when the kernel or the saved
     /// settings say so — and has no service of its own. That is §4.3's
-    /// "Back in the bridge".
+    /// "Returned by RDMALink".
     ///
     /// A return record whose port has since left that bridge, or gained a
     /// service, describes nothing current. The note is kept and nothing is

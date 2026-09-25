@@ -96,7 +96,8 @@ struct PortRow: View {
 }
 
 /// §S1's trailing buttons: `Adopt…` · `Restore…` · `Return to Bridge…` ·
-/// `Stop Managing…` · `Set It Up Again`, borderless so the row stays a row.
+/// `Stop Managing…` · `Set It Up Again`, borderless so the row stays a row,
+/// and in the accent so they read as buttons (§2.3 band 3).
 struct PortRowActions: View {
     let actions: [HubAction]
     let hub: HubActionsModel
@@ -106,8 +107,7 @@ struct PortRowActions: View {
             HStack(spacing: 8) {
                 ForEach(actions) { action in
                     Button(action.title) { hub.perform(action) }
-                        .buttonStyle(.borderless)
-                        .controlSize(.small)
+                        .inlineAction()
                 }
             }
             .transition(.opacity)

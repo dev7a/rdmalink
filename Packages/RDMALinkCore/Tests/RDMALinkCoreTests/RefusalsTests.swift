@@ -291,7 +291,7 @@ struct BaselineWritableTests {
         let refusal = try #require(
             Refusals.baselineWritable(directory.appendingPathComponent("en5.json")))
         #expect(refusal.code == .baselineUnwritable)
-        #expect(refusal.headline == "I can't write down how things are right now")
+        #expect(refusal.headline == "RDMALink can't write down how things are right now")
         #expect(refusal.detail == "The folder isn't writable.")
         #expect(refusal.body.contains("It won't change anything it can't undo."))
     }

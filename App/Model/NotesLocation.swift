@@ -18,7 +18,7 @@ enum NotesLocation {
     static let directory: URL = ProcessInfo.processInfo.environment["RDMALINK_APPLICATION_SUPPORT"]
         .map { URL(fileURLWithPath: $0) } ?? BaselineStore.applicationDirectory
 
-    /// Exactly the folder `Show the Notes in Finder` reveals.
+    /// Exactly the folder `Show Notes in Finder` reveals.
     static var store: BaselineStore {
         BaselineStore(directory: directory.appending(path: BaselineStore.notesFolderName))
     }
