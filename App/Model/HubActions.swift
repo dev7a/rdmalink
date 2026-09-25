@@ -17,8 +17,9 @@ import RDMALinkCore
 
 /// One thing the hub offers. Every title is the spec's own.
 enum HubAction: Sendable, Equatable, Identifiable {
-    /// The footer's default button and the Port menu's ⌘N. The port is the one
-    /// already selected, when there is one.
+    /// The footer's default button and the Port menu's ⌘N, where the port is
+    /// the one already selected, when there is one — and a row's `Set Up…`,
+    /// which names its own (§S1).
     case setUpPort(portID: String?)
     case identifyPort(portID: String?)
     case adopt(portID: String)
@@ -73,6 +74,29 @@ enum HubAction: Sendable, Equatable, Identifiable {
         case .forgetThisNote: "Forget This Note"
         }
     }
+
+    /// The words on a port row's trailing button (§S1 "Copy — buttons"). The
+    /// row already names the port, so `Set Up Port…` is `Set Up…` there; the
+    /// footer and the Port menu keep `title`. Every other action reads the
+    /// same on a row as anywhere else.
+    var rowTitle: LocalizedStringResource {
+        switch self {
+        case .setUpPort: "Set Up…"
+        default: title
+        }
+    }
+
+    /// A way into the set-up assistant (S4–S7): the footer's and the Port
+    /// menu's `Set Up Port…`, a row's `Set Up…`, and `Set It Up Again`.
+    /// §S1 offers every one of them on the footer's terms
+    /// (`HubFooterModel.offers(_:)`), and §S4 gives none of them to a row on
+    /// the picker, where the run is already under way.
+    var opensSetUp: Bool {
+        switch self {
+        case .setUpPort, .setItUpAgain: true
+        default: false
+        }
+    }
 }
 
 /// §2.6's sheets that belong to this slice: Adopt, Restore and Restore All
@@ -119,7 +143,8 @@ enum RestoreSubject: Sendable, Equatable, Identifiable {
 }
 
 /// The hub's hand-off to the set-up flow (S4–S7), which is its own slice. The
-/// footer, the Port menu and `Set It Up Again` set this and nothing else.
+/// footer, the Port menu, a row's `Set Up…` and `Set It Up Again` set this
+/// and nothing else.
 struct SetUpRequest: Sendable, Equatable {
     /// The port the user already had in hand, when there was one.
     var portID: String?

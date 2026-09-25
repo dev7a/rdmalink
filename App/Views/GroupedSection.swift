@@ -50,8 +50,24 @@ extension View {
     /// situation rows, the checks, the change log, Ready and `Show Me` all
     /// take it from here.
     func inlineAction() -> some View {
-        buttonStyle(.borderless)
+        modifier(InlineAction())
+    }
+}
+
+/// The accent is set explicitly, and an explicit foreground style also
+/// overrides the dimming a borderless button gets when it is disabled — so a
+/// row's set-up button with two Macs connected (§S1) drew exactly like one
+/// that works. A disabled inline action is drawn in `.tertiary` instead, the
+/// way a disabled control's title is (§2.3 band 3, §3.1). The environment is
+/// read where the modifier sits, so a `.disabled` applied after
+/// `inlineAction()` reaches it.
+private struct InlineAction: ViewModifier {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func body(content: Content) -> some View {
+        content
+            .buttonStyle(.borderless)
             .controlSize(.small)
-            .foregroundStyle(.tint)
+            .foregroundStyle(isEnabled ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
     }
 }

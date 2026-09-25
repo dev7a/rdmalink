@@ -84,6 +84,27 @@ struct HubFooterModel: Sendable, Equatable {
     var offersRestore: Bool
 }
 
+extension HubFooterModel {
+    /// §S1: a row's set-up button — `Set Up…` or `Set It Up Again`, and the
+    /// drift situation row's `Set It Up Again` — is this footer's `Set Up
+    /// Port…` for one port, on the same terms. Where the primary is absent —
+    /// R23's Thunderbolt 4 Mac and R31's unrecognized one — so is every one of
+    /// them. Every other action is not the footer's to answer, and is offered
+    /// as its row says.
+    func offers(_ action: HubAction) -> Bool {
+        !action.opensSetUp || primary != nil
+    }
+
+    /// And where the primary is disabled — two Macs connected, R1, with the
+    /// reason printed above the footer separator — so is every set-up button.
+    /// `HubActionsModel.perform` does not ask the footer itself, so a button
+    /// that raises a set-up is kept from it here, and `canPerform` gives the
+    /// Port menu and the stage's double-click this same answer.
+    func allows(_ action: HubAction) -> Bool {
+        offers(action) && (!action.opensSetUp || isPrimaryEnabled)
+    }
+}
+
 /// R3 — "A cable is in a USB-only port", as the card §4.5 raises when a
 /// USB-only receptacle is clicked.
 ///

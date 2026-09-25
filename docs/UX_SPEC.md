@@ -76,7 +76,7 @@ A horizontal split: **STAGE** on the left, **ASSISTANT COLUMN** on the right.
 1. **Header row.** Step title leading, `Step 2 of 3` in `.caption` secondary trailing. It is a **label, never a progress bar**, and it is absent on the hub, the change log, and settings. It counts the screens of the current run: a set-up that opens on the picker has three steps (Choose, Review, Ready); one whose port was already chosen on the hub, or picked for the user because exactly one port has a Mac on the end, opens on Review and has two. Setting up (S6) keeps Review's label while it runs.
 2. **Working area.** `.title2` semibold headline, `.body` secondary explanatory text, then the step's controls (grouped inset lists, `Form` rows, value blocks). This is the only band that changes between steps.
 3. **The port list.** A permanent, grouped inset list of **every receptacle on this Mac** — Thunderbolt and USB-only alike — in physical order, grouped by face (`Back`, `Front`, or `Left side`, `Right side`). It is present on every screen of the main window, in every step. **It never reorders and never resizes a row; only badges, subtitles, and trailing controls change**, cross-fading in 180 ms. It has two densities:
-   - **Full** (hub, Choose a port, Identify): symbol, title, `.callout` secondary subtitle carrying state and bridge membership, optional trailing borderless button in the accent color (none on a row the picker lets you choose, §S4). Every small inline action beside a row's words — a port row's, a situation row's, a check row's, the Checked group's `Check Again`, a change-log entry's, Ready's `Turn It On…` and `Copy Address`, `Show Me` — takes the accent the same way, so it reads as something to click and not as one more gray label. So does S4's borderless `Identify Port…` above the list, at its regular size.
+   - **Full** (hub, Choose a port, Identify): symbol, title, `.callout` secondary subtitle carrying state and bridge membership, optional trailing borderless button in the accent color (none on a row the picker lets you choose, §S4). Every small inline action beside a row's words — a port row's, a situation row's, a check row's, the Checked group's `Check Again`, a change-log entry's, Ready's `Turn It On…` and `Copy Address`, `Show Me` — takes the accent the same way, so it reads as something to click and not as one more gray label. So does S4's borderless `Identify Port…` above the list, at its regular size. A disabled one is drawn in `.tertiary` instead of the accent, as a row's set-up button is while two Macs are connected (§S1, §3.1), so it never reads as clickable when it isn't.
    - **Compact** (RDMA, preflight, review, apply, done, other Mac, change log): symbol, title, and a short trailing badge only. Same rows, same order, same place, less ink.
    - It scrolls independently if it cannot fit; it is never truncated away.
 4. **Footer.** A separator, then `Back` leading and the primary button trailing with `.keyboardShortcut(.defaultAction)`. `Back` moves between steps and never dismisses: where going back would leave the assistant — on the picker (S4), which has no step before it — the same button reads `Cancel`. Either way it is `.cancelAction`. A run that opens on S5 keeps `Back` there, because it goes to the picker (§S4). Between them, contextual `.caption` secondary text where a step needs it (`2 ports selected`). Directly **above** the separator, when the primary is disabled, the reason is printed in `.callout` `.primary`, led by the attention symbol — `exclamationmark.circle`, hierarchical, `.orange` — which is hidden from VoiceOver because the words carry the meaning. The text itself is never orange (§3.1).
@@ -133,7 +133,7 @@ No custom brand color. No gradients in chrome. The palette is the system's, expr
 | `surface.grouped` | `.controlBackground` | grouped inset lists, value blocks |
 | `text.primary` | `.primary` | headlines, row titles |
 | `text.secondary` | `.secondary` | body copy, row subtitles |
-| `text.tertiary` | `.tertiary` | technical suffixes, disabled rows |
+| `text.tertiary` | `.tertiary` | technical suffixes, disabled rows, disabled inline actions |
 | `accent` | **the user's system accent color** (blue by default) | selection, the ready ring, the default button, the configured state, inline borderless actions |
 | `attention` | `.orange` | warning **symbols** in the panel only — never text: system orange measures 2.3:1 on the light window background, and text needs 4.5:1. A warning sentence is `.primary` or `.secondary`, led by its orange symbol. |
 | `stop` | `.red` | **used nowhere.** Restore is not styled destructive, because it restores. There is no destructive confirmation in this app. |
@@ -256,9 +256,11 @@ Only three tones are ever used on the model: `.secondary`, `accent`, and the unl
 - `link` · **"In the Thunderbolt Bridge"**
 - `link` · **"In two bridges, including one that isn't in use"**
 
+A port in a bridge that has never been set up, with no service of its own, carries the trailing button `Set Up…` (§S1).
+
 This segmented ring is the same geometry that **closes during apply** and **re-opens during restore**, so the whole lifecycle of a port is one shape.
 
-**Standalone, no service — no outer ring.** Panel detail: **"Not in any bridge"**.
+**Standalone, no service — no outer ring.** Panel detail: **"Not in any bridge"** · trailing buttons `Set Up…` and `Return to Bridge…` (§S1, §7.5).
 
 **Ready for RDMA — a solid, unbroken accent ring** at full opacity with a soft bloom, and no glyph of any kind on the model. Panel: `checkmark.circle.fill` accent · **"Ready for RDMA"** with the `fe80::` address on the detail line.
 
@@ -391,28 +393,30 @@ The rings say what the words say; two small aids make sure nobody has to guess w
 - Ready: **Ready for RDMA · fe80::a2d1:73b4:9e0c:5f16%en6**
 - Ready, adopted: **Ready for RDMA · set up by you, looked after by RDMALink**
 - Ready, nothing attached: **Ready for RDMA · the address appears when a Mac arrives**
+- Never set up (a Thunderbolt port with no setup and no service of its own): the link-state subtitle and the membership phrase *[Set Up…]* — out of every bridge, it carries **Return to Bridge…** after it (§7.5).
 - Set up elsewhere: **Set up outside RDMALink** *[Adopt…]*
 - Drifted: **Not set up any more** *[Set It Up Again]*
 - Returned to the bridge by RDMALink (§7.5), note still there: **Returned by RDMALink** *[Set It Up Again]* — the link-state subtitle and the membership phrase stay (**Returned by RDMALink · Nothing plugged in · In the Thunderbolt Bridge**); this is not drift and adds no situation row.
-- Trailing buttons, by state: *[Adopt…]* · *[Restore…]* · *[Return to Bridge…]* · *[Stop Managing…]* · *[Set It Up Again]*
+- Trailing buttons, by state: *[Set Up…]* · *[Adopt…]* · *[Restore…]* · *[Return to Bridge…]* · *[Stop Managing…]* · *[Set It Up Again]*
+- Every Thunderbolt port that can be set up carries exactly one set-up button on its row — **Set Up…** if it has never been set up, **Set It Up Again** if its setup has gone or RDMALink returned it to the bridge — so every port that can be set up visibly can be; a row with no button reads as a port that can't be. A port that has never been set up but has a service of its own is not one set-up takes, and carries no **Set Up…**: S9's near match is offered **Adopt…**, and R16's port is refused. A row's set-up button, either one, is the footer's **Set Up Port…** for that one port, on the same terms — and so is the drift situation row's **Set It Up Again**: absent in R23's and R31's read-only modes, and disabled while two Macs are connected, with the reason printed above the footer separator. Two set-up buttons side by side are never on different terms.
 - Adopted or set up elsewhere (any port that is out of the bridge and that RDMALink did not set up): the row carries **Return to Bridge…**, so putting a port back never depends on how it was removed. A port RDMALink set up carries **Restore…** instead, which returns it exactly.
 
 **Copy — buttons**
-- **Quit** · **Set Up Port…** · **Set Up Another Port…** · **Restore…** · **Check Again** · **Change Log** · **What This All Means** · **Turn It On…** · **Show Me** · **Forget This Port**
+- **Quit** · **Set Up Port…** · **Set Up Another Port…** · **Set Up…** (on a row, which already names the port; the footer and the Port menu keep **Set Up Port…**) · **Restore…** · **Check Again** · **Change Log** · **What This All Means** · **Turn It On…** · **Show Me** · **Forget This Port**
 
 **Copy — Thunderbolt 4 mode**
 - Headline: **Nothing to configure here**
 - Body: **This Mac has Thunderbolt 4 ports. RDMA over Thunderbolt needs Thunderbolt 5, so there's nothing for RDMALink to set up. You're welcome to look around — everything you see is real.**
-- The footer's primary button is **absent**, not disabled. `Identify Port…` remains available in the Port menu, because it changes nothing and the app is still a useful map.
+- The footer's primary button is **absent**, not disabled, and so is every row's set-up button, `Set Up…` and `Set It Up Again` alike. `Identify Port…` remains available in the Port menu, because it changes nothing and the app is still a useful map.
 
 **Copy — Unrecognized Mac (R31)**
 - Headline: **RDMALink doesn't recognize this Mac**
 - Body: **RDMALink only draws, and only changes, Macs it knows — and this isn't one of them. So there's no picture, and nothing here will be changed. The ports below are listed the way macOS reports them, and everything you see is real.**
 - The footer holds `Quit` and nothing else, and no row has a button: nothing that writes — set-up, Restore, Adopt, Return to Bridge, Stop Managing — is offered in the window. The Port menu keeps its shape, as menus do: every item is present and unavailable, `Identify Port…` included, because there is no model for it to point at. The stage shows R31's block (§6.2) in place of a model.
 
-**States.** First run with RDMA on · First run with RDMA off · Restart pending · One or more ready · An adoptable port present · A drifted port present · A port needing a hand · Cable in a USB-only port · Two Macs connected (the tip row appears and `Set Up Port…` is **disabled** with the reason printed above the footer separator) · Thunderbolt 4 read-only (R23) · Unrecognized Mac read-only (R31) · Live update arrives.
+**States.** First run with RDMA on · First run with RDMA off · Restart pending · One or more ready · An adoptable port present · A drifted port present · A port needing a hand · Cable in a USB-only port · Two Macs connected (the tip row appears, and `Set Up Port…` and every set-up button on a row — `Set Up…` and `Set It Up Again` — are **disabled** with the reason printed above the footer separator) · Thunderbolt 4 read-only (R23) · Unrecognized Mac read-only (R31) · Live update arrives.
 
-**3D behavior.** Fully live. On an unrecognized Mac (R31) there is no model and the rows have nothing to light. Every receptacle carries its tracks. Hovering a row lifts the matching receptacle's glow to 40 %; hovering a receptacle highlights the row; hovering a bridge-membership subtitle draws the ribbon. Clicking a receptacle selects its row; double-clicking a configurable one starts set-up for it.
+**3D behavior.** Fully live. On an unrecognized Mac (R31) there is no model and the rows have nothing to light. Every receptacle carries its tracks. Hovering a row lifts the matching receptacle's glow to 40 %; hovering a receptacle highlights the row; hovering a bridge-membership subtitle draws the ribbon. Clicking a receptacle selects its row; double-clicking a configurable one — a port set-up can take, by the same test as its row's **Set Up…** — starts set-up for it.
 
 The camera **holds** the resting three-quarter pose and never moves on its own here, with exactly one exception: if a port on a face you are not looking at changes state, the other face-selector segment takes a small accent dot and the working area offers a single inline line — **"Something changed on the back."** *[Show Me]* — which is the only camera move the app ever makes unasked, and it is asked.
 
@@ -481,9 +485,9 @@ The camera **holds** the resting three-quarter pose and never moves on its own h
 
 **Purpose.** Turn *"which hole"* into a two-second decision by making the model and the list one selection.
 
-**Layout.** Stage is the subject: full strength, face selector visible, hover states live. Working area: headline, body, the pre-selection rationale line if there is one, then a borderless `Identify Port…` button, left-aligned. The port list is in **full** density and every row is a selection target; non-selectable rows are dimmed with an explanatory subtitle. A row that can be chosen carries **no button** here: choosing it is the action, and a `Set It Up Again` beside it would be a second way into the run already under way — and would make the one row without a history look like the one that can't be set up. A dimmed row keeps only the route this screen names for it (`Restore…`, `Adopt…`). Footer: `Cancel` (Escape; the picker is a run's first step, so its way out leaves the assistant, and `Back` would promise a step that isn't there), `Continue` as the default (disabled until a selectable port is chosen), and `2 ports selected` in `.caption` secondary on the leading side when more than one is chosen.
+**Layout.** Stage is the subject: full strength, face selector visible, hover states live. Working area: headline, body, the pre-selection rationale line if there is one, then a borderless `Identify Port…` button, left-aligned. The port list is in **full** density and every row is a selection target; non-selectable rows are dimmed with an explanatory subtitle. A row that can be chosen carries **no button** here: choosing it is the action, and the hub's `Set Up…` or `Set It Up Again` beside it would be a second way into the run already under way. A dimmed row keeps only the route this screen names for it (`Restore…`, `Adopt…`). Footer: `Cancel` (Escape; the picker is a run's first step, so its way out leaves the assistant, and `Back` would promise a step that isn't there), `Continue` as the default (disabled until a selectable port is chosen), and `2 ports selected` in `.caption` secondary on the leading side when more than one is chosen.
 
-**When this screen appears.** The choice is made at the beginning, and only once. A port clicked on the hub before `Set Up Port…`, a double-clicked receptacle, or a row's own set-up action skips this screen: the run opens on S5 with that port. So does **pre-selection**: if nothing was chosen and exactly one port has a Mac linked, it is picked, the run opens on S5, and the reason is stated there in words rather than assumed — `Back` from S5 is this screen, for anyone who'd rather choose. Otherwise the run opens here.
+**When this screen appears.** The choice is made at the beginning, and only once. A port clicked on the hub before `Set Up Port…`, a double-clicked receptacle, or a row's own set-up action — `Set Up…` on a port that has never been set up, `Set It Up Again` on a drifted or returned one — skips this screen: the run opens on S5 with that port. So does **pre-selection**: if nothing was chosen and exactly one port has a Mac linked, it is picked, the run opens on S5, and the reason is stated there in words rather than assumed — `Back` from S5 is this screen, for anyone who'd rather choose. Otherwise the run opens here.
 
 **After this screen the choice is frozen.** On S5, S6 and S7 no row and no receptacle is a selection target: clicking one does nothing, the chosen port alone carries the accent ring and its badge, and the others are dimmed — the list and the model are status there, not a picker.
 
@@ -1004,7 +1008,7 @@ Documented once so they all read the same.
 **R23 — This Mac's Thunderbolt is version 4.** *Read-only mode, not an error.*
 - Headline: **Nothing to configure here**
 - Body: **This Mac has Thunderbolt 4 ports. RDMA over Thunderbolt needs Thunderbolt 5, so there's nothing for RDMALink to set up. You're welcome to look around — everything you see is real.**
-- Buttons: **Quit** only. The set-up button is **absent**, not disabled.
+- Buttons: **Quit** only. The set-up buttons — the footer's **Set Up Port…** and every row's **Set Up…** and **Set It Up Again** — are **absent**, not disabled.
 - **Recovery:** the model, the port list, Identify and the change log all still work, so the app remains useful as a map.
 
 ---
@@ -1159,7 +1163,7 @@ The port list in the assistant column is **complete, canonical, and present on e
 
 - The `RealityView` is an accessibility **container** with one element per receptacle, in physical order. The container's summary label is read on focus: **"Mac Studio, back face. Four Thunderbolt ports."**
 - Each receptacle element is labelled with its position, kind and state and no more: **"Back, far left. Thunderbolt port. Linked to another Mac. Member of Thunderbolt Bridge."** Its *value* carries the address when configured.
-- Custom actions per element: **Select**, **Identify**, **Adopt**, **Restore**, **Stop Managing** — matching whatever the row offers.
+- Custom actions per element: **Select**, **Identify**, and each of the row's own buttons — **Set Up**, **Adopt**, **Restore**, **Return to Bridge**, **Stop Managing**, **Set It Up Again** — matching whatever the row offers.
 - **Camera moves are announced** with `.announcement` notifications using **the same words the panel shows**: "Turning the Mac around. Now showing the back." A VoiceOver user is told exactly what a sighted user is shown.
 - Live state changes are announced **politely**, so they can never interrupt someone mid-sentence. Refusals are announced **assertively**, once, because they stop the flow.
 - During Identify every detected change posts an announcement — **"Cable removed from Back, far right"**, **"Found Back, far right"** — which makes Identify arguably better with VoiceOver than without.
@@ -1255,3 +1259,5 @@ All copy is localizable with no concatenated sentences. Position names and locat
 4. **How many ports in one password burst.** The credential lasts about 30 s. One port takes roughly 1.8 s; multi-select currently allows any number. **Should there be a cap (say three) after which the app splits into a second password prompt with its own review, or should it try them all and rely on R8's rollback if the window closes?** Related: if port 1 succeeds and port 2 fails, should port 1's changes stand (currently yes, with a per-port result summary) or roll back too?
 
 5. **Terminology and one default.** Three words are load-bearing and worth your ear: **"Restore"** vs **"Put It Back"** (warmer, longer, harder to localize); **"Identify Port…"** vs **"Find It for Me"** (friendlier, less standard); **"Adopt"** vs **"Look After This Port"**. And one behavioral default: **should `Set Up Port…` be offered at all when nothing is plugged into any Thunderbolt port?** The spec currently offers it, on the grounds that preparing a port before the cable arrives is legitimate — but it does mean a brand-new user can complete the whole flow and see no address.
+
+6. **`Set It Up Again`, with or without an ellipsis.** A row's two set-up buttons do the same thing: each opens the assistant on S5, which asks for more before anything changes. `Set Up…` carries the ellipsis the HIG asks for in that case and `Set It Up Again` does not, so one kind of action reads as two in the same list. **Should it read `Set It Up Again…`?** If so, §S1, §S10, §S11 and §7.4 change together, and the code quotes them.

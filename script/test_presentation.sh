@@ -155,8 +155,9 @@ check(text(ThisMacPresentation.readyRow([staleMatch, outside]).text)
 let staleBare = snapshot(port("en5", "Back, far left"), configuration: .unconfigured(bridges: []),
                          baseline: returnRecord)
 check(staleBare.readiness == .plain, "stale return record over a bare port reads plain")
-check(PortRowPresentation(snapshot: staleBare).actions == [.returnToBridge(portID: "en5")],
-      "a bare port out of every bridge carries Return to Bridge…")
+check(PortRowPresentation(snapshot: staleBare).actions
+      == [.setUpPort(portID: "en5"), .returnToBridge(portID: "en5")],
+      "a bare port out of every bridge carries Set Up…, then Return to Bridge…")
 check(text(PortRowPresentation(snapshot: staleBare).detail.state) == "Nothing plugged in"
       && PortRowPresentation(snapshot: staleBare).detail.membership.map(text) == "Not in any bridge",
       "and reads the plain subtitle")
@@ -166,7 +167,8 @@ let staleNear = snapshot(
     configuration: .nearMatch(serviceID: "HAND", differences: [.ipv4NotOff(method: "DHCP")]), baseline: returnRecord)
 check(staleNear.readiness == .plain, "a return record is never drift")
 check(PortRowPresentation(snapshot: staleNear).actions
-      == [.adopt(portID: "en5"), .returnToBridge(portID: "en5")], "a near match offers Adopt… and the return")
+      == [.adopt(portID: "en5"), .returnToBridge(portID: "en5")],
+      "a near match offers Adopt… and the return, and no Set Up…: Core routes it to Adopt")
 
 // MARK: §7.5: any port out of every bridge can be put back, bare or not.
 
@@ -174,14 +176,28 @@ check(snapshot(port("en2", "Back, far right"), configuration: .unconfigured(brid
       "a bare port out of every bridge")
 check(PortRowPresentation(snapshot: snapshot(port("en2", "Back, far right"),
                                              configuration: .unconfigured(bridges: []))).actions
-      == [.returnToBridge(portID: "en2")], "carries Return to Bridge…")
-check(!plain.isOutOfEveryBridge && PortRowPresentation(snapshot: plain).actions.isEmpty,
-      "a bridge member carries nothing")
+      == [.setUpPort(portID: "en2"), .returnToBridge(portID: "en2")], "carries Set Up… and Return to Bridge…")
+check(!plain.isOutOfEveryBridge && PortRowPresentation(snapshot: plain).actions == [.setUpPort(portID: "en3")],
+      "§S1: a bridge member that has never been set up carries Set Up… alone")
+check(PortRowPresentation(snapshot: snapshot(port("en2", "Back, far right", bridges: [bridge0]),
+                                             configuration: nil)).actions
+      == [.setUpPort(portID: "en2")],
+      "a port whose configuration could not be read is still one the picker takes: Core's review decides")
 check(!snapshot(port("en2", "Back, far right"), configuration: nil).isOutOfEveryBridge,
       "a configuration that could not be read is not out of every bridge")
 check(PortRowPresentation(snapshot: snapshot(port("", "Front, right", isThunderbolt: false),
                                              configuration: nil)).actions.isEmpty,
-      "a USB-only receptacle carries nothing")
+      "a USB-only receptacle carries nothing, Set Up… included")
+// §S1 "Copy — buttons": the row already names the port, so it reads Set Up…;
+// the footer and the Port menu keep Set Up Port….
+check(text(HubAction.setUpPort(portID: "en3").rowTitle) == "Set Up…"
+      && text(HubAction.setUpPort(portID: "en3").title) == "Set Up Port…"
+      && text(HubAction.setUpPort(portID: nil).title) == "Set Up Port…",
+      "a row's set-up button reads Set Up…; everywhere else it is Set Up Port…")
+for action in [HubAction.adopt(portID: "en2"), .restore(portID: "en6"), .returnToBridge(portID: "en2"),
+               .stopManaging(portID: "en7"), .setItUpAgain(portID: "en5")] {
+    check(text(action.rowTitle) == text(action.title), "every other row button reads as it does anywhere: \(action.id)")
+}
 check(outside.isOutOfEveryBridge
       && PortRowPresentation(snapshot: outside).actions == [.adopt(portID: "en2"), .returnToBridge(portID: "en2")],
       "set up elsewhere offers Adopt… and Return to Bridge…")
@@ -195,7 +211,8 @@ let drifted = snapshot(port("en6", "Back, left middle", bridges: [bridge0]),
                        configuration: .unconfigured(bridges: ["bridge0"]), baseline: ownNote)
 check(drifted.readiness == .drifted, "own note and no service is drift")
 check(text(PortRowPresentation(snapshot: drifted).detail.state) == "Not set up any more", "drift row state")
-check(PortRowPresentation(snapshot: drifted).actions == [.setItUpAgain(portID: "en6")], "drift row action")
+check(PortRowPresentation(snapshot: drifted).actions == [.setItUpAgain(portID: "en6")],
+      "drift row action: Set It Up Again, and no Set Up… beside it")
 check(snapshot(port("en5", "Back, far left"), configuration: .unconfigured(bridges: []), baseline: returnRecord)
       .readiness != .drifted, "a return record never drifts")
 
@@ -414,6 +431,35 @@ check(tb4Footer.primary == nil && tb4Footer.offersRestore, "R23: no primary, and
 let hubFooter = HubPresentation.footer(hardware: studio, ports: [managed])
 check(hubFooter.primary == .setUpPort(portID: nil) && hubFooter.offersRestore
       && text(hubFooter.primaryTitle) == "Set Up Another Port…", "S1's footer on a recognized Mac")
+
+// §S1: a row's set-up button — Set Up… or Set It Up Again, and the drift
+// situation row's Set It Up Again — is the footer's Set Up Port… for one port,
+// on the same terms. Every other button is not the footer's to answer.
+let setUpActions: [HubAction] = [.setUpPort(portID: nil), .setUpPort(portID: "en3"), .setItUpAgain(portID: "en5")]
+let otherActions: [HubAction] = [.adopt(portID: "en2"), .restore(portID: "en6"), .returnToBridge(portID: "en2"),
+                                 .stopManaging(portID: "en7"), .forgetThisPort(portID: "en6"), .showMe(portID: "en6")]
+check(setUpActions.allSatisfy(\.opensSetUp) && !otherActions.contains(where: \.opensSetUp),
+      "Set Up Port…, Set Up… and Set It Up Again are the ways into set-up, and nothing else is")
+check(setUpActions.allSatisfy { hubFooter.offers($0) && hubFooter.allows($0) },
+      "S1: on an ordinary hub every set-up button is there and live")
+let twoMacsFooter = HubPresentation.footer(hardware: studio, ports: [
+    snapshot(port("en5", "Back, far left", link: .macLinked, bridges: [bridge0]),
+             configuration: .unconfigured(bridges: ["bridge0"])),
+    snapshot(port("en6", "Back, left middle", link: .macLinked, bridges: [bridge0]),
+             configuration: .unconfigured(bridges: ["bridge0"])),
+])
+check(twoMacsFooter.primary != nil && !twoMacsFooter.isPrimaryEnabled && twoMacsFooter.disabledReason != nil,
+      "the two-Macs fixture is R1's footer")
+check(setUpActions.allSatisfy { twoMacsFooter.offers($0) && !twoMacsFooter.allows($0) },
+      "R1: Set Up… and Set It Up Again are disabled with the footer's primary, never one without the other")
+for footer in [tb4Footer, r31Footer] {
+    check(setUpActions.allSatisfy { !footer.offers($0) && !footer.allows($0) },
+          "R23 and R31: every set-up button is absent with the footer's primary")
+}
+for footer in [hubFooter, twoMacsFooter, tb4Footer, r31Footer] {
+    check(otherActions.allSatisfy { footer.offers($0) && footer.allows($0) },
+          "every other row button is its row's answer alone, whatever the footer says")
+}
 
 // The stage: no chassis, so nothing to turn, select or light.
 let stage = StageModel()
@@ -666,6 +712,17 @@ func picker(_ snapshot: PortSnapshot) -> PortRowPresentation {
 }
 let foreign = snapshot(port("en8", "Front, right"),
                        configuration: .foreign(serviceID: "THEIRS", reason: .staticIPv4Address))
+// R16 over a note: the service RDMALink made, since given a manual address.
+let driftedForeign = snapshot(port("en6", "Back, left middle"),
+                              configuration: .foreign(serviceID: "MINE", reason: .staticIPv4Address),
+                              baseline: ownNote)
+// And the same service switched to DHCP: a near match, and still drift.
+let driftedNear = snapshot(port("en6", "Back, left middle"),
+                           configuration: .nearMatch(serviceID: "MINE", differences: [.ipv4NotOff(method: "DHCP")]),
+                           baseline: ownNote)
+check(driftedForeign.readiness == .drifted && ChoosePortReport.route(for: driftedForeign) == .foreignService
+      && driftedNear.readiness == .drifted && ChoosePortReport.route(for: driftedNear) == nil,
+      "a drifted note over a service of the port's own: R16 dims it, a near match does not")
 check(ChoosePortReport.route(for: managed) == .alreadyReady
       && ChoosePortReport.route(for: adopted) == .alreadyReady
       && ChoosePortReport.route(for: outside) == .adopt
@@ -697,6 +754,42 @@ check(picker(usbOnly).isDimmed
 check(picker(foreign).isDimmed
       && text(picker(foreign).detail.state) == text(PortRowPresentation(snapshot: foreign).detail.state),
       "R16's row is dimmed but keeps the hub's subtitle: §S4 has no sentence for it")
+check(PortRowPresentation(snapshot: foreign).actions == [.returnToBridge(portID: "en8")]
+      && picker(foreign).actions == [.returnToBridge(portID: "en8")],
+      "R16's row carries no Set Up… on the hub or the picker — the port is refused, not set up")
+
+// §S1: every Thunderbolt port that can be set up carries exactly one set-up
+// button on its hub row — Set Up… if it has never been set up, Set It Up
+// Again if its setup has gone or was returned. A ready port, and a port that
+// has never been set up but has a service of its own, carries neither.
+func setUpButtons(_ row: PortRowPresentation) -> [HubAction] {
+    row.actions.filter(\.opensSetUp)
+}
+for settable in [plain, staleBare, returned, drifted] {
+    check(setUpButtons(PortRowPresentation(snapshot: settable)).count == 1,
+          "a port set-up can take has exactly one set-up button: \(settable.port.positionName)")
+}
+for unsettable in [managed, adopted, outside, staleMatch, staleNear, usbOnly, foreign] {
+    check(setUpButtons(PortRowPresentation(snapshot: unsettable)).isEmpty,
+          "a port set-up can't take has none: \(unsettable.port.positionName) (\(unsettable.readiness))")
+}
+// A drifted row keeps its one Set It Up Again whatever its service has become:
+// §S1 gives drift that button, and Core's review answers for the port.
+check(PortRowPresentation(snapshot: driftedForeign).actions == [.setItUpAgain(portID: "en6")]
+      && PortRowPresentation(snapshot: driftedNear).actions == [.setItUpAgain(portID: "en6")],
+      "a drifted row over a service of its own still carries Set It Up Again alone")
+
+// §S1's "configurable" receptacle: the stage's double-click asks the row's own
+// question, so a receptacle never starts a set-up its row would not offer.
+for takes in [plain, staleBare, returned, drifted,
+              snapshot(port("en2", "Back, far right", bridges: [bridge0]), configuration: nil)] {
+    check(PortRowPresentation.offersSetUp(takes),
+          "set-up takes \(takes.port.positionName) (\(takes.readiness))")
+}
+for refuses in [managed, adopted, outside, staleMatch, staleNear, usbOnly, foreign, driftedForeign, driftedNear] {
+    check(!PortRowPresentation.offersSetUp(refuses),
+          "set-up never takes \(refuses.port.positionName) (\(refuses.readiness)), so neither does a double-click")
+}
 
 // §6.2 R16 on the picker: `Choose Another Port` puts the card away and leaves
 // the user choosing. Only `Cancel` leaves the assistant (§2.3 band 4).
@@ -723,9 +816,20 @@ for selectable in [plain, returned, drifted] {
     check(!row.isDimmed && row.detail == hub.detail && row.actions.isEmpty,
           "a selectable row on the picker has the hub's words and no button: \(selectable.port.positionName)")
 }
+check(picker(staleBare).actions.isEmpty && picker(staleNear).actions.isEmpty,
+      "…a bare or near-match port out of every bridge included: no Set Up…, no Return to Bridge…")
 check(PortRowPresentation(snapshot: returned).actions == [.setItUpAgain(portID: returned.id)]
-      && PortRowPresentation(snapshot: drifted).actions == [.setItUpAgain(portID: drifted.id)],
-      "…while the hub still offers Set It Up Again on those rows")
+      && PortRowPresentation(snapshot: drifted).actions == [.setItUpAgain(portID: drifted.id)]
+      && PortRowPresentation(snapshot: plain).actions == [.setUpPort(portID: plain.id)],
+      "…while the hub offers Set It Up Again on those rows, and Set Up… on the one never set up")
+for dimmed in [managed, adopted, outside, usbOnly, foreign, driftedForeign] {
+    check(picker(dimmed).isDimmed && !picker(dimmed).actions.contains(where: \.opensSetUp),
+          "a dimmed row on the picker never carries Set Up… or Set It Up Again: \(dimmed.port.positionName) (\(dimmed.readiness))")
+}
+check(picker(driftedForeign).actions.isEmpty,
+      "§S4: R16 over a drifted note keeps none of the hub's buttons — its one was a second way into the run")
+check(picker(driftedNear).actions.isEmpty && !picker(driftedNear).isDimmed,
+      "a drifted near match is selectable on the picker, and carries no button there")
 // And every row off the picker is the hub's, dimmed rows included.
 check(PortRowPresentation(snapshot: managed).isDimmed == false
       && text(PortRowPresentation(snapshot: managed).detail.state)

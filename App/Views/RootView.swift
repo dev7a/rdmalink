@@ -120,8 +120,9 @@ struct RootView: View {
                 hardware: input.hardware, ports: input.ports)
             updateUSBTip(previous: previous.ports, current: input.ports)
         }
-        // §S1's footer, the Port menu's ⌘N and `Set It Up Again` all write
-        // the same request; this is where it becomes the assistant.
+        // §S1's footer, the Port menu's ⌘N, a row's `Set Up…` and `Set It Up
+        // Again` all write the same request; this is where it becomes the
+        // assistant.
         .onChange(of: actions.pendingSetUp) { _, request in
             guard let request else { return }
             actions.pendingSetUp = nil
@@ -207,16 +208,18 @@ struct RootView: View {
 
     /// §S1: "double-clicking a configurable one starts set-up for it". Only
     /// on the hub — inside a run the choice is the picker's — and only for a
-    /// port the picker would accept, so a ready or hand-configured port is
-    /// not sent to a set-up that would refuse it. The run then opens on
-    /// Review, the port already chosen (§S4).
+    /// port set-up can take, the same question the row's `Set Up…` asks
+    /// (`PortRowPresentation.offersSetUp`), so a ready, hand-configured or
+    /// near-match port is not sent to a review that would refuse it or have
+    /// nothing to press. The run then opens on Review, the port already
+    /// chosen (§S4).
     private var doubleClickSetUp: ((StagePort) -> Void)? {
         guard flow == nil else { return nil }
         return { port in
             guard port.isThunderbolt,
                   actions.canPerform(.setUpPort(portID: port.id)),
                   let snapshot = actions.snapshot(id: port.id),
-                  ChoosePortReport.route(for: snapshot) == nil
+                  PortRowPresentation.offersSetUp(snapshot)
             else { return }
             actions.perform(.setUpPort(portID: port.id))
         }

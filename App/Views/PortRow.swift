@@ -95,19 +95,27 @@ struct PortRow: View {
     }
 }
 
-/// §S1's trailing buttons: `Adopt…` · `Restore…` · `Return to Bridge…` ·
-/// `Stop Managing…` · `Set It Up Again`, borderless so the row stays a row,
-/// and in the accent so they read as buttons (§2.3 band 3).
+/// §S1's trailing buttons: `Set Up…` · `Adopt…` · `Restore…` · `Return to
+/// Bridge…` · `Stop Managing…` · `Set It Up Again`, borderless so the row
+/// stays a row, and in the accent so they read as buttons (§2.3 band 3).
 struct PortRowActions: View {
     let actions: [HubAction]
     let hub: HubActionsModel
 
+    /// §S1: the row's set-up button — `Set Up…` or `Set It Up Again` — is the
+    /// footer's `Set Up Port…` for that one port, on the same terms: absent
+    /// where the footer's primary is absent (R23; R31 has no row buttons at
+    /// all), disabled where it is disabled (R1, the reason printed above the
+    /// footer separator). Every other row button is the presentation's
+    /// answer alone (`HubFooterModel.offers(_:)`).
     var body: some View {
-        if !actions.isEmpty {
+        let offered = actions.filter(hub.footer.offers)
+        if !offered.isEmpty {
             HStack(spacing: 8) {
-                ForEach(actions) { action in
-                    Button(action.title) { hub.perform(action) }
+                ForEach(offered) { action in
+                    Button(action.rowTitle) { hub.perform(action) }
                         .inlineAction()
+                        .disabled(!hub.footer.allows(action))
                 }
             }
             .transition(.opacity)

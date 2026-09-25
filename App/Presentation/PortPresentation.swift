@@ -155,8 +155,8 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
         self.accessibilityLabel = Self.accessibilityLabel(for: snapshot, detail: detail)
         self.accessibilityValue = detail.address
         // §S4: a row the picker lets you choose carries no button — choosing
-        // it is the action, and the hub's `Set It Up Again` would be a second
-        // way into the run already under way.
+        // it is the action, and the hub's `Set Up…` or `Set It Up Again`
+        // would be a second way into the run already under way.
         self.actions = mode == .picker && route == nil
             ? [] : Self.actions(for: snapshot, dimmedBy: route)
         self.compactBadge = snapshot.readiness.isReady ? "Ready" : nil
@@ -195,11 +195,16 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
     /// how it's doing?", which has to have somewhere to answer. R16's row is
     /// the other one, and §S4 gives it no subtitle either. **Owed from the
     /// spec owner:** what a dimmed adopted row offers.
+    ///
+    /// Never a set-up button, though: R16's row can be a drifted one — a
+    /// service RDMALink made, since switched to a manual address — whose hub
+    /// row carries `Set It Up Again`, and on the picker that would be a second
+    /// way into the run already under way (§S4 "Layout").
     private static func actions(
         for snapshot: PortSnapshot, dimmedBy route: ChooseRefusalRoute?
     ) -> [HubAction] {
         guard route == nil else {
-            let hub = actions(for: snapshot, dimmedBy: nil)
+            let hub = actions(for: snapshot, dimmedBy: nil).filter { !$0.opensSetUp }
             let named = hub.filter {
                 switch $0 {
                 case .restore, .adopt: true
@@ -219,16 +224,41 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
         // Managing…`, which the model offers for this state too.
         case .returned: return [.setItUpAgain(portID: id)]
         case .plain:
-            // §S9's near match is reached from the row's `Adopt…` — the sheet
-            // is where it says it cannot adopt this one *yet*, and what to
-            // change so it can. A port that is out of every bridge can always
-            // be put back (§7.5), whoever took it out and whether it was given
-            // a service or left bare — §S10 has a form for each.
+            // §S1: a port that has never been set up carries `Set Up…`, first,
+            // so every port that can be set up visibly can be. §S9's near
+            // match is reached from the row's `Adopt…` — the sheet is where it
+            // says it cannot adopt this one *yet*, and what to change so it
+            // can. A port that is out of every bridge can always be put back
+            // (§7.5), whoever took it out and whether it was given a service
+            // or left bare — §S10 has a form for each.
             var actions: [HubAction] = []
+            if offersSetUp(snapshot) { actions.append(.setUpPort(portID: id)) }
             if case .nearMatch? = snapshot.configuration { actions.append(.adopt(portID: id)) }
             if snapshot.isOutOfEveryBridge { actions.append(.returnToBridge(portID: id)) }
             return actions
         }
+    }
+
+    /// Whether set-up can take this port — for a port with nothing to say
+    /// about it (`.plain`), §S1's "a Thunderbolt port with no setup and no
+    /// service of its own", which the row offers `Set Up…`. The stage's
+    /// double-click asks the same question (`RootView.doubleClickSetUp`), so
+    /// the row and the receptacle agree on which port is "configurable" (§S1).
+    ///
+    /// The first half is the picker's own test: a USB-only receptacle, a
+    /// ready port and R16's static address are routes, never set-ups. The
+    /// second is Core's: `SetUpPorts.preview` routes a port that already has
+    /// a service to Adopt and never plans a set-up for it (`routesToAdopt`),
+    /// so a near match offered `Set Up…` would open a review with nothing to
+    /// press. Its row keeps `Adopt…`, where §S9 says what to change.
+    ///
+    /// Whether the hub is taking set-ups at all right now — R1, R23, R31 — is
+    /// the footer's answer, and the row asks it where it draws the button
+    /// (`HubFooterModel.offers(_:)`).
+    static func offersSetUp(_ snapshot: PortSnapshot) -> Bool {
+        guard ChoosePortReport.route(for: snapshot) == nil else { return false }
+        if case .nearMatch? = snapshot.configuration { return false }
+        return true
     }
 
     private static func symbol(for snapshot: PortSnapshot) -> String {

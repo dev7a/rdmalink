@@ -45,10 +45,14 @@ struct SituationRow: View {
                 // RDMALink does not recognize, but its way out — `Show Me`,
                 // `Set It Up Again`, `Forget This Port` — is absent, because
                 // there is no model to show and nothing is written.
+                // §S1: the drift row's `Set It Up Again` is the port row's
+                // beside it, on the footer's terms — absent in R23's
+                // read-only mode, disabled while two Macs are connected.
                 if let hub, !hub.isUnrecognized {
-                    ForEach(situation.actions) { action in
+                    ForEach(situation.actions.filter(hub.footer.offers)) { action in
                         Button(action.title) { hub.perform(action) }
                             .inlineAction()
+                            .disabled(!hub.footer.allows(action))
                     }
                 }
             }

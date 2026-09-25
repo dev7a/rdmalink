@@ -163,7 +163,7 @@ final class HubActionsModel {
         if isUnrecognized { return action == .changeLog }
         switch action {
         case .setUpPort, .setItUpAgain:
-            return footer.primary != nil && footer.isPrimaryEnabled
+            return footer.allows(action)
         case .identifyPort(let portID):
             let port = portID.flatMap(snapshot(id:)) ?? selectedPort
             return port?.port.isThunderbolt == true
