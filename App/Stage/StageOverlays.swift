@@ -208,8 +208,10 @@ struct StageLegendView: View {
 /// same spans `StageMath.spans(for:)` gives the model, walked round a
 /// rounded rectangle, so the legend's segmented ring has the model's four
 /// gaps and its dashed ring the model's dashes. §S8's ghost is the one glyph
-/// that is not a ring: a small faint box with no slot, because the ghost has
-/// no receptacle to show and "never gains detail, ever".
+/// that is not a ring: a small faint box with no slot, whatever the
+/// `Other Mac:` pop-up draws the ghost as — §4.8 keeps "that box and those
+/// words" because "the pop-up already names the model, and the legend names
+/// the part it plays".
 struct StageLegendGlyphView: View {
     let glyph: StageLegendGlyph
 

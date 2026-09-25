@@ -64,8 +64,8 @@ enum StageLegendGlyph: Hashable, Sendable {
     case solidAccent
     /// The drift ring.
     case dashed
-    /// §S8's ghost second Mac: a small faint box, as featureless as the
-    /// ghost itself.
+    /// §S8's ghost second Mac: a small faint box, whatever the `Other Mac:`
+    /// pop-up draws the ghost as (§4.8).
     case ghost
 }
 

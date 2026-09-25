@@ -142,15 +142,43 @@ enum StageMath {
         SIMD3(sin(yaw), 0, cos(yaw))
     }
 
+    /// `point` turned `yaw` about the vertical, the way an entity oriented by
+    /// that yaw turns its children: `+z` becomes ``outwardNormal(yaw:)``. How
+    /// a place on §S8's ghost, in its own chassis's frame, lands in the world.
+    static func turn(_ point: SIMD3<Double>, yaw: Double) -> SIMD3<Double> {
+        SIMD3(
+            point.x * cos(yaw) + point.z * sin(yaw),
+            point.y,
+            -point.x * sin(yaw) + point.z * cos(yaw)
+        )
+    }
+
     /// Daylight between this Mac and the ghost, in centimetres: enough that
     /// the two read as two, not so much that the pair leaves the frame.
     static let handoffClearance = 6.0
 
-    /// Centre-to-centre distance to the ghost. `extentAlongRight` is the ghost
-    /// box's width along ``screenRight(yaw:)``; `across` is this Mac's
-    /// footprint circumcircle, which is its silhouette at any pose.
-    static func handoffGap(extentAlongRight: Double, across: Double) -> Double {
-        extentAlongRight / 2 + across / 2 + handoffClearance
+    /// Centre-to-centre distance to the ghost. `extentAlongRight` is the ghost's
+    /// width along ``screenRight(yaw:)``; `across` is this Mac's footprint
+    /// circumcircle, which is its silhouette at any pose; `overhang` is how far
+    /// the ghost reaches past its footprint towards this Mac — a MacBook Pro's
+    /// open lid, leaning back over its hinge.
+    static func handoffGap(
+        extentAlongRight: Double, across: Double, overhang: Double = 0
+    ) -> Double {
+        extentAlongRight / 2 + overhang + across / 2 + handoffClearance
+    }
+
+    /// How far along screen-right §S8's framing reaches from this Mac's
+    /// centre: to the far side of the ghost's silhouette, `gap` out with
+    /// `ghostAcross` its footprint circumcircle, but never short of where the
+    /// box's far side would be, `boxGap` out with this Mac's own `across`. A
+    /// ghost that fits where the box stood is given the box's room, so this
+    /// Mac keeps its place and size on the stage beside a Mac mini as beside
+    /// the box; only a larger ghost pulls the camera back.
+    static func handoffFarEdge(
+        gap: Double, ghostAcross: Double, boxGap: Double, across: Double
+    ) -> Double {
+        max(gap + ghostAcross / 2, boxGap + across / 2)
     }
 
     /// How far the ghost starts beyond its resting place before it slides in.
@@ -163,15 +191,25 @@ enum StageMath {
 
     /// §S8's "single thin connecting line": out of the near port, across, and
     /// into the far one. Four points in the chassis's own centimetres, near
-    /// end first. A straight line between two ports on the same face would
-    /// lie *on* that face, over every other receptacle on it.
+    /// end first. Both ports face the same way, `normal` (a unit vector), but
+    /// not always from the same depth along it: the box stands where this Mac
+    /// does, while a chosen model's face can stand further out or further in
+    /// — a MacBook Pro's left side is 15.6 cm out of its centre, a Mac mini's
+    /// back 6.4 cm. So each end leaves its own face straight out, and the run
+    /// between them is level, `handoffReach` beyond whichever face stands
+    /// further out. A straight line from port to port would lie on a face,
+    /// over every other receptacle on it; a run kept at a fixed reach from
+    /// each face would slant back through the corner of the Mac whose face
+    /// stands further out, and read as a second point of contact.
     static func handoffCable(
         from near: SIMD3<Double>, to far: SIMD3<Double>, normal: SIMD3<Double>
     ) -> [SIMD3<Double>] {
-        [
+        let nearDepth = simd_dot(near, normal), farDepth = simd_dot(far, normal)
+        let level = max(nearDepth, farDepth) + handoffReach
+        return [
             near + normal * handoffStandoff,
-            near + normal * handoffReach,
-            far + normal * handoffReach,
+            near + normal * (level - nearDepth),
+            far + normal * (level - farDepth),
             far + normal * handoffStandoff,
         ]
     }

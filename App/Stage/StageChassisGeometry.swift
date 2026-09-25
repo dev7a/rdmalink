@@ -38,6 +38,39 @@ extension Chassis {
     var focus: Double {
         isNotebook ? visibleHeight * 0.40 : height * 0.48
     }
+
+    /// The footprint's circumcircle: the machine's silhouette from any yaw.
+    var footprintAcross: Double { (width * width + depth * depth).squareRoot() }
+
+    /// How far an open lid leans back past the hinge, in centimetres; 0 on a
+    /// chassis with no lid, or a lid that does not open past upright.
+    var lidLean: Double {
+        guard let lid else { return 0 }
+        return max(0, -cos(lid.openAngle * .pi / 180)) * lid.depth
+    }
+
+    // MARK: §S8's ghost drawn as a chosen model
+
+    /// UX_SPEC §S8: "the face a cable usually goes into — the back of a Mac
+    /// Studio or a Mac mini, the left side of a MacBook Pro". Read off the
+    /// catalogue rather than listed per archetype: it is the first face in
+    /// §4.7's order that carries a Thunderbolt receptacle, which is exactly
+    /// those three.
+    var usualCableFace: PortFace? {
+        faces.first { face in features(on: face).contains { $0.kind == .thunderbolt } }
+    }
+
+    /// §S8: the far port on a ghost drawn as this chassis — "that model's
+    /// Thunderbolt port nearest this Mac on the face a cable usually goes
+    /// into". The ghost settles on the trailing side with that face turned the
+    /// way this Mac's port faces, so the side nearest this Mac is the viewer's
+    /// left as they look at the face: the Thunderbolt receptacle with the
+    /// smallest `u` there. `Back, far left` on a Mac Studio, `Back, left` on a
+    /// Mac mini, `Left side, rear` on a MacBook Pro.
+    var ghostPort: ChassisFeature? {
+        guard let face = usualCableFace else { return nil }
+        return features(on: face).filter { $0.kind == .thunderbolt }.min { $0.u < $1.u }
+    }
 }
 
 extension ChassisFeature {

@@ -5,10 +5,58 @@
 //  step 4 names, and whether the far end has answered. Pure over the hub's
 //  snapshots and the way the screen was reached, so the screen, its footer's
 //  copy and the stage's handoff agree about the port and the script can check
-//  the rule.
+//  the rule. And which Mac the user says the other one is, for the stage's
+//  picture of it (`OtherMacChoice`, §S8 "The other Mac's picture").
 //
 
 import Foundation
+import RDMALinkCore
+
+/// §S8's `Other Mac:` pop-up: which Mac the stage draws the ghost second Mac
+/// as. "It changes the stage's picture of the other Mac and nothing else",
+/// and "the choice is remembered across launches" (`AppSettings.otherMac`).
+/// The raw values are what is remembered, so they never change.
+enum OtherMacChoice: String, CaseIterable, Identifiable, Sendable {
+    case anyMac
+    case macBookPro
+    case macStudio
+    case macMini
+
+    /// "**Any Mac**, the default".
+    static let standard = OtherMacChoice.anyMac
+
+    var id: Self { self }
+
+    /// The item, verbatim: Title Case, and no ellipsis, because choosing one
+    /// finishes the command (§1.3 rule 11).
+    var title: LocalizedStringResource {
+        switch self {
+        case .anyMac: "Any Mac"
+        case .macBookPro: "MacBook Pro"
+        case .macStudio: "Mac Studio"
+        case .macMini: "Mac mini"
+        }
+    }
+
+    /// The model a family is drawn as — "a current Thunderbolt 5 model of it:
+    /// the Mac Studio (M5 Max), the Mac mini (M5 Pro) and the 14-inch MacBook
+    /// Pro (M5 Pro or M5 Max)" — by the identifier Core's catalogue lists it
+    /// under, so the chassis is the catalogue's and never a second table's.
+    /// `nil` for **Any Mac**, which "draws the featureless box".
+    var representative: String? {
+        switch self {
+        case .anyMac: nil
+        case .macBookPro: "Mac17,7"
+        case .macStudio: "Mac17,14"
+        case .macMini: "Mac17,16"
+        }
+    }
+
+    /// The chassis family the ghost is drawn as, or `nil` for the box.
+    var archetype: Archetype? {
+        representative.flatMap(HardwareModel.archetype(forIdentifier:))
+    }
+}
 
 /// How §S8 was reached, which decides whose link it is about (UX_SPEC §S8
 /// "Whose link").

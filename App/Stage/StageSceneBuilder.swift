@@ -190,6 +190,29 @@ enum StageSceneBuilder {
         )
     }
 
+    /// UX_SPEC §S8's ghost drawn as the model the user picked: "its shell and
+    /// the holes in it", by the same code as this Mac's — the shell, the
+    /// grille, every hole on it, and on a MacBook Pro the base and open lid
+    /// "with no screen or keyboard laid on them" — and nothing that belongs
+    /// to a port or to a Mac that is running: no ring, no plug, no collider,
+    /// no identity, and a status light drawn as an unlit hole ("no lit status
+    /// light"). No shadow either, as the featureless box casts none: a chosen
+    /// model is "ghosted exactly as the box is". Its 40 % is the ghost's, set
+    /// on an ancestor.
+    static func ghostBody(_ chassis: Chassis, palette: StagePalette) -> Entity {
+        let body = Entity()
+        body.name = "ghost.chassis"
+        if chassis.isNotebook {
+            buildNotebook(chassis, into: body, palette: palette, asGhost: true)
+        } else {
+            buildBox(chassis, into: body, palette: palette, asGhost: true)
+        }
+        for feature in chassis.features {
+            body.addChild(makeFeature(feature, chassis: chassis, palette: palette, lit: false))
+        }
+        return body
+    }
+
     // MARK: - Binding ports to holes
 
     /// Ports are matched to catalogue receptacles by face and by their order
@@ -214,8 +237,9 @@ enum StageSceneBuilder {
 
     // MARK: - Chassis
 
+    /// - Parameter asGhost: §S8's ghost, which casts no shadow.
     private static func buildBox(
-        _ chassis: Chassis, into body: Entity, palette: StagePalette
+        _ chassis: Chassis, into body: Entity, palette: StagePalette, asGhost: Bool = false
     ) {
         let band = chassis.baseBand
         // The shell is extruded, not boxed. `Chassis.cornerRadius` is a *plan*
@@ -232,7 +256,7 @@ enum StageSceneBuilder {
             let shell = ModelEntity(mesh: mesh, materials: [palette.chassisMaterial])
             shell.orientation = StageMesh.standing
             shell.position.y = m(band)
-            shell.components.set(GroundingShadowComponent(castsShadow: true))
+            if !asGhost { shell.components.set(GroundingShadowComponent(castsShadow: true)) }
             body.addChild(shell)
         }
 
@@ -285,8 +309,13 @@ enum StageSceneBuilder {
         return strip
     }
 
+    /// - Parameter asGhost: §S8's ghost: the base, the feet and the lid, and
+    ///   none of the screen, keyboard and trackpad laid over them. Those are
+    ///   flat inlays stacked on the shell, and at the ghost's 40 % each one
+    ///   darkens the one under it, so the lid read as a black slab in the dark
+    ///   appearance — not "ghosted exactly as the box is". No shadow either.
     private static func buildNotebook(
-        _ chassis: Chassis, into body: Entity, palette: StagePalette
+        _ chassis: Chassis, into body: Entity, palette: StagePalette, asGhost: Bool = false
     ) {
         guard let lid = chassis.lid else { return }
         // Extruded for the same reason the desktop shell is: a 1.55 cm base
@@ -298,7 +327,7 @@ enum StageSceneBuilder {
         ) {
             let base = ModelEntity(mesh: mesh, materials: [palette.chassisMaterial])
             base.orientation = StageMesh.standing
-            base.components.set(GroundingShadowComponent(castsShadow: true))
+            if !asGhost { base.components.set(GroundingShadowComponent(castsShadow: true)) }
             body.addChild(base)
         }
 
@@ -313,6 +342,26 @@ enum StageSceneBuilder {
                 body.addChild(entity)
             }
         }
+
+        let panel = Entity()
+        panel.position = SIMD3(0, m(chassis.height + 0.05), m(-chassis.depth / 2 + 0.55))
+        panel.orientation = simd_quatf(
+            angle: Float(-lid.openAngle * .pi / 180), axis: SIMD3(1, 0, 0)
+        )
+        // The prototype bevels the lid by 0.12 rather than by the body's own
+        // bevel — 0.22 is more than half of a 0.42 cm panel.
+        if let mesh = try? StageMesh.prism(
+            width: chassis.width, height: lid.depth, cornerRadius: chassis.cornerRadius,
+            depth: lid.thickness, bevel: 0.12
+        ) {
+            let shell = ModelEntity(mesh: mesh, materials: [palette.chassisMaterial])
+            shell.orientation = StageMesh.standing
+            shell.position = SIMD3(0, 0, m(lid.depth / 2))
+            if !asGhost { shell.components.set(GroundingShadowComponent(castsShadow: true)) }
+            panel.addChild(shell)
+        }
+        body.addChild(panel)
+        guard !asGhost else { return }
 
         let wellZ = -chassis.depth / 2 + 1.2 + 5.7
         let well = ModelEntity(
@@ -346,24 +395,6 @@ enum StageSceneBuilder {
         )
         trackpad.orientation = faceUp
         body.addChild(trackpad)
-
-        let panel = Entity()
-        panel.position = SIMD3(0, m(chassis.height + 0.05), m(-chassis.depth / 2 + 0.55))
-        panel.orientation = simd_quatf(
-            angle: Float(-lid.openAngle * .pi / 180), axis: SIMD3(1, 0, 0)
-        )
-        // The prototype bevels the lid by 0.12 rather than by the body's own
-        // bevel — 0.22 is more than half of a 0.42 cm panel.
-        if let mesh = try? StageMesh.prism(
-            width: chassis.width, height: lid.depth, cornerRadius: chassis.cornerRadius,
-            depth: lid.thickness, bevel: 0.12
-        ) {
-            let shell = ModelEntity(mesh: mesh, materials: [palette.chassisMaterial])
-            shell.orientation = StageMesh.standing
-            shell.position = SIMD3(0, 0, m(lid.depth / 2))
-            shell.components.set(GroundingShadowComponent(castsShadow: true))
-            panel.addChild(shell)
-        }
 
         let bezel = ModelEntity(
             mesh: .generatePlane(
@@ -400,14 +431,19 @@ enum StageSceneBuilder {
         )
         notch.orientation = faceUp
         panel.addChild(notch)
-
-        body.addChild(panel)
     }
 
     // MARK: - Holes
 
+    /// One hole or fitting on the chassis. This Mac's build passes scenery
+    /// only, because its receptacles are ``makeReceptacle(hole:port:chassis:palette:appearance:)``'s;
+    /// §S8's ghost passes every feature, receptacles as the bare recess that
+    /// receptacle cuts.
+    ///
+    /// - Parameter lit: `false` on §S8's ghost, whose status light is a hole
+    ///   like any other — a lit one would say the other Mac is on.
     private static func makeFeature(
-        _ feature: ChassisFeature, chassis: Chassis, palette: StagePalette
+        _ feature: ChassisFeature, chassis: Chassis, palette: StagePalette, lit: Bool = true
     ) -> Entity {
         let opening = feature.opening
         let entity = Entity()
@@ -417,18 +453,23 @@ enum StageSceneBuilder {
         entity.position = placement
         entity.orientation = orientation(for: feature.face)
 
-        let material = feature.kind == .indicator
-            ? AnyMaterialBox.unlit(palette.indicatorMaterial)
-            : AnyMaterialBox.surface(palette.sceneryMaterial)
+        let material: AnyMaterialBox = switch feature.kind {
+        case .indicator where lit: .unlit(palette.indicatorMaterial)
+        case .thunderbolt: .surface(palette.recessMaterial)
+        case .usbC: .surface(palette.usbRecessMaterial)
+        default: .surface(palette.sceneryMaterial)
+        }
         // Extruded rather than boxed so the catalogue's corner radius survives:
         // `generateBox` clamps it to half the smallest dimension, and the
         // smallest dimension here is the 0.16 cm depth, which would make the
         // Mac Studio's round power socket and its headphone jack rounded
-        // squares at a radius of 0.08.
+        // squares at a radius of 0.08. A receptacle is as deep as
+        // `makeReceptacle` cuts it.
         guard
             let mesh = try? StageMesh.prism(
                 width: opening.width, height: opening.height,
-                cornerRadius: opening.cornerRadius, depth: 0.16
+                cornerRadius: opening.cornerRadius,
+                depth: feature.kind.isReceptacle ? 0.22 : 0.16
             )
         else { return entity }
         let hole = ModelEntity(mesh: mesh, materials: [material.material])

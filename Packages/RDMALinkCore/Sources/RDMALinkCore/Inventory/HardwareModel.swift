@@ -124,20 +124,44 @@ extension HardwareModel {
     ///
     /// Every identifier is transcribed from Apple's own "Identify your … model"
     /// pages, which list the Model Identifier per machine:
-    /// MacBook Pro <https://support.apple.com/en-us/108052>,
-    /// Mac Studio <https://support.apple.com/en-us/102231>,
-    /// Mac mini <https://support.apple.com/en-us/102852> (read 2026-09-20).
-    /// `Mac15,14` is also verified on this hardware and `Mac17,7` on the rig's
-    /// MacBook Pro. A new Mac needs no row to be recognized — the
-    /// family-and-layout rule covers it — so a row is only ever added from
-    /// those pages, never from a third-party listing.
+    /// MacBook Pro <https://support.apple.com/en-us/108052> (read 2026-09-20),
+    /// Mac Studio <https://support.apple.com/en-us/102231> and
+    /// Mac mini <https://support.apple.com/en-us/102852> (read 2026-09-20, and
+    /// again 2026-09-25 for the 2026 rows). Where an Identify page gives no
+    /// port sentence for a machine, its archetype is taken from Apple's specs
+    /// page for that chip — <https://www.apple.com/mac-studio/specs/> and
+    /// <https://www.apple.com/mac-mini/specs/>, read 2026-09-25 — never from
+    /// the chip's name alone. `Mac15,14` is also verified on this hardware
+    /// and `Mac17,7` on the rig's MacBook Pro. A new Mac needs no row to be
+    /// recognized — the family-and-layout rule covers it — so a row is only
+    /// ever added from those pages, never from a third-party listing.
     static let catalog: [String: KnownMac] = [
         // Mac Studio (2025).
         "Mac15,14": KnownMac(marketingName: "Mac Studio", archetype: .studioSix),   // M3 Ultra
         "Mac16,9": KnownMac(marketingName: "Mac Studio", archetype: .studioFour),   // M4 Max
+        // Mac Studio (M5 Max) and (M5 Ultra), 2026. Both: "Four Thunderbolt 5
+        // (USB-C) ports" on the back. The front is "Two USB-C ports" on the
+        // M5 Max, as on `Mac16,9`, and "Two Thunderbolt 5 ports" on the
+        // M5 Ultra, as on `Mac15,14`.
+        "Mac17,14": KnownMac(marketingName: "Mac Studio", archetype: .studioFour),  // M5 Max
+        "Mac17,15": KnownMac(marketingName: "Mac Studio", archetype: .studioSix),   // M5 Ultra
         // Mac mini (2024) — both share one chassis and one port layout.
         "Mac16,10": KnownMac(marketingName: "Mac mini", archetype: .mini),          // M4
         "Mac16,11": KnownMac(marketingName: "Mac mini", archetype: .mini),          // M4 Pro
+        // Mac mini (M5 Pro) and (M6), 2026: the same chassis — three
+        // Thunderbolt receptacles on the back, "Two USB-C ports with support
+        // for USB 3" on the front. The M5 Pro's back three are Thunderbolt 5.
+        "Mac17,16": KnownMac(marketingName: "Mac mini", archetype: .mini),          // M5 Pro
+        // The M6's back three are "Three Thunderbolt 4 (USB-C) ports". The
+        // chassis is the mini's all the same; whether set-up is offered is not
+        // decided here or at run time, but by R23's generation table
+        // (App/Presentation/ThunderboltGeneration.swift), keyed on the
+        // identifier. `Mac18,5` is in it as Thunderbolt 4, because Apple names
+        // one chip per identifier for it, so this Mac opens read-only.
+        // `Mac16,10` is not: Apple's 2024 page lists it together with
+        // `Mac16,11`, so the M4 mini's generation reads unknown and R23 never
+        // shows there.
+        "Mac18,5": KnownMac(marketingName: "Mac mini", archetype: .mini),           // M6
         // MacBook Pro (14-inch, 2024) M4; (14-inch, 2024) M4 Pro / M4 Max;
         // (16-inch, 2024) M4 Pro / M4 Max.
         "Mac16,1": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
@@ -157,6 +181,15 @@ extension HardwareModel {
         "Mac17,6": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
         "Mac17,8": KnownMac(marketingName: "MacBook Pro", archetype: .notebook),
     ]
+
+    /// The chassis the identifier catalogue lists for `identifier`, or nil
+    /// when it lists none. It never recognizes *this* Mac — ``read()`` and
+    /// the family-and-layout rule do that — and exists so the app can draw a
+    /// Mac it is only told about: UX_SPEC §S8's other Mac, drawn as a current
+    /// model of the family the user picked, by that model's identifier.
+    public static func archetype(forIdentifier identifier: String) -> Archetype? {
+        catalog[identifier]?.archetype
+    }
 
     /// `Apple M3 Ultra` → `M3 Ultra`. Anything else is passed through trimmed,
     /// because a chip name nobody recognizes is still better than none.

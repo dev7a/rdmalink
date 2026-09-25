@@ -190,7 +190,8 @@ enum StageSnapshotState: String, Sendable, CaseIterable {
     /// §S8: the ghost second Mac beside this one, the cable between them run
     /// from the first ready receptacle — or the first Thunderbolt receptacle
     /// on a Mac with none. Posed on the hub; `RDMALINK_SNAPSHOT_ROUTE=other-mac`
-    /// stages the same handoff from the screen's own subject instead.
+    /// stages the same handoff from the screen's own subject instead. The
+    /// ghost is drawn as `RDMALINK_SNAPSHOT_OTHER_MAC` says, or as the box.
     case handoff
 
     /// `RDMALINK_SNAPSHOT_STAGE`, when it names one of these.
@@ -242,7 +243,7 @@ enum StageSnapshotState: String, Sendable, CaseIterable {
             model.preview(previewKind, for: first.id)
         case .handoff:
             let near = ports.first { $0.cfg == .ready } ?? first
-            model.beginHandoff(for: near.id)
+            model.beginHandoff(for: near.id, ghost: SnapshotHook.otherMac?.archetype)
         }
     }
 

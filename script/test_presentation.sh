@@ -9,7 +9,9 @@
 # §S4's choice made first and once, the frozen selection on S5, and §6.2 R7
 # coming back to S5 — and §S8's subject (App/Presentation/OtherMacPresentation):
 # the port a run just set up, or the Help menu's ready selection, with the
-# stage's handoff receding every other port and the legend naming the ghost
+# stage's handoff receding every other port and the legend naming the ghost,
+# and the `Other Mac:` pop-up — its items, the default, the catalogue model
+# each family is drawn as and the far port on it (App/Stage/StageChassisGeometry)
 # — and the Restore sheet's
 # button rows (App/Presentation/RestorePresentation), the only place §6.2's
 # rows for R19, R20, R21, R28 and R30 are written down — and §4.8's two aids:
@@ -27,7 +29,7 @@
 # test counts, never with a write.
 #
 # The app target has no test bundle, and these files import nothing but
-# Foundation, Observation, AppKit and RDMALinkCore, so — like script/test_stage_math.sh —
+# Foundation, Observation, AppKit, CoreGraphics and RDMALinkCore, so — like script/test_stage_math.sh —
 # they are compiled against the Core module `swift build` left behind and run
 # as a plain executable. Every sentence asserted here is the spec's own.
 set -euo pipefail
@@ -539,6 +541,30 @@ check(text(HubPresentation.copy(hardware: tb4Unrecognized, ports: []).headline) 
 let tb4 = HardwareModel(identifier: "Mac16,1", marketingName: "MacBook Pro", chip: "M4", archetype: .notebook)
 check(text(HubPresentation.copy(hardware: tb4, ports: []).headline) == "Nothing to configure here",
       "R23 stands on a recognized Thunderbolt 4 Mac")
+// The 2026 rows, read 2026-09-25: Apple names one chip per identifier, and
+// the specs pages name the generation per chip.
+// Each fixture is the catalogue's own row: its name and chip as Apple gives
+// them, its archetype read back from the identifier table.
+func catalogued(_ identifier: String, _ marketingName: String, _ chip: String) -> HardwareModel? {
+    HardwareModel.archetype(forIdentifier: identifier).map {
+        HardwareModel(identifier: identifier, marketingName: marketingName, chip: chip, archetype: $0)
+    }
+}
+let m6Mini = catalogued("Mac18,5", "Mac mini", "M6")
+check(m6Mini?.archetype == .mini && m6Mini?.isThunderbolt4 == true
+      && m6Mini.map { text(HubPresentation.copy(hardware: $0, ports: []).headline) } == "Nothing to configure here",
+      "R23: the Mac mini (M6) has Thunderbolt 4 ports and opens read-only")
+let tb5Rows = [
+    catalogued("Mac17,14", "Mac Studio", "M5 Max"),
+    catalogued("Mac17,15", "Mac Studio", "M5 Ultra"),
+    catalogued("Mac17,16", "Mac mini", "M5 Pro"),
+]
+check(tb5Rows.map { $0?.archetype } == [.studioFour, .studioSix, .mini]
+      && tb5Rows.allSatisfy { $0?.thunderboltGeneration == .five },
+      "the Mac Studio (M5 Max), (M5 Ultra) and the Mac mini (M5 Pro) are Thunderbolt 5")
+check(HardwareModel(identifier: "Mac16,10", marketingName: "Mac mini", chip: "M4", archetype: .mini)
+          .thunderboltGeneration == .unknown,
+      "the Mac mini (2024) page lists its two identifiers together, so the table still says nothing for the M4")
 let r31Footer = HubPresentation.footer(hardware: unrecognized, ports: [managed])
 // §S1: R31's footer holds `Quit` and nothing else. `Quit` is neither the
 // primary nor Restore — it is the same button on every hub state, so the view
@@ -883,6 +909,86 @@ check(dimStage.selectedID == "en5", "…and the selection stays where it was")
 dimStage.endHandoff()
 check(dims(dimStage) == [1, 1, 1] && dimStage.handoff == nil && !dimStage.moment().handoffHoldsTheOnlyLink,
       "the handoff over, every receptacle and every thread is back")
+
+// MARK: §S8 "The other Mac's picture" — the Other Mac: pop-up and what it draws.
+
+check(OtherMacChoice.standard == .anyMac, "§S8: Any Mac is the default")
+check(OtherMacChoice.allCases == [.anyMac, .macBookPro, .macStudio, .macMini],
+      "§S8: four items, in the spec's order")
+check(OtherMacChoice.allCases.map { text($0.title) } == ["Any Mac", "MacBook Pro", "Mac Studio", "Mac mini"],
+      "§S8: each item verbatim")
+check(OtherMacChoice.allCases.allSatisfy { !text($0.title).hasSuffix("…") && !text($0.title).hasSuffix("...") },
+      "§1.3 rule 11: choosing an item finishes the command, so none ends in an ellipsis")
+check(OtherMacChoice.allCases.map(\.rawValue) == ["anyMac", "macBookPro", "macStudio", "macMini"],
+      "the remembered values are the ones every earlier launch wrote")
+check(OtherMacChoice.anyMac.representative == nil && OtherMacChoice.anyMac.archetype == nil,
+      "§S8: Any Mac draws the featureless box")
+check(OtherMacChoice.macBookPro.representative == "Mac17,7"
+      && OtherMacChoice.macBookPro.archetype == .notebook,
+      "§S8: MacBook Pro is drawn as the 14-inch MacBook Pro (M5 Pro or M5 Max), from the catalogue")
+check(OtherMacChoice.macStudio.representative == "Mac17,14"
+      && OtherMacChoice.macStudio.archetype == .studioFour,
+      "§S8: Mac Studio is drawn as the Mac Studio (M5 Max), from the catalogue")
+check(OtherMacChoice.macMini.representative == "Mac17,16"
+      && OtherMacChoice.macMini.archetype == .mini,
+      "§S8: Mac mini is drawn as the Mac mini (M5 Pro), from the catalogue")
+
+// §S8: the line ends on "that model's Thunderbolt port nearest this Mac on the
+// face a cable usually goes into — the back of a Mac Studio or a Mac mini, the
+// left side of a MacBook Pro".
+@MainActor func ghostEnd(_ archetype: Archetype) -> (PortFace?, String?) {
+    let chassis = ReceptacleCatalogue.chassis(for: archetype)
+    return (chassis?.usualCableFace, chassis?.ghostPort?.positionName)
+}
+check(ghostEnd(.studioFour) == (.back, "Back, far left") && ghostEnd(.studioSix) == (.back, "Back, far left"),
+      "§S8: a Mac Studio takes the line on the back, far left — the port nearest this Mac")
+check(ghostEnd(.mini) == (.back, "Back, left"), "§S8: a Mac mini takes it on the back, left")
+check(ghostEnd(.notebook) == (.left, "Left side, rear"), "§S8: a MacBook Pro takes it on the left side, rear")
+check([Archetype.studioFour, .studioSix, .mini, .notebook].allSatisfy {
+          ReceptacleCatalogue.chassis(for: $0)?.ghostPort?.kind == .thunderbolt
+      }, "§S8: the far port is always a Thunderbolt port, never a USB-only one")
+check(OtherMacChoice.allCases.allSatisfy { choice in
+          choice.archetype.map { ReceptacleCatalogue.chassis(for: $0)?.ghostPort != nil } ?? true
+      }, "every family the pop-up offers has a chassis and a far port to draw")
+
+// The stage: a pick is part of the handoff, redraws the ghost in place, and
+// frames the new pair as the handoff first did — leaving the user's
+// selection where it is.
+let pickStage = StageModel()
+if let chassis = ReceptacleCatalogue.chassis(for: .studioSix) { pickStage.picture = .chassis(chassis) }
+pickStage.ports = [farLeftPort, leftMiddle].enumerated().map {
+    StagePort(port: $1.port, physicalIndex: $0 + 1, configuration: cfg($1))
+}
+pickStage.beginHandoff(for: "en6", ghost: OtherMacChoice.macMini.archetype)
+check(pickStage.handoff == StageHandoff(portID: "en6", face: .back, ghost: .mini),
+      "§S8: the handoff carries what the ghost is drawn as")
+check(pickStage.cameraRequest?.kind == .handoff(.back, ghost: .mini),
+      "…and the camera frames the pair with that Mac in it")
+check(pickStage.selectedID == "en6", "…with the near port selected as the handoff opens")
+pickStage.cameraRequestHandled()
+pickStage.select("en5")
+pickStage.cameraRequestHandled()
+pickStage.beginHandoff(for: "en6", ghost: OtherMacChoice.macBookPro.archetype)
+check(pickStage.handoff?.ghost == .notebook && pickStage.handoff?.portID == "en6",
+      "§S8: a new pick redraws the ghost, and the line stays this link's")
+check(pickStage.selectedID == "en5", "…leaving the user's selection where they put it")
+check(pickStage.cameraRequest?.kind == .handoff(.back, ghost: .notebook),
+      "…and the camera frames the new pair as the handoff first did")
+pickStage.cameraRequestHandled()
+pickStage.beginHandoff(for: "en6", ghost: .notebook)
+check(pickStage.cameraRequest == nil, "the same pick again moves nothing")
+pickStage.beginHandoff(for: "en6", ghost: OtherMacChoice.anyMac.archetype)
+check(pickStage.handoff == StageHandoff(portID: "en6", face: .back, ghost: nil)
+      && pickStage.cameraRequest?.kind == .handoff(.back, ghost: nil),
+      "§S8: Any Mac puts the box back")
+check(StageLegend.rows(for: pickStage.ports, handoff: pickStage.handoff).last.map { text($0.label) }
+      == "The other Mac",
+      "§4.8: the legend's line keeps its words whatever the ghost is drawn as")
+pickStage.beginHandoff(for: "en6", ghost: .mini)
+check(StageLegend.rows(for: pickStage.ports, handoff: pickStage.handoff).last.map { text($0.label) }
+      == "The other Mac" && StageLegend.rows(for: pickStage.ports, handoff: pickStage.handoff).last?.glyph == .ghost,
+      "…and its small faint box")
+pickStage.endHandoff()
 
 // MARK: §S4 — the picker's rows: dimmed, with the explanatory subtitle.
 
@@ -2161,6 +2267,7 @@ xcrun swiftc -swift-version 6 -warnings-as-errors \
   "$ROOT_DIR/App/Stage/StageMath.swift" \
   "$ROOT_DIR/App/Stage/StageModel.swift" \
   "$ROOT_DIR/App/Stage/StageLegend.swift" \
+  "$ROOT_DIR/App/Stage/StageChassisGeometry.swift" \
   "$WORK_DIR/main.swift"
 
 "$WORK_DIR/test_presentation"

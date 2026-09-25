@@ -41,9 +41,13 @@
 //  S5's Checked group can be reviewed open. `oneMac` is this Mac with a
 //  second Mac on the end of its first Thunderbolt port alone, so the picker
 //  opens with RDMALink's pick lit and its reason printed (§S4
-//  "Pre-selection"). A fixture replaces every read of
-//  this Mac's identity and ports for the run and nothing else; the services,
-//  notes and stored bridges are still this Mac's.
+//  "Pre-selection"). `macBookPro` is this Mac's first three Thunderbolt
+//  ports, as they are, on a 14-inch MacBook Pro (`Mac17,7`) in its three
+//  places, so §S8's handoff can be reviewed from a notebook — pair it with
+//  `other-mac-from-ready` and `RDMALINK_SNAPSHOT_OTHER_MAC`, below; one of
+//  the three has to be ready on this Mac for a line to be drawn. A fixture
+//  replaces every read of this Mac's identity and ports for the run and
+//  nothing else; the services, notes and stored bridges are still this Mac's.
 //
 //  `RDMALINK_SNAPSHOT_ROUTE` opens one of the app's own routes on the live
 //  inventory first: `hub`, `choose`, `review`, `review-from-picker`, `ready`,
@@ -65,6 +69,16 @@
 //  The two review routes run `SetUpPorts.preview` and stop; no route reaches
 //  `perform`, opens an `AuthorizedSession` or raises the administrator
 //  prompt — that is S5's default button, which nothing here presses.
+//
+//  `RDMALINK_SNAPSHOT_OTHER_MAC` is `anyMac`, `macBookPro`, `macStudio` or
+//  `macMini`, and shows §S8's `Other Mac:` pop-up set to that choice, with
+//  the ghost second Mac drawn as it says — pair it with `other-mac` or
+//  `other-mac-from-ready`, or with `RDMALINK_SNAPSHOT_STAGE=handoff` for the
+//  ghost alone on the hub. It is shown, never remembered: the pick this Mac
+//  has stored is neither changed nor written.
+//
+//      RDMALINK_SNAPSHOT=/tmp/s8-mini.png RDMALINK_SNAPSHOT_ROUTE=other-mac-from-ready \
+//          RDMALINK_SNAPSHOT_OTHER_MAC=macMini ./…/RDMALink
 //
 //  Nothing here runs unless the environment variable is present, and nothing
 //  here writes anywhere but the path it was handed.
@@ -143,6 +157,14 @@ enum SnapshotHook {
         /// port and nothing else changed — §S4's pre-selection, which the
         /// picker lights and explains.
         case oneMac
+        /// This Mac's first three Thunderbolt ports, as they are, standing on
+        /// a 14-inch MacBook Pro (M5 Max) — `Mac17,7`, recognized by
+        /// identifier — in its three places: `Left side, rear`, `Left side,
+        /// front`, `Right side`. So §S8's handoff can be reviewed with this
+        /// Mac a notebook, whose left side stands further out of its centre
+        /// than any other Mac's face, beside each ghost the `Other Mac:`
+        /// pop-up draws.
+        case macBookPro
 
         /// The Mac the fixture stands for, without reading its ports.
         var model: HardwareModel {
@@ -154,6 +176,11 @@ enum SnapshotHook {
                 )
             case .twoMacs, .oneMac:
                 Inventory.readModel()
+            case .macBookPro:
+                HardwareModel(
+                    identifier: "Mac17,7", marketingName: "MacBook Pro", chip: "M5 Max",
+                    archetype: .notebook, recognition: .identifier
+                )
             }
         }
 
@@ -184,6 +211,22 @@ enum SnapshotHook {
                         inventory.ports[index].link = .macLinked
                     }
                     return inventory
+                case .macBookPro:
+                    // Each port keeps its BSD name, so its services, notes
+                    // and bridges are still this Mac's; only where it sits
+                    // changes.
+                    var inventory = try Inventory.read()
+                    let places: [(PortFace, String)] = [
+                        (.left, "Left side, rear"), (.left, "Left side, front"), (.right, "Right side"),
+                    ]
+                    inventory.ports = zip(inventory.ports.filter(\.isThunderbolt), places).map {
+                        var port = $0
+                        port.face = $1.0
+                        port.positionName = $1.1
+                        return port
+                    }
+                    inventory.model = Fixture.macBookPro.model
+                    return inventory
                 }
             }
         }
@@ -203,6 +246,15 @@ enum SnapshotHook {
             }
             return Inventory(model: Fixture.unrecognized.model, ports: ports, rdma: .off)
         }
+    }
+
+    /// §S8's `Other Mac:` pick to show for the capture instead of the
+    /// remembered one. `RDMALINK_SNAPSHOT_OTHER_MAC`. Only while a capture is
+    /// armed, like a fixture, and never written to the remembered pick.
+    static var otherMac: OtherMacChoice? {
+        guard destination != nil else { return nil }
+        return ProcessInfo.processInfo.environment["RDMALINK_SNAPSHOT_OTHER_MAC"]
+            .flatMap(OtherMacChoice.init(rawValue:))
     }
 
     /// Only while a capture is armed: a fixture must never reach a normal

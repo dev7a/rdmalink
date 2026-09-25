@@ -304,7 +304,7 @@ final class StageScene {
         case .turn(let face): turn(to: face)
         case .squareOn(let face): turn(to: face, squareOn: true)
         case .survey(let faces): survey(faces)
-        case .handoff(let face): handoff(on: face)
+        case .handoff(let face, let ghost): handoff(on: face, ghost: ghost)
         case .endHandoff: endHandoff()
         case .fit: animate(yaw: yaw, pitch: pitch, radius: fitDistance, bumps: false)
         case .reset: reset()
@@ -312,17 +312,27 @@ final class StageScene {
     }
 
     /// §S8: "The camera pulls back and pans so this Mac occupies the leading
-    /// third of the stage." It looks half way between this Mac and where the
-    /// ghost will settle, from far enough to hold the pair, at a shallow
-    /// three-quarter on the handoff's face so the cable reads as leaving it.
-    private func handoff(on face: PortFace) {
+    /// third of the stage." It looks half way across the pair — this Mac and
+    /// the ghost where it will settle, as whatever the ghost is drawn as —
+    /// from far enough to hold both, at a shallow three-quarter on the
+    /// handoff's face so the cable reads as leaving it. A new pick in the
+    /// pop-up asks for the same move, fitted to the new ghost: "the camera
+    /// frames the new pair as the handoff first did", never tighter than it
+    /// frames the box, so this Mac only ever shrinks for a larger ghost
+    /// (`StageHandoffLayout.farEdge`).
+    private func handoff(on face: PortFace, ghost: Archetype?) {
         guard let graph else { return }
-        let layout = StageHandoffLayout(face: face, chassis: graph.chassis)
+        let layout = StageHandoffLayout(
+            face: face, chassis: graph.chassis,
+            ghost: ghost.flatMap(ReceptacleCatalogue.chassis(for:))
+        )
         let midpoint = layout.midpoint
-        let destination = homeTarget
-            + SIMD3(StageMesh.metres(midpoint.x), 0, StageMesh.metres(midpoint.z))
+        let destination = SIMD3(
+            StageMesh.metres(midpoint.x), StageMesh.metres(layout.focus),
+            StageMesh.metres(midpoint.z)
+        )
         let distance = StageMath.fitDistance(
-            width: layout.framingWidth * 0.01, height: graph.chassis.visibleHeight * 0.01,
+            width: layout.framingWidth * 0.01, height: layout.height * 0.01,
             viewport: viewport, verticalFieldOfView: Self.verticalFieldOfView,
             margin: StageMath.fitMargin
         )
@@ -660,10 +670,12 @@ final class StageScene {
     private static let handoffBloomDuration = 0.9
 
     /// The ghost slides in over the same 0.7 s the camera pulls back in, on a
-    /// cross-fade under Reduce Motion; the cable comes with it. When the far
-    /// end answers — a Mac at the far end of the near port's cable — a pulse
-    /// runs the cable back to this Mac and blooms at the receptacle, once per
-    /// answer, and not before the ghost has arrived.
+    /// cross-fade under Reduce Motion; the cable comes with it. A new pick in
+    /// §S8's pop-up while it is up redraws it in place, cross-faded unless
+    /// Reduce Motion is on. When the far end answers — a Mac at the far end of
+    /// the near port's cable — a pulse runs the cable back to this Mac and
+    /// blooms at the receptacle, once per answer, and not before the ghost has
+    /// arrived.
     private func updateHandoff(moment: StageMoment, deltaTime: TimeInterval) {
         guard let graph else { return }
         let ghost = graph.ghost
@@ -675,7 +687,10 @@ final class StageScene {
                     pulseStarted = nil
                 }
                 let near = graph.receptacles.first { $0.id == intent.portID }?.anchor
-                ghost.place(face: intent.face, near: near)
+                ghost.place(
+                    face: intent.face, ghost: intent.ghost, near: near,
+                    crossFade: handoff != nil && !appearance.reduceMotion
+                )
             } else {
                 handoffStarted = nil
                 pulseStarted = nil
@@ -685,6 +700,7 @@ final class StageScene {
             handoff = moment.handoff
         }
 
+        ghost.advanceCrossFade(by: deltaTime)
         let duration = appearance.reduceMotion ? Self.reducedArcDuration : Self.arcDuration
         let t = handoffStarted.map { min((elapsed - $0) / duration, 1) } ?? 1
         let arrived = appearance.reduceMotion ? t : StageMath.easeInOut(t)
@@ -850,11 +866,11 @@ final class StageScene {
             loop.show()
             graph.body.addChild(loop.root)
         }
-        // §S8's ghost, already arrived: the slide is a beat the review hook
-        // waits out, not a state it pictures.
+        // §S8's ghost, already arrived: the slide and a new pick's cross-fade
+        // are beats the review hook waits out, not states it pictures.
         if let intent = moment.handoff {
             let near = graph.receptacles.first { $0.id == intent.portID }?.anchor
-            graph.ghost.place(face: intent.face, near: near)
+            graph.ghost.place(face: intent.face, ghost: intent.ghost, near: near, crossFade: false)
             graph.ghost.show(slide: 0, opacity: StageGhostNode.restingOpacity)
         }
     }

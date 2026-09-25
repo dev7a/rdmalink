@@ -22,6 +22,26 @@ struct InventoryHardwareTests {
         }
         // Not on that page: it was never a MacBook Pro identifier.
         #expect(HardwareModel.catalog["Mac17,1"] == nil)
+        // Apple's Mac Studio and Mac mini Identify pages and the two specs
+        // pages, read 2026-09-25: the M5 Max has USB-C in front, the M5 Ultra
+        // Thunderbolt 5, and both 2026 minis share the one mini chassis.
+        #expect(HardwareModel.catalog["Mac17,14"]
+            == HardwareModel.KnownMac(marketingName: "Mac Studio", archetype: .studioFour))
+        #expect(HardwareModel.catalog["Mac17,15"]
+            == HardwareModel.KnownMac(marketingName: "Mac Studio", archetype: .studioSix))
+        #expect(HardwareModel.catalog["Mac17,16"]
+            == HardwareModel.KnownMac(marketingName: "Mac mini", archetype: .mini))
+        #expect(HardwareModel.catalog["Mac18,5"]
+            == HardwareModel.KnownMac(marketingName: "Mac mini", archetype: .mini))
+    }
+
+    @Test("The catalogue's archetype is readable by identifier, and only by one it lists")
+    func archetypeByIdentifier() {
+        #expect(HardwareModel.archetype(forIdentifier: "Mac17,14") == .studioFour)
+        #expect(HardwareModel.archetype(forIdentifier: "Mac17,16") == .mini)
+        #expect(HardwareModel.archetype(forIdentifier: "Mac17,7") == .notebook)
+        #expect(HardwareModel.archetype(forIdentifier: "Mac99,99") == nil)
+        #expect(HardwareModel.archetype(forIdentifier: "") == nil)
     }
 
     @Test("The rig's MacBook Pro spellings parse to the notebook's three names")

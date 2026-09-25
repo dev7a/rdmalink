@@ -7,10 +7,12 @@
 //  the ready port selected on the stage (`OtherMacReport`, §S8 "Whose
 //  link"). **A screen, not a sheet**, because the stage does the talking:
 //  while this is up, the camera turns to that port's face and pulls back, a
-//  featureless ghost of a second Mac slides in beside this one with a single
-//  thin line from that port to it — its cable, the only link drawn — and
-//  when the far end answers a pulse travels back along that line and blooms
-//  at the near receptacle, once.
+//  ghost of a second Mac slides in beside this one with a single thin line
+//  from that port to it — its cable, the only link drawn — and when the far
+//  end answers a pulse travels back along that line and blooms at the near
+//  receptacle, once. The ghost is a featureless box unless the `Other Mac:`
+//  pop-up between the note and the honesty line says which Mac it is (§S8
+//  "The other Mac's picture"), and the pick is remembered across launches.
 //
 //  It takes the working area's place the way §S11's change log does, so the
 //  port list — compact, per §2.3 — and the model stay beside it, and its
@@ -19,15 +21,35 @@
 //
 
 import AppKit
+import RDMALinkCore
 import SwiftUI
 
 struct OtherMacScreen: View {
     let model: InventoryModel
     /// §S8's 3D behaviour is the stage's; this screen only tells it when the
-    /// handoff begins and ends, and which port it is about.
+    /// handoff begins and ends, which port it is about, and which Mac the
+    /// other one is.
     let stage: StageModel
     /// How the screen was reached, which decides whose link it is about.
     let origin: OtherMacOrigin
+
+    /// §S8: "the choice is remembered across launches".
+    @AppStorage(AppSettings.otherMac) private var storedChoice = OtherMacChoice.standard
+
+    /// The pop-up's value: the remembered pick, or the review hook's
+    /// `RDMALINK_SNAPSHOT_OTHER_MAC`, which is shown without being remembered.
+    private var choice: Binding<OtherMacChoice> {
+        Binding(
+            get: { SnapshotHook.otherMac ?? storedChoice },
+            set: { storedChoice = $0 }
+        )
+    }
+
+    /// What the stage is asked to draw: whose link, and as which Mac.
+    private struct Staging: Equatable {
+        var subjectID: String?
+        var ghost: Archetype?
+    }
 
     var body: some View {
         let report = OtherMacReport(ports: model.ports, origin: origin)
@@ -53,28 +75,49 @@ struct OtherMacScreen: View {
                     NumberedStep(number: 4, text: "When both sides are done, each Mac has its own address on this link. This one's address appears as soon as a Mac is connected.")
                 }
             }
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("Leave this one cable connected while you're over there — and keep it to one cable between the pair.")
-                Text("RDMALink can only see this Mac. Nothing it did crossed that cable — that's deliberate.")
-                if report.answered {
-                    // §S8's live line, in the same beat as the stage's
-                    // returning pulse: one event, two places. Only this
-                    // link's far end counts — never another port's.
-                    Text("Something answered on this link. That's a good sign — the other end is awake.")
-                        .transition(.opacity)
+                    .quiet()
+                // §S8 "The other Mac's picture": one choice among four, so a
+                // pop-up button introduced by a label ending in a colon. It
+                // changes the stage's picture and nothing else. "Below the
+                // note and above the honesty line", so the live line arriving
+                // under that line never moves it. On an unrecognized Mac
+                // (R31) there is no model and no ghost to change, so it is
+                // not there.
+                if stage.chassis != nil {
+                    Picker("Other Mac:", selection: choice) {
+                        ForEach(OtherMacChoice.allCases) { option in
+                            Text(option.title).tag(option)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
                 }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("RDMALink can only see this Mac. Nothing it did crossed that cable — that's deliberate.")
+                    if report.answered {
+                        // §S8's live line, in the same beat as the stage's
+                        // returning pulse: one event, two places. Only this
+                        // link's far end counts — never another port's.
+                        Text("Something answered on this link. That's a good sign — the other end is awake.")
+                            .transition(.opacity)
+                    }
+                }
+                .quiet()
             }
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.smooth(duration: 0.25), value: report)
         // §S8: the stage performs the handoff for as long as the screen is up,
-        // about the port step 4 names — and re-aims if a later reading
-        // changes which port that is.
-        .onChange(of: report.subjectID, initial: true) { _, id in
-            stage.beginHandoff(for: id)
+        // about the port step 4 names and as the Mac the pop-up names — and
+        // re-aims if a later reading changes which port that is, or redraws
+        // the ghost in place when the pick changes.
+        .onChange(
+            of: Staging(subjectID: report.subjectID, ghost: choice.wrappedValue.archetype),
+            initial: true
+        ) { _, staging in
+            stage.beginHandoff(for: staging.subjectID, ghost: staging.ghost)
         }
         .onDisappear { stage.endHandoff() }
     }
@@ -122,6 +165,15 @@ struct OtherMacFooter: View {
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
         }
+    }
+}
+
+private extension View {
+    /// §S8's quiet lines: the note, the honesty line and the live line.
+    func quiet() -> some View {
+        font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

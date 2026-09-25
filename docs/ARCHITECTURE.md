@@ -454,6 +454,10 @@ public struct HardwareModel: Sendable {
     public var chip: String              // "M3 Ultra"
     public var archetype: Archetype
     public var recognition: Recognition  // which UX_SPEC §4.7 rule decided the archetype
+
+    // The identifier catalogue's row, for drawing a Mac the app is only told
+    // about (UX_SPEC §S8's other Mac) — never for recognizing this one.
+    public static func archetype(forIdentifier: String) -> Archetype?
 }
 
 public enum PortFace: String, Sendable { case back, front, left, right }

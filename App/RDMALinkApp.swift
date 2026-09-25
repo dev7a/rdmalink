@@ -11,6 +11,9 @@ enum AppSettings {
     static let showsLegend = "ShowLegend"
     /// §2.3: where the divider sits, remembered between launches.
     static let stageSplitFraction = "StageSplitFraction"
+    /// §S8: which Mac the ghost second Mac is drawn as — an
+    /// `OtherMacChoice` — and "the choice is remembered across launches".
+    static let otherMac = "OtherMac"
 }
 
 @main
