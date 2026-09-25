@@ -11,8 +11,11 @@
 //  from that port to it — its cable, the only link drawn — and when the far
 //  end answers a pulse travels back along that line and blooms at the near
 //  receptacle, once. The ghost is a featureless box unless the `Other Mac:`
-//  pop-up between the note and the honesty line says which Mac it is (§S8
-//  "The other Mac's picture"), and the pick is remembered across launches.
+//  pop-up says which Mac it is (§S8 "The other Mac's picture"), and the pick
+//  is remembered across launches. The pop-up floats on the stage, in its
+//  top-trailing corner (`StageOtherMacPicker`); only while the stage is
+//  §8.5's strip does it stand here, between the note and the honesty line
+//  (`OtherMacPickerPlace`).
 //
 //  It takes the working area's place the way §S11's change log does, so the
 //  port list — compact, per §2.3 — and the model stay beside it, and its
@@ -33,17 +36,12 @@ struct OtherMacScreen: View {
     /// How the screen was reached, which decides whose link it is about.
     let origin: OtherMacOrigin
 
-    /// §S8: "the choice is remembered across launches".
+    /// §S8: "the choice is remembered across launches". Read here and set
+    /// by the pop-up, wherever it stands; this screen tells the stage.
     @AppStorage(AppSettings.otherMac) private var storedChoice = OtherMacChoice.standard
-
-    /// The pop-up's value: the remembered pick, or the review hook's
-    /// `RDMALINK_SNAPSHOT_OTHER_MAC`, which is shown without being remembered.
-    private var choice: Binding<OtherMacChoice> {
-        Binding(
-            get: { SnapshotHook.otherMac ?? storedChoice },
-            set: { storedChoice = $0 }
-        )
-    }
+    /// Whether the pop-up stands in this working area rather than on the
+    /// stage — only while the stage is §8.5's strip.
+    @Environment(\.otherMacPickerPlace) private var pickerPlace
 
     /// What the stage is asked to draw: whose link, and as which Mac.
     private struct Staging: Equatable {
@@ -78,21 +76,15 @@ struct OtherMacScreen: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Leave this one cable connected while you're over there — and keep it to one cable between the pair.")
                     .quiet()
-                // §S8 "The other Mac's picture": one choice among four, so a
-                // pop-up button introduced by a label ending in a colon. It
-                // changes the stage's picture and nothing else. "Below the
-                // note and above the honesty line", so the live line arriving
-                // under that line never moves it. On an unrecognized Mac
-                // (R31) there is no model and no ghost to change, so it is
-                // not there.
-                if stage.chassis != nil {
-                    Picker("Other Mac:", selection: choice) {
-                        ForEach(OtherMacChoice.allCases) { option in
-                            Text(option.title).tag(option)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .fixedSize()
+                // §S8 "The other Mac's picture": on the stage, except below
+                // 900 pt, where the stage is §8.5's strip and the pair fills
+                // it — then here, "below the note and above the honesty
+                // line", so the live line arriving under that line never
+                // moves it. At the smallest windows that is below band 2's
+                // fold, a scroll or a Tab away (§S8). Never on an
+                // unrecognized Mac (R31), which has no ghost to change.
+                if pickerPlace == .workingArea {
+                    OtherMacPicker()
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     Text("RDMALink can only see this Mac. Nothing it did crossed that cable — that's deliberate.")
@@ -114,7 +106,7 @@ struct OtherMacScreen: View {
         // re-aims if a later reading changes which port that is, or redraws
         // the ghost in place when the pick changes.
         .onChange(
-            of: Staging(subjectID: report.subjectID, ghost: choice.wrappedValue.archetype),
+            of: Staging(subjectID: report.subjectID, ghost: OtherMacPicker.shown(storedChoice).archetype),
             initial: true
         ) { _, staging in
             stage.beginHandoff(for: staging.subjectID, ghost: staging.ghost)
@@ -141,6 +133,50 @@ struct OtherMacScreen: View {
         lines.append(String(localized: "Leave this one cable connected while you're over there — and keep it to one cable between the pair."))
         return lines.joined(separator: "\n") + "\n"
     }
+}
+
+/// §S8's `Other Mac:` pop-up (§S8 "The other Mac's picture"): one choice
+/// among four, so a pop-up button introduced by a label ending in a colon,
+/// whose label is also what VoiceOver reads. It changes the remembered pick
+/// and nothing else; `OtherMacScreen` hands that pick to the stage. One view
+/// wherever it stands — on the stage in the glass capsule
+/// (`StageOtherMacPicker`), or in the working area while the stage is a
+/// strip — so the two can never offer different items.
+struct OtherMacPicker: View {
+    /// §S8: "the choice is remembered across launches".
+    @AppStorage(AppSettings.otherMac) private var storedChoice = OtherMacChoice.standard
+
+    var body: some View {
+        Self.popUp(
+            selection: Binding(get: { Self.shown(storedChoice) }, set: { storedChoice = $0 })
+        )
+    }
+
+    /// The pop-up itself, on any selection: the remembered pick above, or
+    /// each item in turn where `StageOtherMacPicker` reserves the widest.
+    static func popUp(selection: Binding<OtherMacChoice>) -> some View {
+        Picker("Other Mac:", selection: selection) {
+            ForEach(OtherMacChoice.allCases) { option in
+                Text(option.title).tag(option)
+            }
+        }
+        .pickerStyle(.menu)
+        .fixedSize()
+    }
+
+    /// The pick the pop-up shows and the stage draws: the remembered one, or
+    /// the review hook's `RDMALINK_SNAPSHOT_OTHER_MAC`, which is shown
+    /// without being remembered.
+    static func shown(_ stored: OtherMacChoice) -> OtherMacChoice {
+        SnapshotHook.otherMac ?? stored
+    }
+}
+
+extension EnvironmentValues {
+    /// Where §S8's `Other Mac:` pop-up stands right now, decided once by the
+    /// window, which knows both whether §S8 is up and whether the stage is
+    /// §8.5's strip (`OtherMacPickerPlace.place`). `nil` everywhere else.
+    @Entry var otherMacPickerPlace: OtherMacPickerPlace? = nil
 }
 
 /// §S8's buttons, in band 4 while the screen holds the working area:

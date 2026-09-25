@@ -2,10 +2,11 @@
 //  StageOverlays.swift
 //
 //  The only things allowed to float over the stage: the face selector, the
-//  Fit / Reset View pair, the narration capsule (UX_SPEC §2.3, §9.1), §S5's
-//  bookmark glyph, and §4.8's two aids — the legend and the receptacle
-//  callout. Nothing else. No badge, no step indicator, and no text on the
-//  model itself (§4.7): both aids are SwiftUI over the render surface.
+//  Fit / Reset View pair, the narration capsule (UX_SPEC §2.3, §9.1), §S8's
+//  `Other Mac:` pop-up while that screen is up, §S5's bookmark glyph, and
+//  §4.8's two aids — the legend and the receptacle callout. Nothing else. No
+//  badge, no step indicator, and no text on the model itself (§4.7): both
+//  aids are SwiftUI over the render surface.
 //
 
 import RDMALinkCore
@@ -82,8 +83,8 @@ struct StageFaceSelector: View {
 struct StageViewControls: View {
     let fit: () -> Void
     let reset: () -> Void
-    /// §3.6 and §8.6 name *both* floating capsules, so this one takes the
-    /// same treatment the face selector does.
+    /// §3.6 and §8.6 give every floating control capsule on the stage the
+    /// same treatment, so this one takes what the face selector takes.
     let appearance: StageAppearance
 
     var body: some View {
@@ -100,6 +101,105 @@ struct StageViewControls: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .stageGlass(appearance)
+    }
+}
+
+/// UX_SPEC §S8 "The other Mac's picture": the `Other Mac:` pop-up "on the
+/// stage, in its top-trailing corner — above where the ghost settles, across
+/// from the legend", its label beside it, "the two in one Liquid Glass capsule
+/// like the stage's other controls". The pop-up is `OtherMacPicker`, the same
+/// one the working area stands in the strip (§8.5); here it is borderless,
+/// because the capsule is its bezel, as `Fit` and `Reset View` are.
+///
+/// It is a standard pop-up button, so VoiceOver reads its label and value
+/// and, with keyboard navigation on, Tab reaches it. Unlike the narration,
+/// the legend and the callout it is a control, so it is never hidden from
+/// VoiceOver and always takes the pointer.
+///
+/// §S8: "on the stage it keeps one width, its widest item's, whichever is
+/// chosen". A menu pop-up sizes itself to the title it shows, and
+/// `StageMath.topBand` pins the capsule's trailing edge, so each pick would
+/// move the label and the leading edge under the pointer — and the
+/// narration's drop and the callout's keep-out with them. So every item is
+/// laid out once more in the live pop-up's place, unseen, inert and out of
+/// the accessibility tree, and the stack is as wide as the widest of them;
+/// the live pop-up stands at its leading edge, where the label never moves.
+struct StageOtherMacPicker: View {
+    let appearance: StageAppearance
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            ForEach(OtherMacChoice.allCases) { choice in
+                OtherMacPicker.popUp(selection: .constant(choice))
+                    .hidden()
+                    .disabled(true)
+                    .accessibilityHidden(true)
+            }
+            OtherMacPicker()
+        }
+        .buttonStyle(.borderless)
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .stageGlass(appearance)
+    }
+}
+
+/// §2.3's top band: §9.1's narration capsule, top-center, and — while §S8 is
+/// up — its `Other Mac:` pop-up in the top-trailing corner, placed together
+/// by `StageMath.topBand` in the one pass that measures both. "A label gives
+/// way to a control, never the reverse": when the capsule, centered, would
+/// come within 8 pt of the pop-up, it is set just below the pop-up's row,
+/// and the pop-up stays put.
+///
+/// Laid out rather than measured into state, so the capsule lands in its
+/// place on the frame it appears in, not one frame late.
+struct StageTopBand: Layout {
+    /// Which of the two a subview is. Untagged subviews are the narration's,
+    /// so the capsule's own `Group` needs no tagging.
+    enum Slot { case narration, picker }
+
+    struct SlotKey: LayoutValueKey {
+        static let defaultValue = Slot.narration
+    }
+
+    func sizeThatFits(
+        proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) -> CGSize {
+        proposal.replacingUnspecifiedDimensions()
+    }
+
+    func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        let narration = subviews.filter { $0[SlotKey.self] == .narration }
+        let picker = subviews.first { $0[SlotKey.self] == .picker }
+        // A capsule fading out while the next fades in is two subviews for
+        // a moment; the band makes room for the wider of them.
+        let narrationSize = narration.map { $0.sizeThatFits(.unspecified) }
+            .reduce(CGSize.zero) { widest, size in
+                CGSize(width: max(widest.width, size.width), height: max(widest.height, size.height))
+            }
+        let band = StageMath.topBand(
+            width: bounds.width, narration: narrationSize,
+            picker: picker?.sizeThatFits(.unspecified)
+        )
+        for subview in narration {
+            let size = subview.sizeThatFits(.unspecified)
+            subview.place(
+                at: CGPoint(
+                    x: bounds.minX + (bounds.width - size.width) / 2,
+                    y: bounds.minY + band.narration.y
+                ),
+                anchor: .topLeading, proposal: .unspecified
+            )
+        }
+        if let picker, let origin = band.picker {
+            picker.place(
+                at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
+                anchor: .topLeading, proposal: .unspecified
+            )
+        }
     }
 }
 
@@ -129,10 +229,12 @@ struct StageNarration: View {
 }
 
 extension View {
-    /// §2.3 and §3.1 `material.floating`: the stage's two controls float over
-    /// the render in Liquid Glass, as macOS draws controls over content.
-    /// §3.6: under Reduce Transparency the capsule is opaque instead, and
-    /// under Increase Contrast it gains a hairline.
+    /// §2.3 and §3.1 `material.floating`: the stage's controls — the face
+    /// selector, the Fit / Reset View pair and, while §S8 is up, its
+    /// `Other Mac:` pop-up — float over the render in Liquid Glass, as macOS
+    /// draws controls over content. §3.6: under Reduce Transparency the
+    /// capsule is opaque instead, and under Increase Contrast it gains a
+    /// hairline.
     @ViewBuilder
     func stageGlass(_ appearance: StageAppearance) -> some View {
         if appearance.reduceTransparency {

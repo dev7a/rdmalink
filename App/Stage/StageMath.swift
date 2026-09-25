@@ -3,8 +3,9 @@
 //
 //  Every number the stage needs that is not a RealityKit call: the orbit rig,
 //  the dolly limits that keep a receptacle clickable (UX_SPEC §3.4, §8.4), the
-//  easing for the 0.7 s camera arc (§3.5), and the rounded-rectangle outlines
-//  the ring tracks are built from (§4.1).
+//  easing for the 0.7 s camera arc (§3.5), the rounded-rectangle outlines
+//  the ring tracks are built from (§4.1), and where the narration capsule and
+//  §S8's pop-up stand in the stage's top band (§2.3).
 //
 //  This file imports nothing but Foundation, CoreGraphics and simd on purpose:
 //  it is the only part of the stage that can be compiled and exercised on its
@@ -126,6 +127,39 @@ enum StageMath {
             x: viewport.width / 2 + x * viewport.width / 2,
             y: viewport.height / 2 - y * viewport.height / 2
         )
+    }
+
+    // MARK: - §2.3's top band
+
+    /// How far §S8's `Other Mac:` pop-up stands in from the stage's top and
+    /// trailing edges — the legend's inset across the stage from it.
+    static let cornerInset = 12.0
+    /// Where §9.1's narration capsule hangs from the stage's top edge.
+    static let narrationTop = 14.0
+    /// §2.3: the narration capsule "is set just below the pop-up's row
+    /// whenever, centered, it would come within 8 pt of it".
+    static let topBandGap = 8.0
+
+    /// Where the stage's top band puts its two floating things in a stage
+    /// `width` points wide, as top-leading corners in the stage's own
+    /// coordinates: §9.1's narration capsule, top-center, and §S8's pop-up
+    /// in the top-trailing corner — `picker` is its size, `nil` when it is
+    /// not on the stage.
+    ///
+    /// The pop-up never moves for the capsule, because "a label gives way to
+    /// a control, never the reverse" (§2.3): it stays where the pointer left
+    /// it, and the capsule, up for 1.4 s at a time, drops below its row
+    /// instead of meeting it. A capsule that clears it keeps its place.
+    static func topBand(
+        width: Double, narration: CGSize, picker: CGSize?
+    ) -> (narration: CGPoint, picker: CGPoint?) {
+        let narrationX = (width - narration.width) / 2
+        guard let picker else { return (CGPoint(x: narrationX, y: narrationTop), nil) }
+        let pickerOrigin = CGPoint(x: width - cornerInset - picker.width, y: cornerInset)
+        let meets = narration.width > 0
+            && narrationX + narration.width + topBandGap > pickerOrigin.x
+        let narrationY = meets ? cornerInset + picker.height + topBandGap : narrationTop
+        return (CGPoint(x: narrationX, y: narrationY), pickerOrigin)
     }
 
     // MARK: - §S8's handoff

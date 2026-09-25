@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Exercises App/Stage/StageMath.swift on its own.
 #
-# The stage's numbers — the orbit clamps, the 24 pt dolly floor, the easing and
-# the rounded-rectangle outlines the ring tracks are built from — are the part
+# The stage's numbers — the orbit clamps, the 24 pt dolly floor, the easing,
+# the rounded-rectangle outlines the ring tracks are built from, and where the
+# narration capsule and §S8's pop-up stand in the top band — are the part
 # of the 3D code that can be wrong without looking wrong. StageMath imports
 # nothing but Foundation and simd so exactly this is possible: no Xcode
 # project, no RealityKit, no window.
@@ -626,6 +627,37 @@ check(aside.map { $0.x < 290 && near($0.y, 334, 1e-6) } == true,
 check(StageMath.project(
         SIMD3(0, 0, -2), camera: eye, target: .zero, verticalFieldOfView: fov, viewport: stage
       ) == nil, "a point behind the camera does not project")
+
+// UX_SPEC §2.3's top band: the narration capsule top-center, §S8's pop-up
+// top-trailing, and "a label gives way to a control, never the reverse".
+let capsule = CGSize(width: 163, height: 29)
+// The pop-up's capsule as drawn: one width whichever item is chosen, its
+// widest item's (§S8), measured at 191 × 26 pt with MacBook Pro and with Any
+// Mac alike in a real capture (2026-09-25).
+let popUp = CGSize(width: 191, height: 26)
+let alone = StageMath.topBand(width: 580, narration: capsule, picker: nil)
+check(alone.picker == nil && near(alone.narration.x, (580 - 163) / 2) && near(alone.narration.y, 14),
+      "with no pop-up the capsule hangs top-center, 14 pt down")
+let roomy = StageMath.topBand(width: 900, narration: capsule, picker: popUp)
+check(roomy.picker.map { near($0.x, 900 - 12 - 191) && near($0.y, 12) } == true,
+      "the pop-up stands 12 pt in from the top and trailing edges, level with the legend")
+check(near(roomy.narration.y, 14), "a capsule that clears the pop-up keeps its place")
+for width in [460.0, 522, 580, 640] {
+    let band = StageMath.topBand(width: width, narration: capsule, picker: popUp)
+    let pickerOrigin = band.picker ?? .zero
+    check(near(pickerOrigin.x, width - 12 - 191) && near(pickerOrigin.y, 12),
+          "the pop-up never moves for the capsule at \(width) pt")
+    let capsuleFrame = CGRect(origin: band.narration, size: capsule)
+    let pickerFrame = CGRect(origin: pickerOrigin, size: popUp)
+    check(!capsuleFrame.intersects(pickerFrame.insetBy(dx: -7.9, dy: -7.9)),
+          "the capsule never comes within 8 pt of the pop-up at \(width) pt")
+    check(near(band.narration.x, (width - 163) / 2), "the capsule stays centered at \(width) pt")
+}
+let narrowest = StageMath.topBand(width: 460, narration: capsule, picker: popUp)
+check(near(narrowest.narration.y, 12 + 26 + 8),
+      "at the narrowest stage the capsule sits just below the pop-up's row")
+check(near(StageMath.topBand(width: 460, narration: .zero, picker: popUp).narration.y, 14),
+      "no capsule up, nothing to move")
 
 if failures > 0 {
     FileHandle.standardError.write(Data("test_stage_math: \(failures) failed\n".utf8))

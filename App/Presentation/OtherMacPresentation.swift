@@ -6,7 +6,8 @@
 //  snapshots and the way the screen was reached, so the screen, its footer's
 //  copy and the stage's handoff agree about the port and the script can check
 //  the rule. And which Mac the user says the other one is, for the stage's
-//  picture of it (`OtherMacChoice`, §S8 "The other Mac's picture").
+//  picture of it (`OtherMacChoice`, §S8 "The other Mac's picture"), and
+//  where the pop-up that says so stands (`OtherMacPickerPlace`).
 //
 
 import Foundation
@@ -55,6 +56,32 @@ enum OtherMacChoice: String, CaseIterable, Identifiable, Sendable {
     /// The chassis family the ghost is drawn as, or `nil` for the box.
     var archetype: Archetype? {
         representative.flatMap(HardwareModel.archetype(forIdentifier:))
+    }
+}
+
+/// Where §S8's `Other Mac:` pop-up stands, if anywhere (UX_SPEC §S8 "The
+/// other Mac's picture", §2.3). One answer for the stage and the working
+/// area, so the pop-up is never in both places, and never in neither while
+/// the screen is up on a Mac the stage can draw.
+enum OtherMacPickerPlace: Equatable, Sendable {
+    /// "On the stage, in its top-trailing corner — above where the ghost
+    /// settles, across from the legend".
+    case stage
+    /// "Below 900 pt the stage is §8.5's 180 pt strip, which the pair fills
+    /// from top to bottom, so there the pop-up leaves the stage for the
+    /// working area … below the note and above the honesty line".
+    case workingArea
+
+    /// - Parameters:
+    ///   - showsOtherMac: §S8 holds the working area — not merely asked for:
+    ///     the set-up assistant's working area comes first.
+    ///   - recognized: the stage draws a model. "On an unrecognized Mac
+    ///     (R31) the stage draws no model and no ghost, so the pop-up is not
+    ///     there, on the stage or in the working area."
+    ///   - stageIsStrip: §8.5's single column, below 900 pt.
+    static func place(showsOtherMac: Bool, recognized: Bool, stageIsStrip: Bool) -> Self? {
+        guard showsOtherMac, recognized else { return nil }
+        return stageIsStrip ? .workingArea : .stage
     }
 }
 
