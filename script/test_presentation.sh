@@ -715,14 +715,17 @@ check(r16.step == .choose && r16.refusal == nil && !r16LeftTheAssistant,
 r16.goBack()
 check(r16LeftTheAssistant, "…where Cancel is what leaves the assistant")
 
-// A selectable row is the hub's row, untouched: §S4's selectable subtitles are
-// §S1's, and the screen is still a picker for it.
+// A selectable row keeps the hub's words — §S4's selectable subtitles are
+// §S1's — but none of its buttons: choosing the row is the action (§S4).
 for selectable in [plain, returned, drifted] {
     let row = picker(selectable)
     let hub = PortRowPresentation(snapshot: selectable)
-    check(!row.isDimmed && row.detail == hub.detail && row.actions == hub.actions,
-          "a selectable row on the picker is the row the hub draws: \(selectable.port.positionName)")
+    check(!row.isDimmed && row.detail == hub.detail && row.actions.isEmpty,
+          "a selectable row on the picker has the hub's words and no button: \(selectable.port.positionName)")
 }
+check(PortRowPresentation(snapshot: returned).actions == [.setItUpAgain(portID: returned.id)]
+      && PortRowPresentation(snapshot: drifted).actions == [.setItUpAgain(portID: drifted.id)],
+      "…while the hub still offers Set It Up Again on those rows")
 // And every row off the picker is the hub's, dimmed rows included.
 check(PortRowPresentation(snapshot: managed).isDimmed == false
       && text(PortRowPresentation(snapshot: managed).detail.state)

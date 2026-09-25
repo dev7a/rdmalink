@@ -154,7 +154,11 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
         self.technicalSuffix = Self.technicalSuffix(for: snapshot)
         self.accessibilityLabel = Self.accessibilityLabel(for: snapshot, detail: detail)
         self.accessibilityValue = detail.address
-        self.actions = Self.actions(for: snapshot, dimmedBy: route)
+        // §S4: a row the picker lets you choose carries no button — choosing
+        // it is the action, and the hub's `Set It Up Again` would be a second
+        // way into the run already under way.
+        self.actions = mode == .picker && route == nil
+            ? [] : Self.actions(for: snapshot, dimmedBy: route)
         self.compactBadge = snapshot.readiness.isReady ? "Ready" : nil
         self.isDimmed = route != nil
     }
