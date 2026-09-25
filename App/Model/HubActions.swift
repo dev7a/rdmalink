@@ -208,12 +208,14 @@ struct OperationRun: Sendable, Equatable {
 
     var isRunning: Bool { outcome == nil }
 
-    /// §S10: the checklist has started and the burst is writing — the first
-    /// step has been reported, which only happens once macOS has handed back
-    /// the permission. While only the password dialog is up every row is
-    /// still pending, nothing has been written, and closing or quitting
-    /// cancels as it always did.
-    var isWriting: Bool { isRunning && states.contains { $0 != .pending } }
+    /// §S10: a checklist is under way, from the moment macOS's password
+    /// dialog is asked for until the last step lands, and the window holds
+    /// on to it. The burst starts writing the instant the password is
+    /// accepted — before its first reported step could reach the screen — so
+    /// the window can't wait for a step to turn its close button off, and a
+    /// dialog left behind a closed window would still write. A run with no
+    /// steps (Adopt, Stop Managing) asks for no password and holds nothing.
+    var holdsTheWindow: Bool { isRunning && !steps.isEmpty }
 
     /// Restore All runs the same step once per port — three ports means three
     /// `checkBackInBridge` rows, all equal values — so a report lands on the

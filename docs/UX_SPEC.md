@@ -632,7 +632,7 @@ Steps 1 to 4 are Review's four rows, word for word: the pending label is the row
 - Rollback status line: **Something didn't take. Putting the port back exactly as it was…**
 - Completion line, printed under the last checkmark before the screen advances: **Done. That took 1.8 seconds.**
 
-**A write is never cut off.** While the burst runs, the window's close button and File › Close ⌘W are unavailable, and quitting waits until the last step lands and then quits: the checklist already on screen is the feedback, and the burst is bounded by the credential's thirty seconds. While only macOS's password dialog is up nothing has been written, so closing the window or quitting then cancels the run as it always did.
+**A write is never cut off.** From the moment macOS's password dialog is asked for until the last step lands, the window's close button and File › Close ⌘W are unavailable: the burst starts writing the instant the password is accepted, before anything on screen could turn them off, and a dialog left behind a closed window would still write. The way out of the dialog is the dialog's own Cancel. Once writing has started, quitting waits until the last step lands and then quits: the checklist already on screen is the feedback, and the burst is bounded by the credential's thirty seconds. While only the dialog is up nothing has been written, so quitting then ends the app and the request with it.
 
 **The undo note is step 1, not step 5.** If it cannot be written, nothing is changed at all (R14). The gate that protects every other promise goes first, and the screen says so.
 
@@ -724,7 +724,7 @@ Steps 1 to 4 are Review's four rows, word for word: the pending label is the row
 
 **Layout.** Sheet, 500 pt wide, from a row's `Restore…` button, the hub footer, the change log, or the Port menu — or, over the picker, a dimmed row's `Restore…` or `Return to Bridge…`, the one route that screen names for it (§2.6, §S4). A headline that asks about **this port** without naming it — the camera has already turned to the port and ringed it, and a position name at the head of a question reads as part of the verb ("Put Back, far left…", "Return Back, far right…") — then a body that names the port and the moment the baseline was taken, a grouped list of exactly what will happen, then buttons. While the sheet reads this Mac, its headline is already there, over a small spinner. After `Restore`, the headline says what is happening instead of asking (**Putting this port back**), and the sheet's content is replaced by the same live checklist pattern as S6, including the password step, with one status line beneath it: **Every other setting stays as it is.**
 
-**A write is never cut off** (§S6). While the checklist runs — Restore, Return to Bridge and Restore All alike — the window's close button and File › Close ⌘W are unavailable and quitting waits until the last step lands. While only macOS's password dialog is up nothing has been written, so closing the window or quitting cancels as it always did.
+**A write is never cut off** (§S6). From macOS's password dialog until the last step lands — Restore, Return to Bridge and Restore All alike — the window's close button and File › Close ⌘W are unavailable, and once writing has started quitting waits until the last step lands. While only the dialog is up nothing has been written, so quitting then ends the app and the request with it; the dialog's own Cancel is the way back.
 
 **Copy.**
 - Headline: **Put this port back the way it was?** · while it runs: **Putting this port back**

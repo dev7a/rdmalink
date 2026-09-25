@@ -57,14 +57,14 @@ struct RootView: View {
             }
         }
         .frame(minWidth: 840, minHeight: 600)
-        // §S6, §S10: a write is never cut off. While a burst writes, the
-        // window's dismiss functionality — its close button and File › Close
-        // ⌘W — is turned off, rather than left looking live and doing nothing
-        // (a `windowShouldClose` that says no), and quitting waits in
-        // `BurstGate`. While only the password dialog is up nothing is written
-        // yet, and closing cancels the run as it always did. Checked against
-        // SwiftUI's documented contract, never by running a write.
-        .windowDismissBehavior(isWriting ? .disabled : .automatic)
+        // §S6, §S10: a write is never cut off. From the password dialog to
+        // the last step, the window's dismiss functionality — its close
+        // button and File › Close ⌘W — is turned off, rather than left
+        // looking live and doing nothing (a `windowShouldClose` that says
+        // no), and once writing starts quitting waits in `BurstGate`.
+        // Checked against SwiftUI's documented contract, never by running a
+        // write.
+        .windowDismissBehavior(holdsTheWindow ? .disabled : .automatic)
         .navigationTitle("RDMALink")
         .navigationSubtitle(model.windowSubtitle)
         // §2.7: the View menu drives the stage and the Port menu drives the
@@ -387,12 +387,15 @@ struct RootView: View {
         flow.open(request)
     }
 
-    /// §S6, §S10: a burst is writing — S6's, or a Restore sheet's checklist
-    /// — from its first reported step. What the window shows, so it is read
-    /// from what the window draws; quitting asks `BurstGate`, which knows
-    /// from the moment the credential is in hand.
-    private var isWriting: Bool {
-        flow?.apply?.phase == .running || actions.run?.isWriting == true
+    /// §S6, §S10: from the moment macOS's password dialog is asked for until
+    /// the last step lands — S6's run, or a Restore sheet's checklist. Not
+    /// from the first reported step: the burst writes the instant the
+    /// password is accepted, before any report reaches the main actor.
+    /// Quitting asks `BurstGate`, which opens with the credential.
+    private var holdsTheWindow: Bool {
+        let phase = flow?.apply?.phase
+        return phase == .authorizing || phase == .running
+            || actions.run?.holdsTheWindow == true
     }
 
     /// The whole assistant re-derives itself from this.

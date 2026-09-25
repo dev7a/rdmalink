@@ -1166,13 +1166,13 @@ check(replies.all == [true, true], "S2: …and the quit goes ahead when the last
 gate.end()
 check(replies.all == [true, true] && !gate.isRunning, "an unmatched end neither answers nor counts below zero")
 var restoreRun = OperationRun(steps: [.deleteCreatedService(named: "RDMA — Back, far left"), .checkBackInBridge])
-check(restoreRun.isRunning && !restoreRun.isWriting,
-      "S2: a checklist whose rows are all pending is the password dialog: closing still cancels")
+check(restoreRun.isRunning && restoreRun.holdsTheWindow,
+      "S2: from the password dialog on, before any step is reported, the window's close button is off")
 restoreRun.mark(.deleteCreatedService(named: "RDMA — Back, far left"), .running)
-check(restoreRun.isWriting, "S2: from the first reported step the window's close button is off")
+check(restoreRun.holdsTheWindow, "S2: …and stays off while the checklist runs")
 restoreRun.outcome = .succeeded(headline: nil, body: "Done.")
-check(!restoreRun.isWriting, "S2: …and on again once it has landed")
-check(!OperationRun(steps: []).isWriting, "S2: forgetting a note is never a burst")
+check(!restoreRun.holdsTheWindow, "S2: …and on again once it has landed")
+check(!OperationRun(steps: []).holdsTheWindow, "S2: forgetting a note asks for no password and holds nothing")
 
 // MARK: S3 — a refused S6 never re-plans over a kept note.
 
