@@ -98,6 +98,31 @@ struct CheckAgainCommand: View {
     }
 }
 
+/// Whether the main window has one of its sheets up, handed to the menu bar
+/// so the Help menu's save can wait for it (§S12).
+struct PresentsSheetFocusedValueKey: FocusedValueKey {
+    typealias Value = Bool
+}
+
+extension FocusedValues {
+    var presentsSheet: Bool? {
+        get { self[PresentsSheetFocusedValueKey.self] }
+        set { self[PresentsSheetFocusedValueKey.self] = newValue }
+    }
+}
+
+/// §2.7's `Save Diagnostics File…`, unavailable while the main window has a
+/// sheet up: a sheet never stacks on a sheet, and an app-wide save panel over
+/// one would be the same stacking by another name (§S12).
+struct SaveDiagnosticsCommand: View {
+    @FocusedValue(\.presentsSheet) private var presentsSheet
+
+    var body: some View {
+        Button("Save Diagnostics File…") { DiagnosticsFile.save() }
+            .disabled(presentsSheet == true)
+    }
+}
+
 /// The View menu's last item (§2.7), which shows §S11 in place of the working
 /// area rather than opening a sheet.
 struct ChangeLogCommand: View {

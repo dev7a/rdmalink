@@ -15,9 +15,9 @@ import UniformTypeIdentifiers
 
 @MainActor
 enum DiagnosticsFile {
-    /// The save panel, as a sheet on the key window when it can take one —
-    /// the Help menu can be used with no window open, and then it stands
-    /// alone.
+    /// The save panel, as a sheet on the window it was asked from. It stands
+    /// alone only when there is no window at all — the Help menu can be used
+    /// with none open.
     static func save() {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = Diagnostics.suggestedFileName()
@@ -52,7 +52,8 @@ enum DiagnosticsFile {
     ///
     /// The window is asked again here, because the text took a moment to
     /// build: an alert sent to a window that has closed since is never seen,
-    /// which is the silent failure this exists to prevent.
+    /// which is the silent failure this exists to prevent. One that has taken
+    /// a sheet since gets the alert queued behind it.
     private static func report(_ error: any Error, on window: NSWindow?) {
         let alert = NSAlert()
         alert.messageText = String(localized: "The diagnostics file couldn't be saved.")
@@ -65,14 +66,15 @@ enum DiagnosticsFile {
         }
     }
 
-    /// The window a sheet can go on: one that is on screen, is not a sheet
-    /// itself and has none up. Help › Save Diagnostics File… can be chosen
-    /// with Restore or What This All Means open, and the key window is then
-    /// that sheet — a sheet never stacks on a sheet (§S12).
+    /// The window a sheet goes on: the one asked from, or the window it
+    /// hangs from when that is itself a sheet. If it already has a sheet up —
+    /// Restore, say, opened while the text was being built — AppKit queues
+    /// this one until that sheet closes (`NSWindow.beginSheet`), so a sheet
+    /// never stacks on a sheet and never falls back to an app-wide modal
+    /// over one (§S12). `nil` only when there is no window left to hang from.
     private static func sheetHost(_ window: NSWindow?) -> NSWindow? {
-        guard let window, window.isVisible, window.sheetParent == nil,
-            window.attachedSheet == nil
-        else { return nil }
-        return window
+        guard let window else { return nil }
+        let host = window.sheetParent ?? window
+        return host.isVisible ? host : nil
     }
 }

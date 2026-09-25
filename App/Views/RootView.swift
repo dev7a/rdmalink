@@ -66,6 +66,9 @@ struct RootView: View {
         // §2.7: ⌘R is the View menu's `Check Again`, and it re-checks exactly
         // as the toolbar button does.
         .focusedSceneValue(\.recheck, recheck)
+        // §S12: the Help menu's save waits while one of this window's sheets
+        // is up.
+        .focusedSceneValue(\.presentsSheet, router.sheet != nil || actions.sheet != nil)
         .toolbar {
             // §2.2: two items, each with a verb-first tooltip. `Help` takes
             // the plain `questionmark` — the toolbar group already draws the

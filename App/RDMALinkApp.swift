@@ -75,7 +75,7 @@ struct RDMALinkApp: App {
                 // routed like the change log and not like the item above it.
                 Button("What to Do on the Other Mac") { showOtherMac() }
                 // §S12's save, the same one Settings and the change log use.
-                Button("Save Diagnostics File…") { DiagnosticsFile.save() }
+                SaveDiagnosticsCommand()
             }
         }
 
