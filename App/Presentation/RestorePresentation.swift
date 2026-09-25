@@ -138,13 +138,20 @@ enum RestoreRefusals {
     /// The paragraph the card prints: Core's, except R28's over the picker.
     /// There the row has no `Stop Managing…` — a sheet over the assistant
     /// opens no second sheet (§2.6) — so the body must not point at it, and
-    /// Core's own form without it is used (§6.2 R28). A plan's refusal and a
-    /// burst's both come through here.
+    /// Core's own form without it is used (§6.2 R28), in whichever of R28's
+    /// two bodies was raised. A plan's refusal and a burst's both come
+    /// through here.
     static func message(
         for refusal: Refusal, port: ObservedPort?, overTheAssistant: Bool
     ) -> String {
         guard overTheAssistant, refusal.code == .createdServiceEdited, let port else {
             return refusal.body
+        }
+        // The picker never names `Restore…` for a port whose service was
+        // replaced by hand — its route is `Adopt…` or R16 — but a burst reads
+        // the port again, and can find a service set up while the sheet was up.
+        if refusal == Refusals.createdServiceReplaced(port: port) {
+            return Refusals.createdServiceReplaced(port: port, offersStopManaging: false).body
         }
         return Refusals.createdServiceEdited(
             port: port, differences: [], offersStopManaging: false).body

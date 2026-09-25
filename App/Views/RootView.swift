@@ -103,7 +103,7 @@ struct RootView: View {
             if shows { actions.closeChangeLog() }
         }
         .onChange(of: actions.showsChangeLog) { _, shows in
-            if shows { router.showsOtherMac = false }
+            if shows { router.otherMac = nil }
         }
         .task { await model.start() }
         // §2.8: `Restore…` is offered whenever a note exists, including a note
@@ -111,6 +111,8 @@ struct RootView: View {
         // read once rather than inferred from the ports.
         .task {
             actions.attach(stage: stage)
+            // §S8 from the Help menu is about the port selected here.
+            router.attach(stage: stage)
             await actions.refreshNotes()
         }
         // §2.4: the inventory is mirrored onto the stage every time it changes,
@@ -348,17 +350,31 @@ struct RootView: View {
         case .changelog:
             actions.perform(.changeLog)
         case .otherMac:
-            router.showsOtherMac = true
+            // As the Help menu opens it: about the port selected on the stage
+            // if that one is ready, and otherwise §S8's own rule.
+            router.showOtherMacFromHelp()
+        case .otherMacFromReady:
+            // As S7's `What to Do on the Other Mac` opens it, about the port
+            // the run set up. No run is made: the first ready port in
+            // physical order stands in for the port a run just set up.
+            guard let port = model.ports.ready.first else { return }
+            router.otherMac = .run(setUp: port.id)
         }
     }
 
     /// S7's `What to Do on the Other Mac`. §S8 is reached from S7, whose work
     /// is finished, so the assistant closes exactly as `Done` closes it and
-    /// the screen takes the working area it leaves. The Help menu reaches the
-    /// same screen without an assistant to close.
+    /// the screen takes the working area it leaves — about the port the run
+    /// just set up, the first in physical order when it set up several
+    /// (§S8 "Whose link"), read before the run is let go. The Help menu
+    /// reaches the same screen without an assistant to close.
     private func showOtherMac() {
-        if let flow, flow.step == .ready { flow.goForward() }
-        router.showsOtherMac = true
+        guard let flow, flow.step == .ready, let setUp = flow.selectedPorts.first?.id else {
+            router.otherMac = .help(selected: stage.selectedID)
+            return
+        }
+        flow.goForward()
+        router.otherMac = .run(setUp: setUp)
     }
 
     // MARK: - The set-up assistant (S4–S7)

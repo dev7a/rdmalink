@@ -212,13 +212,23 @@ public struct RestorePort: Sendable {
         if note.bridges.count > 1 { plan.notes.append(Self.twoBridgesNote) }
         if plan.isServiceAlreadyGone { plan.notes.append(Self.serviceAlreadyGone) }
 
+        // The service RDMALink made has gone from the port, and one set up by
+        // hand stands there instead (§S1's drift). It isn't RDMALink's to
+        // delete, and putting the port back around it would leave it on a
+        // bridge member, or forget the note over a port that is not as it was.
+        let isReplacedByHand = note.createdService != nil && plan.isServiceAlreadyGone
+            && !NetworkServices.services(for: port.bsdName, in: world.services).isEmpty
+
         // In the order the spec raises them: a mounted volume means Restore is
-        // not offered at all, a service somebody has taken over is not
-        // RDMALink's to delete, and a bridge that has gone gets R21's offer.
+        // not offered at all, a service somebody has taken over — or set up by
+        // hand in the place of RDMALink's — is not RDMALink's to delete (R28),
+        // and a bridge that has gone gets R21's offer.
         if let refusal = Refusals.nothingMountedOverThunderbolt(world.mountedVolumes) {
             plan.refusal = refusal
         } else if let refusal = removal?.refusal {
             plan.refusal = refusal
+        } else if isReplacedByHand {
+            plan.refusal = Refusals.createdServiceReplaced(port: port.observed)
         } else if let missing = plan.missingBridges.first {
             plan.refusal = Refusals.originalBridgeGone(port: port.observed, bridgeName: missing)
         }

@@ -360,6 +360,129 @@ struct OperationsAdoptTests {
         #expect(plan.buttonTitles.isEmpty || plan.canAdopt == false)
     }
 
+    /// RDMALink's note from setting the port up, naming the service it made.
+    private static func setUpNote(created: String, bridges: Bool) -> PortBaseline {
+        PortBaseline(
+            bsdName: "en6", receptacle: 1, positionName: "Back, far left",
+            bridges: bridges
+                ? [BridgeMembership(bridgeName: "bridge0", members: ["en5", "en6"], isActive: true)] : [],
+            createdService: CreatedServiceRecord(identifier: created, interfaceBSDName: "en6"))
+    }
+
+    @Test("A set-up note names another service only by identifier, and only as a set-up note")
+    func tellsTheServicesApartByIdentifier() {
+        #expect(Self.setUpNote(created: "MINE", bridges: true).namesAServiceOtherThan("A"))
+        #expect(!Self.setUpNote(created: "A", bridges: true).namesAServiceOtherThan("A"))
+        #expect(!PortBaseline.adopted(bsdName: "en6", receptacle: 1, positionName: "Back, far left")
+            .namesAServiceOtherThan("A"), "an adopted note made no service")
+        #expect(!PortBaseline(
+            bsdName: "en6", receptacle: 1, positionName: "Back, far left",
+            returnedToBridge: BridgeReturn(bsdName: "bridge0", displayName: "Thunderbolt Bridge"))
+            .namesAServiceOtherThan("A"), "nor did a return record")
+        #expect(!PortBaseline(
+            bsdName: "en6", receptacle: 1, positionName: "Back, far left",
+            bridges: [BridgeMembership(bridgeName: "bridge0", members: ["en5", "en6"], isActive: true)])
+            .namesAServiceOtherThan("A"), "a note that names no service has no identity to tell apart")
+    }
+
+    @Test("RDMALink's service replaced by a full match made by hand: adopted, over the old note (§S9)")
+    func adoptsOverANoteWhoseServiceIsGone() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let world = Fixtures.world(ifconfig: Fixtures.standalone, services: [Self.readyService])
+        let old = Self.setUpNote(created: "MINE", bridges: true)
+        try store.save(old)
+
+        let plan = AdoptPort(port: Fixtures.port, existingNote: old).preview(world: world)
+        #expect(plan.match == .full && plan.canAdopt)
+        #expect(plan.notes == [AdoptPort.note, AdoptPort.forgottenBridgesHonestyNote])
+        #expect(!plan.notes.contains(AdoptPort.honestyNote), "RDMALink did see this port before")
+        #expect(plan.forgetsTheWayBack, "the old note records the bridges the port came from")
+        #expect(plan.buttonTitles == ["Adopt", "Cancel"])
+        #expect(AdoptPort.forgottenBridgesHonestyNote == """
+            One thing to be straight about: RDMALink set this port up before, but the \
+            service it made is gone and this one was made by hand. Adopting looks after \
+            this one and replaces RDMALink's old note for the port, so RDMALink won't \
+            know which bridge the port came from any more. There's no exact "put it \
+            back" for an adopted port — Return to Bridge does the ordinary thing \
+            instead, and Stop Managing leaves the port exactly as it is.
+            """)
+
+        // A note that records no bridges loses nothing but itself.
+        let standalone = AdoptPort(port: Fixtures.port,
+                                   existingNote: Self.setUpNote(created: "MINE", bridges: false))
+            .preview(world: world)
+        #expect(standalone.canAdopt && !standalone.forgetsTheWayBack)
+        #expect(standalone.notes == [AdoptPort.note, AdoptPort.replacedNoteHonestyNote])
+        #expect(AdoptPort.replacedNoteHonestyNote == """
+            One thing to be straight about: RDMALink set this port up before, but the \
+            service it made is gone and this one was made by hand. Adopting looks after \
+            this one and replaces RDMALink's old note for the port. There's no exact \
+            "put it back" for an adopted port — Return to Bridge does the ordinary \
+            thing instead, and Stop Managing leaves the port exactly as it is.
+            """)
+
+        try AdoptPort(port: Fixtures.port, existingNote: old).perform(
+            world: world, environment: Fixtures.environment(store: store))
+        let adopted = try store.load(port: "en6")
+        #expect(adopted.isAdopted && adopted.bridges.isEmpty && adopted.createdService == nil,
+                "the adopted note replaces the old one")
+        #expect(adopted.existingService?.identifier == "A")
+    }
+
+    @Test("RDMALink's own service is never adopted, ready or edited since")
+    func neverAdoptsRDMALinksOwnService() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let own = Self.setUpNote(created: "A", bridges: true)
+        try store.save(own)
+        let ready = Fixtures.world(ifconfig: Fixtures.standalone, services: [Self.readyService])
+        let readyPlan = AdoptPort(port: Fixtures.port, existingNote: own).preview(world: ready)
+        #expect(readyPlan.match == .none && readyPlan.buttonTitles.isEmpty)
+        #expect(throws: (any Error).self) {
+            try AdoptPort(port: Fixtures.port, existingNote: own).perform(
+                world: ready, environment: Fixtures.environment(store: store))
+        }
+        #expect(try store.load(port: "en6").createdServiceIdentifier == "A",
+                "the note is left exactly where it was")
+
+        let edited = Fixtures.world(ifconfig: Fixtures.standalone, services: [Self.nearService])
+        #expect(AdoptPort(port: Fixtures.port, existingNote: own).preview(world: edited).match == .none,
+                "R28 answers for RDMALink's own service edited since, never S9's near match")
+        #expect(AdoptPort(port: Fixtures.port, existingNote: PortBaseline.adopted(
+            bsdName: "en6", receptacle: 1, positionName: "Back, far left")).preview(world: ready).match
+                == .none, "an adopted port is already looked after")
+    }
+
+    @Test("A return record whose port moved on is adopted over, and the honesty note says RDMALink saw it (§S9)")
+    func adoptsOverAStaleReturnRecord() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let record = PortBaseline(
+            bsdName: "en6", receptacle: 1, positionName: "Back, far left",
+            returnedToBridge: BridgeReturn(bsdName: "bridge0", displayName: "Thunderbolt Bridge"))
+        try store.save(record)
+        let world = Fixtures.world(ifconfig: Fixtures.standalone, services: [Self.readyService])
+
+        let plan = AdoptPort(port: Fixtures.port, existingNote: record).preview(world: world)
+        #expect(plan.canAdopt && !plan.forgetsTheWayBack, "a return record is no way back")
+        #expect(plan.notes == [AdoptPort.note, AdoptPort.returnRecordHonestyNote])
+        #expect(!plan.notes.contains(AdoptPort.honestyNote), "RDMALink did see this port before")
+        #expect(AdoptPort.returnRecordHonestyNote == """
+            One thing to be straight about: RDMALink returned this port to the bridge \
+            before, but the port has left the bridge since and this service was made by \
+            hand. Adopting looks after this one and replaces RDMALink's note of that \
+            return. There's no exact "put it back" for an adopted port — Return to Bridge \
+            does the ordinary thing instead, and Stop Managing leaves the port exactly as \
+            it is.
+            """)
+
+        try AdoptPort(port: Fixtures.port, existingNote: record).perform(
+            world: world, environment: Fixtures.environment(store: store))
+        let adopted = try store.load(port: "en6")
+        #expect(adopted.isAdopted && !adopted.isReturned, "the adopted note replaces the record")
+    }
+
     @Test("Stop Managing forgets a return record too")
     func stopsManagingAReturnedPort() throws {
         let store = Fixtures.store()

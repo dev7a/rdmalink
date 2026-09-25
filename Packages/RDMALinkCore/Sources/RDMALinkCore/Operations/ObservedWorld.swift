@@ -193,7 +193,8 @@ enum BaselineCapture {
         }
         if isAdopted {
             // An adopted note has no bridge history: RDMALink never saw which
-            // bridge the port came from and will not invent one (§7.3).
+            // bridge the port came from, or lets its old note go when it adopts
+            // over it (§S9), and will not invent one (§7.3).
             return PortBaseline.adopted(
                 bsdName: port.bsdName, receptacle: port.receptacle,
                 positionName: port.positionName, existingService: service,

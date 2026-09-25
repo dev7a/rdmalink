@@ -391,7 +391,7 @@ func runRestore(_ bsdName: String?) throws {
         print("")
         print("Refusing: \(bsdName)'s note is an adoption record, not an undo note — RDMALink "
             + "adopted the port as it found it on \(note.recordedAt.formatted(.iso8601)) and "
-            + "never saw which bridge it came from. There is nothing to restore; the port keeps "
+            + "keeps no record of which bridge it came from. There is nothing to restore; the port keeps "
             + "its setup. Stop Managing applies in the app; `rdmalink stop-managing "
             + "\(bsdName)` previews it.")
         return
@@ -483,7 +483,11 @@ func runAdopt(_ bsdName: String?) throws {
     let inventory = try Inventory.read()
     let port = operationPort(bsdName, in: inventory)
     let world = try observe([port], inventory)
-    let operation = AdoptPort(port: port)
+    // The note says which form the app would show: RDMALink's own service,
+    // still ready or edited since, is nothing to adopt, and a note whose
+    // service is gone, a matching one made by hand in its place, is one
+    // adopting replaces — which the honesty note owns up to (§S9).
+    let operation = AdoptPort(port: port, existingNote: try? notesStore.load(port: bsdName))
     let plan = operation.preview(world: world)
 
     print(plan.headline)
@@ -496,7 +500,9 @@ func runAdopt(_ bsdName: String?) throws {
         print("In the way:")
         show(refusal)
     }
-    print("buttons: \(list(plan.buttonTitles))")
+    // §2.6: adopting over a note that records bridges forgets the way back,
+    // so the app's sheet has no default there.
+    print("buttons: \(list(plan.buttonTitles))" + (plan.forgetsTheWayBack ? " (no default)" : ""))
 }
 
 /// `stop-managing <bsd>` — what forgetting the note would say. The app forgets

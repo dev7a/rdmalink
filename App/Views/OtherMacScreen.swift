@@ -2,11 +2,15 @@
 //  OtherMacScreen.swift
 //
 //  S8 — Now the other Mac (UX_SPEC §S8). "Close the loop the app cannot
-//  cross." Reached from S7's footer and from the Help menu. **A screen, not a
-//  sheet**, because the stage does the talking: while this is up, the camera
-//  pulls back, a featureless ghost of a second Mac slides in beside this one
-//  with a single thin line between them, and when the far end answers a pulse
-//  travels back along that line and blooms at the near receptacle, once.
+//  cross." Reached from S7's footer and from the Help menu, and about one
+//  port, *this link* — the port the run just set up, or from the Help menu
+//  the ready port selected on the stage (`OtherMacReport`, §S8 "Whose
+//  link"). **A screen, not a sheet**, because the stage does the talking:
+//  while this is up, the camera turns to that port's face and pulls back, a
+//  featureless ghost of a second Mac slides in beside this one with a single
+//  thin line from that port to it — its cable, the only link drawn — and
+//  when the far end answers a pulse travels back along that line and blooms
+//  at the near receptacle, once.
 //
 //  It takes the working area's place the way §S11's change log does, so the
 //  port list — compact, per §2.3 — and the model stay beside it, and its
@@ -22,9 +26,11 @@ struct OtherMacScreen: View {
     /// §S8's 3D behaviour is the stage's; this screen only tells it when the
     /// handoff begins and ends, and which port it is about.
     let stage: StageModel
+    /// How the screen was reached, which decides whose link it is about.
+    let origin: OtherMacOrigin
 
     var body: some View {
-        let report = OtherMacReport(ports: model.ports)
+        let report = OtherMacReport(ports: model.ports, origin: origin)
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Now the other Mac")
@@ -52,7 +58,8 @@ struct OtherMacScreen: View {
                 Text("RDMALink can only see this Mac. Nothing it did crossed that cable — that's deliberate.")
                 if report.answered {
                     // §S8's live line, in the same beat as the stage's
-                    // returning pulse: one event, two places.
+                    // returning pulse: one event, two places. Only this
+                    // link's far end counts — never another port's.
                     Text("Something answered on this link. That's a good sign — the other end is awake.")
                         .transition(.opacity)
                 }
@@ -99,13 +106,17 @@ struct OtherMacScreen: View {
 /// has one button row and one default.
 struct OtherMacFooter: View {
     let model: InventoryModel
+    /// The screen's own origin, so the copied step 4 names the port the
+    /// screen names.
+    let origin: OtherMacOrigin
     let done: () -> Void
 
     var body: some View {
         ScreenFooter {
             // A state the button passes through, not an end state (§9.14).
             CopyButton(title: "Copy These Steps") {
-                OtherMacScreen.plainTextSteps(address: OtherMacReport(ports: model.ports).address)
+                OtherMacScreen.plainTextSteps(
+                    address: OtherMacReport(ports: model.ports, origin: origin).address)
             }
             Button("Done", action: done)
                 .buttonStyle(.borderedProminent)

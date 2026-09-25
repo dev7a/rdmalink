@@ -13,32 +13,86 @@ import RDMALinkCore
 /// Which of §S9's two forms a port is in. A port that is not a match at all is
 /// neither, and is never offered this sheet.
 enum AdoptForm: Sendable, Equatable {
-    case fullMatch
+    /// `replacing` is the note adopting replaces, which the honesty note owns
+    /// up to (§S9): RDMALink's from setting the port up before — §S1's
+    /// drifted port, the service RDMALink made gone and this one made by
+    /// hand — or a return record whose port has moved on (§7.5 step 5).
+    /// `nil` when there is no note at all.
+    case fullMatch(replacing: PortBaseline?)
     case nearMatch([ConfigurationDifference])
 
     init?(_ port: PortSnapshot) {
         switch port.configuration {
         case .readyForRDMA?:
-            // A port RDMALink already looks after has nothing to adopt. A
-            // return record is not that: its port has left the bridge and been
-            // given a matching service since, so the record describes nothing
-            // current, and adopting replaces it with the adopted note (the
-            // same replacement §7.5 step 5 describes for set-up).
+            // §S9's full match over the note RDMALink kept from setting the
+            // port up, whose service is gone: adopting looks after the one
+            // made by hand and replaces that note, and the honesty note says
+            // so. Core's `AdoptPort.preview` makes the same call.
+            if port.hasRDMALinksServiceReplacedByAMatch {
+                self = .fullMatch(replacing: port.baseline)
+                return
+            }
+            // Any other port RDMALink already looks after has nothing to
+            // adopt. A return record is not that: its port has left the
+            // bridge and been given a matching service since, so the record
+            // describes nothing current, and adopting replaces it with the
+            // adopted note (the same replacement §7.5 step 5 describes for
+            // set-up) — which the honesty note owns up to, since RDMALink did
+            // see this port before.
             guard port.baseline?.isReturned != false else { return nil }
-            self = .fullMatch
+            self = .fullMatch(replacing: port.baseline)
         case .nearMatch(_, let differences)?:
             // §7.3: Adopt is for a port that is "out of every bridge, its own
             // service". A port still in a bridge is not that case, and §S9's
             // near-match body opens by saying it is — so it is not offered
             // this sheet rather than shown a sentence that contradicts itself.
-            // Core's `AdoptPort.preview` makes the same call.
+            // Nor is the service RDMALink made, edited by hand since: it is
+            // RDMALink's own, `Restore…` answers for it (R28), and the body's
+            // "RDMALink didn't make this service" would be false (§S1).
+            // Core's `AdoptPort.preview` makes the same calls.
             guard !differences.contains(where: \.isBridgeMembership),
+                !port.hasRDMALinksOwnServiceEdited,
                 AdoptFindings.clause(for: differences) != nil
             else { return nil }
             self = .nearMatch(differences)
         case .unconfigured?, .foreign?, nil:
             return nil
         }
+    }
+
+    /// The form a sheet showing `current` moves to when the port changes
+    /// under it, or `nil` to stay as it is (§S9, "The sheet follows the
+    /// port").
+    ///
+    /// A near match put right in System Settings with the sheet still up
+    /// becomes the full match, `Adopt` and all — the watcher line's promise,
+    /// kept where the user is looking. A port that stops being either form
+    /// keeps the one on screen: a near match its steps, which still apply,
+    /// and a full match its `Adopt`, because the run reads the port again
+    /// and Core adopts only what that reading finds, refusing a port that no
+    /// longer matches with nothing written. A reading that fails for a moment
+    /// resolves to no form too, and is no change to the port. Nothing moves
+    /// once `Adopt` is pressed, because the note it writes makes the port no
+    /// form at all and the sheet's answer is what it shows then.
+    static func following(_ current: AdoptForm, live: AdoptForm?, adopting: Bool) -> AdoptForm? {
+        guard !adopting, let live, live != current else { return nil }
+        return live
+    }
+
+    /// §S9's honesty note, in Core's words: `AdoptPort.preview` hands the
+    /// command-line tool the same one. `nil` on a near match, which has none.
+    var honestyNote: LocalizedStringResource? {
+        guard case .fullMatch(let replaced) = self else { return nil }
+        return LocalizedStringResource(core: AdoptPort.honestyNote(replacing: replaced))
+    }
+
+    /// Whether `Adopt` is the sheet's default. It is not when adopting forgets
+    /// the only record of the bridges the port came from — the old note
+    /// records them — so `Cancel` takes the trailing slot and Return presses
+    /// nothing (§2.6, §S9), as in the stop-managing form for the same note.
+    var adoptIsDefault: Bool {
+        guard case .fullMatch(let replaced) = self else { return false }
+        return !AdoptPort.forgetsTheWayBack(replacing: replaced)
     }
 
     var headline: LocalizedStringResource {

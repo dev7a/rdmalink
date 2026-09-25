@@ -892,6 +892,9 @@ final class StageScene {
             // is up, neither end sends its own thread out to the frame edge —
             // that is the picture of two Macs, which R2 is there to correct.
             if moment.loopedPair?.contains(port.id) == true { return 0 }
+            // §S8: the ghost's line is the near port's cable and the only
+            // link drawn, so every thread stands down while it is up.
+            if moment.handoffHoldsTheOnlyLink { return 0 }
             if port.link == .macLinked { return 1 }
             // §S3: with two Macs connected "both receptacles ring
             // simultaneously and a faint light thread leaves each one", which

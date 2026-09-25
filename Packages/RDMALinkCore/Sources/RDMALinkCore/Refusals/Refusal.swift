@@ -42,7 +42,9 @@ public enum RefusalCode: String, Sendable, Equatable, CaseIterable {
     /// The bridge the port came from doesn't exist any more, at Restore.
     case originalBridgeGone = "R21"
     /// The service RDMALink created has been edited since, so Restore will not
-    /// delete it.
+    /// delete it. The same number covers its other body: that service has
+    /// gone and one set up by hand stands in its place, which Restore will
+    /// not delete either.
     case createdServiceEdited = "R28"
     /// There is no Thunderbolt Bridge to return a standalone port to, and
     /// RDMALink never creates one. The copy is §S10's no-bridge form.

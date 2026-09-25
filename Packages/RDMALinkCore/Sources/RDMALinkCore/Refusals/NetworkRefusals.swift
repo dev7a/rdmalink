@@ -684,20 +684,58 @@ public enum Refusals {
         differences: [String],
         offersStopManaging: Bool = true
     ) -> Refusal {
-        let advice = offersStopManaging
-            ? "Remove it yourself in Network settings if you're done with it, "
-                + "or Stop Managing leaves everything exactly where it is."
-            : "Remove it yourself in Network settings if you're done with it."
-        return Refusal(
+        Refusal(
             code: .createdServiceEdited,
-            headline: "This port's service isn't the one RDMALink made any more",
+            headline: createdServiceHeadline,
             body: """
             The service RDMALink created on \(port.positionName) has been \
             changed since — it's carrying settings RDMALink didn't put there, \
-            and it won't quietly delete something you've made your own. \(advice)
+            and it won't quietly delete something you've made your own. \
+            \(createdServiceAdvice(offersStopManaging: offersStopManaging))
             """,
             detail: differences.isEmpty ? nil : englishList(differences) + ".",
             subjects: [port.bsdName]
         )
+    }
+
+    /// **R28's other body** — the service RDMALink made has gone from the
+    /// port and one set up by hand stands there instead: §S1's drifted port,
+    /// which its row offers `Adopt…` or nothing for, and which only the
+    /// footer's or the Port menu's `Restore…`, or Restore All, reaches. Same
+    /// number, headline and row. Putting the port back would mean deleting a
+    /// service RDMALink didn't make, so nothing is deleted, nothing rejoins a
+    /// bridge, and the note is kept.
+    ///
+    /// No detail line: nothing RDMALink made has changed.
+    ///
+    /// - Parameter offersStopManaging: as for the edited form.
+    public static func createdServiceReplaced(
+        port: ObservedPort,
+        offersStopManaging: Bool = true
+    ) -> Refusal {
+        Refusal(
+            code: .createdServiceEdited,
+            headline: createdServiceHeadline,
+            body: """
+            The service RDMALink created on \(port.positionName) isn't there \
+            any more, and the one on the port now was set up by hand. RDMALink \
+            won't delete a service it didn't make, so it can't put the port \
+            back the way it was while that one is there. \
+            \(createdServiceAdvice(offersStopManaging: offersStopManaging))
+            """,
+            subjects: [port.bsdName]
+        )
+    }
+
+    private static let createdServiceHeadline =
+        "This port's service isn't the one RDMALink made any more"
+
+    /// R28's advice, in both its forms: it names Stop Managing only where the
+    /// row beside it has the button.
+    private static func createdServiceAdvice(offersStopManaging: Bool) -> String {
+        offersStopManaging
+            ? "Remove it yourself in Network settings if you're done with it, "
+                + "or Stop Managing leaves everything exactly where it is."
+            : "Remove it yourself in Network settings if you're done with it."
     }
 }

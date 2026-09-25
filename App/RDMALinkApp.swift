@@ -99,7 +99,7 @@ struct RDMALinkApp: App {
     /// reason a sheet's is: the screen is drawn in it.
     private func showOtherMac() {
         openWindow(id: Self.mainWindowID)
-        router.showsOtherMac = true
+        router.showOtherMacFromHelp()
     }
 }
 

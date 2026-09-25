@@ -40,11 +40,16 @@ struct AssistantColumn: View {
 
     /// §2.3 band 3: **full** on the hub, Choose a port and Identify; compact
     /// on the RDMA screen, review, apply, done, other Mac and the change log.
+    /// Asked in the column's own order — the assistant, then §S8 and §S11,
+    /// then the hub — because a run started from either screen leaves it
+    /// set underneath, to come back to on `Done`, and the picker is full
+    /// whatever waits under it.
     private var density: PortListDensity {
-        if actions.showsChangeLog || router.showsOtherMac { return .compact }
-        guard let flow else { return .full }
-        if flow.identify != nil { return .full }
-        return flow.step == .choose ? .full : .compact
+        if let flow {
+            if flow.identify != nil { return .full }
+            return flow.step == .choose ? .full : .compact
+        }
+        return actions.showsChangeLog || router.showsOtherMac ? .compact : .full
     }
 
     /// §2.3 band 3 and §S4: on the picker "every row is a selection target;
@@ -163,8 +168,8 @@ struct AssistantColumn: View {
             if let flow {
                 WizardFooter(flow: flow, perform: performer(for: flow).callAsFunction)
                     .padding(.top, 12)
-            } else if router.showsOtherMac {
-                OtherMacFooter(model: model) { router.showsOtherMac = false }
+            } else if let origin = router.otherMac {
+                OtherMacFooter(model: model, origin: origin) { router.otherMac = nil }
                     .padding(.top, 12)
             } else if actions.showsChangeLog {
                 ChangeLogFooter(hub: actions)
@@ -187,8 +192,8 @@ struct AssistantColumn: View {
                 flow: flow, model: model, stage: stage, preview: preview,
                 perform: performer(for: flow).callAsFunction
             )
-        } else if router.showsOtherMac {
-            OtherMacScreen(model: model, stage: stage)
+        } else if let origin = router.otherMac {
+            OtherMacScreen(model: model, stage: stage, origin: origin)
         } else {
             WorkingArea(
                 model: model, stage: stage, usbTip: usbTip,

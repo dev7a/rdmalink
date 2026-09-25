@@ -38,6 +38,12 @@ public struct AdoptPortPlan: Sendable, Equatable {
     /// R31, when this Mac is not one RDMALink recognizes: the findings are
     /// still what was found, but nothing is offered and no note is written.
     public var refusal: Refusal?
+    /// True when adopting forgets the only record of the bridges the port
+    /// came from: the note it replaces, RDMALink's from setting the port up
+    /// before, records them. The sheet then has no default (UX_SPEC §S9,
+    /// §2.6), as the stop-managing form has none for the same note
+    /// (`StopManaging.forgetsTheWayBack`).
+    public var forgetsTheWayBack = false
 
     public var canAdopt: Bool { refusal == nil && match == .full }
 }
@@ -60,14 +66,79 @@ public struct AdoptPort: Sendable {
         back" for an adopted port — Return to Bridge does the ordinary thing \
         instead, and Stop Managing leaves the port exactly as it is.
         """
+    /// §S9's honesty note on a port RDMALink set up before: the service it
+    /// made is gone, and the one there now, exactly what RDMALink would have
+    /// made, was made by hand. Adopting replaces RDMALink's old note.
+    public static let replacedNoteHonestyNote = """
+        One thing to be straight about: RDMALink set this port up before, but \
+        the service it made is gone and this one was made by hand. Adopting \
+        looks after this one and replaces RDMALink's old note for the port. \
+        There's no exact "put it back" for an adopted port — Return to Bridge \
+        does the ordinary thing instead, and Stop Managing leaves the port \
+        exactly as it is.
+        """
+    /// The same, when that old note records the bridges the port came from:
+    /// adopting forgets them, and says so.
+    public static let forgottenBridgesHonestyNote = """
+        One thing to be straight about: RDMALink set this port up before, but \
+        the service it made is gone and this one was made by hand. Adopting \
+        looks after this one and replaces RDMALink's old note for the port, so \
+        RDMALink won't know which bridge the port came from any more. There's \
+        no exact "put it back" for an adopted port — Return to Bridge does the \
+        ordinary thing instead, and Stop Managing leaves the port exactly as it \
+        is.
+        """
+    /// §S9's honesty note on a port RDMALink returned to the bridge (§7.5)
+    /// that has left it since and been given this service by hand: adopting
+    /// replaces the return record, which records no bridges the port came
+    /// from, so nothing is forgotten but the return itself.
+    public static let returnRecordHonestyNote = """
+        One thing to be straight about: RDMALink returned this port to the \
+        bridge before, but the port has left the bridge since and this service \
+        was made by hand. Adopting looks after this one and replaces \
+        RDMALink's note of that return. There's no exact "put it back" for an \
+        adopted port — Return to Bridge does the ordinary thing instead, and \
+        Stop Managing leaves the port exactly as it is.
+        """
     public static let watcherLine = """
         RDMALink keeps looking, and offers to adopt the port the moment it \
         matches.
         """
 
-    public let port: OperationPort
+    /// §S9's honesty note for a full match. `replaced` is the note adopting
+    /// replaces: RDMALink's from setting the port up before, whose service
+    /// has gone (`PortBaseline.namesAServiceOtherThan(_:)`), or a return
+    /// record whose port has moved on (§7.5 step 5). `nil` when there is no
+    /// note to replace.
+    public static func honestyNote(replacing replaced: PortBaseline?) -> String {
+        guard let replaced else { return honestyNote }
+        if replaced.isReturned { return returnRecordHonestyNote }
+        return forgetsTheWayBack(replacing: replaced)
+            ? forgottenBridgesHonestyNote : replacedNoteHonestyNote
+    }
 
-    public init(port: OperationPort) { self.port = port }
+    /// True when the note adopting replaces records the bridges the port came
+    /// from, so adopting forgets the only way back (§S9, §2.6). A return
+    /// record never does: it records where RDMALink put the port, not where
+    /// the port came from.
+    public static func forgetsTheWayBack(replacing replaced: PortBaseline?) -> Bool {
+        guard let replaced, !replaced.isReturned else { return false }
+        return !replaced.bridges.isEmpty
+    }
+
+    public let port: OperationPort
+    /// The note RDMALink keeps for the port — not `note`, which is §S9's line
+    /// about adopting. The app passes the one it last read when `Adopt` was
+    /// pressed; the command-line tool reads it from the store. Only what it
+    /// says about the service on the port is asked of it: whether that
+    /// service is RDMALink's own, and which note adopting would replace
+    /// (§S9).
+    public let existingNote: PortBaseline?
+
+    public init(port: OperationPort, existingNote: PortBaseline? = nil) {
+        self.port = port
+        self.existingNote = existingNote
+    }
 
     // MARK: - Preview
 
@@ -95,7 +166,19 @@ public struct AdoptPort: Sendable {
         let findings = Self.findings(service: service, bridges: bridges.map(world.name(ofBridge:)))
 
         switch configuration {
-        case .readyForRDMA:
+        case let .readyForRDMA(serviceID):
+            // A port RDMALink already looks after has nothing to adopt: its
+            // own set-up, still ready, or a port it adopted. Two notes are
+            // replaced instead, and the honesty note owns up to each (§S9): a
+            // return record whose port has moved on (§7.5 step 5), and a note
+            // RDMALink wrote when it set the port up whose service is gone, a
+            // matching one made by hand in its place — §S1's drift.
+            let replaced = existingNote.flatMap {
+                $0.isReturned || $0.namesAServiceOtherThan(serviceID) ? $0 : nil
+            }
+            if existingNote != nil, replaced == nil {
+                return Self.notAMatch(port: port, findings: findings)
+            }
             return AdoptPortPlan(
                 port: port, match: .full,
                 headline: "This port is already set up",
@@ -107,26 +190,24 @@ public struct AdoptPort: Sendable {
                     """,
                 findings: findings,
                 steps: nil,
-                notes: [Self.note, Self.honestyNote],
-                buttonTitles: ["Adopt", "Cancel"])
+                notes: [Self.note, Self.honestyNote(replacing: replaced)],
+                buttonTitles: ["Adopt", "Cancel"],
+                forgetsTheWayBack: Self.forgetsTheWayBack(replacing: replaced))
 
-        case let .nearMatch(_, differences):
+        case let .nearMatch(serviceID, differences):
             // §7.3: Adopt is for a port "out of every bridge, its own service".
             // A port that is still a bridge member is not that case, and the
             // near-match body opens by saying it is — so it is not offered
             // Adopt at all rather than shown a sentence that contradicts
-            // itself in its own second clause (§1.3 rule 10).
+            // itself in its own second clause (§1.3 rule 10). Nor is the
+            // service RDMALink made, edited by hand since: it is RDMALink's
+            // own, `Restore…` answers for it (R28), and "RDMALink didn't make
+            // this service" would be false (§S1, §S9).
             guard !differences.contains(where: \.isBridgeMembership),
+                existingNote?.createdServiceIdentifier != serviceID,
                 let clause = ConfigurationDifference.serviceClause(in: differences)
             else {
-                return AdoptPortPlan(
-                    port: port, match: .none,
-                    headline: "This port is already set up",
-                    body: "",
-                    findings: findings,
-                    steps: nil,
-                    notes: [],
-                    buttonTitles: [])
+                return Self.notAMatch(port: port, findings: findings)
             }
             return AdoptPortPlan(
                 port: port, match: .near(differences: differences),
@@ -150,15 +231,20 @@ public struct AdoptPort: Sendable {
         case .unconfigured, .foreign:
             // Not a match at all: no `Adopt…` button is ever offered, and the
             // hub subtitle simply describes what it found.
-            return AdoptPortPlan(
-                port: port, match: .none,
-                headline: "This port is already set up",
-                body: "",
-                findings: findings,
-                steps: nil,
-                notes: [],
-                buttonTitles: [])
+            return Self.notAMatch(port: port, findings: findings)
         }
+    }
+
+    /// §S9's "Not a match at all": the findings, and nothing offered.
+    private static func notAMatch(port: OperationPort, findings: [AdoptFinding]) -> AdoptPortPlan {
+        AdoptPortPlan(
+            port: port, match: .none,
+            headline: "This port is already set up",
+            body: "",
+            findings: findings,
+            steps: nil,
+            notes: [],
+            buttonTitles: [])
     }
 
     /// §S9's four findings rows.

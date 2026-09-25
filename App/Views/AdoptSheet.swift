@@ -21,12 +21,15 @@ struct AdoptSheet: View {
     /// rule 8).
     let model: InventoryModel
     @Environment(\.dismiss) private var dismiss
-    /// Which form the sheet opened in, resolved once.
+    /// The form on screen: the one the sheet opened in, then whatever the
+    /// port becomes while nothing is running (§S9, "The sheet follows the
+    /// port"; `AdoptForm.following`).
     ///
-    /// Adopting writes the note that makes `AdoptForm(port)` return nil, so
-    /// deriving the form from the live port empties the sheet the moment the
-    /// adopt succeeds — during the very beat §S9 keeps it up to show the
-    /// confirmation. The live port is still read for the findings rows.
+    /// Kept, not derived from the live port on every read: adopting writes
+    /// the note that makes `AdoptForm(port)` return nil, so a derived form
+    /// would empty the sheet the moment the adopt succeeds — during the very
+    /// beat §S9 keeps it up to show the confirmation. The live port is still
+    /// read for the findings rows.
     @State private var form: AdoptForm?
 
     private var port: PortSnapshot? { hub.snapshot(id: portID) }
@@ -49,6 +52,15 @@ struct AdoptSheet: View {
             guard let port, let resolved = AdoptForm(port) else { return dismiss() }
             form = resolved
         }
+        // §S9: a near match put right while the sheet is up becomes the full
+        // match, `Adopt` and all. Never once `Adopt` has been pressed: its
+        // answer is the sheet's then.
+        .onChange(of: port.flatMap { AdoptForm($0) }) { _, live in
+            guard let form,
+                let next = AdoptForm.following(form, live: live, adopting: hub.run != nil)
+            else { return }
+            self.form = next
+        }
         .onDisappear { hub.sheetDismissed() }
     }
 
@@ -67,7 +79,7 @@ struct AdoptSheet: View {
         } else {
             switch form {
             case .fullMatch:
-                fullMatchContent(port)
+                fullMatchContent(port, form: form)
             case .nearMatch:
                 nearMatchContent(port)
             }
@@ -77,7 +89,7 @@ struct AdoptSheet: View {
     // MARK: - Full match
 
     @ViewBuilder
-    private func fullMatchContent(_ port: PortSnapshot) -> some View {
+    private func fullMatchContent(_ port: PortSnapshot, form: AdoptForm) -> some View {
         GroupedSection {
             ForEach(Array(AdoptFindings.rows(port).enumerated()), id: \.offset) { index, row in
                 if index > 0 { RowDivider(leadingInset: 42) }
@@ -98,23 +110,34 @@ struct AdoptSheet: View {
         }
         // §S9's two notes are Core's, which `AdoptPort.preview` hands the
         // command-line tool too, so the sheet and the tool can never word
-        // them two ways.
+        // them two ways — the honesty note in whichever form the port needs.
         VStack(alignment: .leading, spacing: 6) {
             Text(LocalizedStringResource(core: AdoptPort.note))
                 .fixedSize(horizontal: false, vertical: true)
-            Text(LocalizedStringResource(core: AdoptPort.honestyNote))
-                .fixedSize(horizontal: false, vertical: true)
+            if let honesty = form.honestyNote {
+                Text(honesty)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .font(.callout)
         .foregroundStyle(.secondary)
-        // §2.6's row: `Cancel` just before the default.
         HStack(spacing: 10) {
             Spacer(minLength: 0)
-            Button("Cancel") { dismiss() }
-                .keyboardShortcut(.cancelAction)
-            Button("Adopt") { adopt(port) }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
+            if form.adoptIsDefault {
+                // §2.6's row: `Cancel` just before the default.
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Adopt") { adopt(port) }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+            } else {
+                // §2.6: adopting here forgets the only record of the bridges
+                // the port came from, so the row has no default — `Cancel`
+                // takes the trailing slot and Return presses nothing.
+                Button("Adopt") { adopt(port) }
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
         }
     }
 
@@ -204,11 +227,29 @@ struct AdoptSheet: View {
     /// §7.3: adopting changes nothing and needs no password — it writes a note
     /// and a log entry, which is why there is no checklist here.
     private func adopt(_ port: PortSnapshot) {
-        guard let world = hub.world, let environment = hub.environment else { return }
+        // No reading is asked of the sheet: the run takes its own, and one
+        // that fails is its answer, with details, so `Adopt` is never a
+        // button that silently does nothing.
+        guard let environment = hub.environment else { return }
         let operationPort = OperationPort(port.port)
+        // Core asks the note what the sheet asked it: RDMALink's own service
+        // is never adopted, and a note whose service is gone, or a return
+        // record whose port has moved on, is replaced (§S9).
+        let existingNote = port.baseline
+        let hub = hub
         hub.start(steps: []) { _ in
+            // §S9: the sheet follows the port, so the reading taken when it
+            // opened may still describe the near match it was then, and Core
+            // would refuse to adopt that. This Mac is read again first —
+            // read-only, as every sheet's reading is — so the note is written
+            // against the port the sheet is showing.
+            await hub.readWorld()
+            guard let world = await hub.world else {
+                let failure = await hub.worldFailure ?? "no reading"
+                throw NetworkConfigurationError.missing("a reading of this Mac: \(failure)")
+            }
             let confirmation = try await OperationHost.withoutACredential {
-                try AdoptPort(port: operationPort).perform(
+                try AdoptPort(port: operationPort, existingNote: existingNote).perform(
                     world: world, environment: environment)
             }
             return .succeeded(headline: nil, body: LocalizedStringResource(core: confirmation))

@@ -14,19 +14,23 @@ import Foundation
 import RDMALinkCore
 
 /// What the configuration says about a port — UX_SPEC §4.3's outer track,
-/// reduced to the six answers the hub can actually observe.
+/// reduced to the seven answers the hub can actually observe.
 enum PortReadiness: Sendable, Equatable {
     /// Nothing to say beyond what is plugged in. Also the honest answer when
     /// the stored network configuration could not be read this time round: the
     /// app states what it observed and no more (§1.3 rule 10).
     case plain
-    /// Set up by RDMALink, and still exactly as RDMALink left it.
+    /// Set up by RDMALink, and still exactly as RDMALink left it: the service
+    /// on the port is the one RDMALink made, matched by identifier.
     case managed
     /// Already set up by hand, then adopted, and still matching.
     case adopted
     /// Exactly what RDMALink would have made, but RDMALink did not make it.
     case setUpElsewhere
-    /// RDMALink has a note for this port and the setup it describes is gone.
+    /// RDMALink has a note for this port and the setup it describes is gone —
+    /// its service replaced by hand included, even by exactly what RDMALink
+    /// would have made (§4.3, §S1): that one is ready, but it isn't
+    /// RDMALink's until the port is adopted (§S9).
     case drifted
     /// RDMALink itself put this port back into the Thunderbolt Bridge (§7.5),
     /// its note is still there, and the port still has what the note
@@ -58,7 +62,10 @@ enum PortReadiness: Sendable, Equatable {
     }
 
     /// §4.3 and §S9: exactly what RDMALink would have made, made by somebody
-    /// else. It is the one state `Adopt…` is offered from.
+    /// else, with no note of RDMALink's describing anything else. The other
+    /// rows that offer `Adopt…` are a near match (§S9) and a drifted port
+    /// whose service was replaced by hand (`PortSnapshot
+    /// .hasRDMALinksServiceReplacedByAMatch`).
     var isAdoptable: Bool { self == .setUpElsewhere }
 }
 
@@ -104,7 +111,18 @@ struct PortSnapshot: Sendable, Equatable, Identifiable {
             }
             return .drifted
         }
-        return baseline.isAdopted ? .adopted : .managed
+        if baseline.isAdopted { return .adopted }
+        // §S1, §4.3: "its service has been edited or replaced". The service
+        // RDMALink made is gone and the one standing in its place — exactly
+        // what RDMALink would have made — was made by hand, told apart by
+        // identifier as `hasRDMALinksOwnServiceEdited` tells them apart. It is
+        // not RDMALink's set-up, so the row is drift with `Adopt…`, never
+        // "Ready for RDMA" with a `Restore…` that would claim it.
+        if case .readyForRDMA(let serviceID) = configuration,
+            baseline.namesAServiceOtherThan(serviceID) {
+            return .drifted
+        }
+        return .managed
     }
 
     /// §S1's drifted port with a service of its own, split by identity: the
@@ -118,6 +136,16 @@ struct PortSnapshot: Sendable, Equatable, Identifiable {
             return false
         }
         return serviceIdentifier == created
+    }
+
+    /// §S1's drifted port the other way round: the service RDMALink made is
+    /// gone, and a service made by hand that is exactly what RDMALink would
+    /// have made stands in its place. Ready, but not RDMALink's: set-up
+    /// would route it to Adopt and never plan it, and Adopt takes it,
+    /// replacing the note (§S9, §7.3).
+    var hasRDMALinksServiceReplacedByAMatch: Bool {
+        guard readiness == .drifted, case .readyForRDMA? = configuration else { return false }
+        return true
     }
 
     /// The link-local address with its scope suffix, the way UX_SPEC §S1 prints
@@ -148,9 +176,13 @@ extension Array where Element == PortSnapshot {
     /// The ports §S1's "Ports ready for RDMA" row names, in physical order.
     var ready: [PortSnapshot] { filter { $0.readiness.isReady } }
 
-    /// The ports §S1 offers `Adopt…` on, and the ones its ready row counts as
-    /// "set up outside RDMALink".
-    var adoptable: [PortSnapshot] { filter { $0.readiness.isAdoptable } }
+    /// The ports §S1's ready row counts as "set up outside RDMALink": exactly
+    /// what RDMALink would have made, made by somebody else — whether or not
+    /// RDMALink once set the port up and kept a note whose service has since
+    /// been replaced by that one. Each is offered `Adopt…`.
+    var adoptable: [PortSnapshot] {
+        filter { $0.readiness.isAdoptable || $0.hasRDMALinksServiceReplacedByAMatch }
+    }
 
     /// Ports with an established link to another Mac.
     var withLinkedMac: [PortSnapshot] { filter { $0.port.link == .macLinked } }

@@ -81,8 +81,10 @@ final class HubActionsModel {
 
     /// What a sheet is reading right now: the kernel's bridge membership, the
     /// services, the volumes mounted over these links, and whether a note can
-    /// be saved. Read once when a sheet opens and never read again while it is
-    /// up, exactly as `ObservedWorld` is meant to be used.
+    /// be saved. Read when a sheet opens, and again only when the sheet itself
+    /// asks — R12's `Check Again`, and §S9's `Adopt`, whose sheet follows the
+    /// port (`AdoptForm.following`) — never behind a sheet's back, exactly as
+    /// `ObservedWorld` is meant to be used.
     ///
     /// **Read-only.** `ObservedWorld.read` takes no credential, no lock and
     /// writes nothing.

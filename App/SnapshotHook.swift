@@ -47,8 +47,12 @@
 //
 //  `RDMALINK_SNAPSHOT_ROUTE` opens one of the app's own routes on the live
 //  inventory first: `hub`, `choose`, `review`, `review-from-picker`, `ready`,
-//  `restore-sheet`, `adopt-sheet`, `changelog` or `other-mac` (§S8, a screen
-//  in the working area, with the ghost second Mac on the stage). `review` is
+//  `restore-sheet`, `adopt-sheet`, `changelog`, `other-mac` or
+//  `other-mac-from-ready` (§S8, a screen in the working area, with the ghost
+//  second Mac on the stage). `other-mac` is §S8 as the Help menu opens it;
+//  `other-mac-from-ready` is §S8 as S7's `What to Do on the Other Mac` opens
+//  it, about the first ready port in physical order standing in for the port
+//  a run just set up — no run is made to get there. `review` is
 //  S5 in a run a control that names its port opened — a row's `Set Up…` on
 //  the first port set-up can take — with the two-step label and `Cancel`
 //  leading; `review-from-picker` is S5 in a run the footer's `Set Up Port…`
@@ -116,6 +120,7 @@ enum SnapshotHook {
         case adoptSheet = "adopt-sheet"
         case changelog
         case otherMac = "other-mac"
+        case otherMacFromReady = "other-mac-from-ready"
     }
 
     static var route: Route? {

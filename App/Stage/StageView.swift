@@ -105,11 +105,13 @@ struct StageView: View {
                 StageNarration(line: model.narration, appearance: appearance)
                     .padding(.top, 14)
             }
-            // §4.8's legend, "shown whenever the rings are live".
+            // §4.8's legend, "shown whenever the rings are live" — with the
+            // line that names §S8's ghost while the handoff is up.
             .overlay {
                 if showsLegend {
                     StageLegendOverlay(
-                        rows: StageLegend.rows(for: model.ports), projection: scene.projection,
+                        rows: StageLegend.rows(for: model.ports, handoff: model.handoff),
+                        projection: scene.projection,
                         viewport: scene.viewport, appearance: appearance
                     )
                 }
@@ -625,6 +627,8 @@ private struct StageLegendOverlay: View {
             }
         }
         .animation(appearance.reduceMotion ? nil : .smooth(duration: 0.15), value: yields)
+        // §S8's line comes and goes with the ghost, on §3.5's cross-fade.
+        .animation(appearance.reduceMotion ? nil : .smooth(duration: 0.15), value: rows)
         .allowsHitTesting(false)
     }
 

@@ -176,7 +176,8 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
     /// never plans it, and refuses a fixed IPv4 address (R16), so the row
     /// offers what the picker would name for it — `Restore…` for RDMALink's
     /// own service edited since, which raises R28 and says what changed,
-    /// `Adopt…` for a new near match made by hand, and nothing where neither
+    /// `Adopt…` for a new service made by hand — a near match, or a full
+    /// match standing where RDMALink's used to — and nothing where neither
     /// can take it. A port that needs a hand offers `Restore…` and never a
     /// set-up.
     ///
@@ -204,6 +205,9 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
             switch ChoosePortReport.route(for: snapshot) {
             case nil: return [.setUpAgain(portID: id)]
             case .editedService?: return [.restore(portID: id)]
+            // A new service made by hand that Adopt can take: a near match,
+            // whose sheet says what to change, or a full match in place of the
+            // service RDMALink made, which it adopts over the old note (§S9).
             case .adopt?: return [.adopt(portID: id)]
             // A service RDMALink didn't make that neither Adopt nor set-up
             // can take — a fixed IPv4 address, or a service of its own on a

@@ -7,7 +7,9 @@
 # card reach into) — the set-up assistant's shape (App/Flows/SetUpFlow with
 # the flow files under it): §2.3's step label counting this run's screens,
 # §S4's choice made first and once, the frozen selection on S5, and §6.2 R7
-# coming back to S5 — and §S8's subject (App/Presentation/OtherMacPresentation)
+# coming back to S5 — and §S8's subject (App/Presentation/OtherMacPresentation):
+# the port a run just set up, or the Help menu's ready selection, with the
+# stage's handoff receding every other port and the legend naming the ghost
 # — and the Restore sheet's
 # button rows (App/Presentation/RestorePresentation), the only place §6.2's
 # rows for R19, R20, R21, R28 and R30 are written down — and §4.8's two aids:
@@ -280,26 +282,81 @@ check(text(r2.headline) == "Both ends of that cable are in this Mac", "R2 card h
 
 // MARK: §S8 — which port "this link" is, and when the far end has answered.
 
+// The Help menu with nothing selected: §S8's own rule, over ready ports only.
+func fromHelp(_ ports: [PortSnapshot], selected: String? = nil) -> OtherMacReport {
+    OtherMacReport(ports: ports, origin: .help(selected: selected))
+}
 let linkedManaged = snapshot(
     port("en6", "Back, left middle", link: .macLinked), configuration: .readyForRDMA(serviceID: "MINE"),
     baseline: ownNote)
 var addressed = linkedManaged
 addressed.port.linkLocal = ["fe80::a2d1:73b4:9e0c:5f16"]
-check(OtherMacReport(ports: [plain, outside]).subjectID == nil, "a Mac with no ready port has no subject")
-check(OtherMacReport(ports: [plain, outside]).address == nil
-      && !OtherMacReport(ports: [plain, outside]).answered, "and no address, and nothing has answered")
-check(OtherMacReport(ports: [outside, managed]).subjectID == "en6",
+check(fromHelp([plain, outside]).subjectID == nil, "a Mac with no ready port has no subject")
+check(fromHelp([plain, outside]).address == nil
+      && !fromHelp([plain, outside]).answered, "and no address, and nothing has answered")
+check(fromHelp([outside, managed]).subjectID == "en6",
       "a port set up outside RDMALink is never the subject; RDMALink's own is")
-check(OtherMacReport(ports: [managed, addressed]).subjectID == "en6"
-      && OtherMacReport(ports: [managed, addressed]).address == "fe80::a2d1:73b4:9e0c:5f16%en6",
+check(fromHelp([managed, addressed]).subjectID == "en6"
+      && fromHelp([managed, addressed]).address == "fe80::a2d1:73b4:9e0c:5f16%en6",
       "the first ready port with an address is the subject, and step 4 names it whole")
-check(OtherMacReport(ports: [managed]).address == nil, "a ready port with no address yet has none to name")
-check(OtherMacReport(ports: [adopted]).subjectID == "en7", "an adopted port is RDMALink's to hand out")
-check(!OtherMacReport(ports: [managed]).answered, "nothing plugged in has not answered")
-check(OtherMacReport(ports: [linkedManaged]).answered, "a Mac at the far end has answered")
-check(!OtherMacReport(ports: [snapshot(port("en6", "Back, left middle", link: .macLinkComingUp),
-                                       configuration: .readyForRDMA(serviceID: "MINE"), baseline: ownNote)]).answered,
+check(fromHelp([managed]).address == nil, "a ready port with no address yet has none to name")
+check(fromHelp([adopted]).subjectID == "en7", "an adopted port is RDMALink's to hand out")
+check(!fromHelp([managed]).answered, "nothing plugged in has not answered")
+check(fromHelp([linkedManaged]).answered, "a Mac at the far end has answered")
+check(!fromHelp([snapshot(port("en6", "Back, left middle", link: .macLinkComingUp),
+                          configuration: .readyForRDMA(serviceID: "MINE"), baseline: ownNote)]).answered,
       "a link still coming up has not answered yet")
+
+// The report that raised this: Back, far left just set up with nothing in it,
+// while Front, left and Front, right are ready, linked and addressed. The
+// handoff was drawn from Front, left and step 4 printed Front, left's address.
+func readyNote(_ bsdName: String, _ receptacle: Int, _ positionName: String) -> PortBaseline {
+    PortBaseline(
+        bsdName: bsdName, receptacle: receptacle, positionName: positionName,
+        bridges: [BridgeMembership(bridgeName: "bridge0", members: [bsdName], isActive: true)],
+        createdService: CreatedServiceRecord(identifier: "MINE-\(bsdName)", interfaceBSDName: bsdName))
+}
+func readyPort(_ bsdName: String, _ receptacle: Int, _ positionName: String, linkedAt address: String? = nil)
+    -> PortSnapshot {
+    var ready = snapshot(
+        port(bsdName, positionName, link: address == nil ? .empty : .macLinked),
+        configuration: .readyForRDMA(serviceID: "MINE-\(bsdName)"),
+        baseline: readyNote(bsdName, receptacle, positionName))
+    ready.port.linkLocal = address.map { [$0] } ?? []
+    return ready
+}
+let justSetUp = readyPort("en5", 1, "Back, far left")
+let frontLeft = readyPort("en7", 5, "Front, left", linkedAt: "fe80::1c2b:3d4e:5f60:7182")
+let frontRight = readyPort("en8", 6, "Front, right", linkedAt: "fe80::9a8b:7c6d:5e4f:3a2b")
+let userRig = [justSetUp, frontLeft, frontRight]
+check(userRig.ready.map(\.id) == ["en5", "en7", "en8"], "the rig: three ready ports, in physical order")
+let afterRun = OtherMacReport(ports: userRig, origin: .run(setUp: "en5"))
+check(afterRun.subjectID == "en5",
+      "§S8 from S7: the port the run just set up is the subject, not a ready neighbour with an address")
+check(afterRun.address == nil,
+      "…so step 4 names no other port's address: this link has none yet, and says it appears when a Mac arrives")
+check(!afterRun.answered,
+      "…and a Mac answering on Front, left is not this link answering")
+check(OtherMacReport(ports: userRig, origin: .run(setUp: "en7")).address == "fe80::1c2b:3d4e:5f60:7182%en7"
+      && OtherMacReport(ports: userRig, origin: .run(setUp: "en7")).answered,
+      "a run whose port is linked names that port's own address, and its far end answering counts")
+var rereading = justSetUp
+rereading.configuration = nil
+check(OtherMacReport(ports: [rereading, frontLeft], origin: .run(setUp: "en5")).subjectID == "en5",
+      "a run's port stays the subject through a reading that could not see its configuration")
+check(OtherMacReport(ports: [frontLeft, frontRight], origin: .run(setUp: "en5")).subjectID == "en7",
+      "a run's port this Mac no longer reports falls back to §S8's own rule")
+check(fromHelp(userRig).subjectID == "en7",
+      "§S8 from the Help menu with nothing selected: the first ready port with an address")
+check(fromHelp(userRig, selected: "en5").subjectID == "en5" && fromHelp(userRig, selected: "en5").address == nil,
+      "§S8 from the Help menu: the selected port, when it is ready, even with no address yet")
+check(fromHelp(userRig, selected: "en8").subjectID == "en8"
+      && fromHelp(userRig, selected: "en8").address == "fe80::9a8b:7c6d:5e4f:3a2b%en8",
+      "…and step 4 names the selected port's own address")
+check(fromHelp([outside, frontLeft], selected: "en2").subjectID == "en7"
+      && fromHelp([plain, frontLeft], selected: "en3").subjectID == "en7"
+      && fromHelp([frontLeft, frontRight], selected: "en5").subjectID == "en7",
+      "a selected port set up outside RDMALink, not ready, or not reported gives way to §S8's own rule")
 
 // MARK: §6.2's button rows in the Restore sheet, laid out by §2.6's one rule:
 // the default trailing with Cancel just before it, or Cancel trailing when a
@@ -410,6 +467,27 @@ check(StageLegend.rows(for: [plain].map(cfg)).map(\.glyph) == [.segmented]
       && StageLegend.rows(for: [managed].map(cfg)).map(\.glyph) == [.solidAccent]
       && StageLegend.rows(for: [drifted].map(cfg)).map(\.glyph) == [.dashed],
       "each legend line carries its own ring geometry")
+
+// §4.8 and §S8: the line that names the ghost, only while the handoff is up.
+let legendStage = StageModel()
+if let chassis = ReceptacleCatalogue.chassis(for: .studioSix) { legendStage.picture = .chassis(chassis) }
+legendStage.ports = [plain, managed].enumerated().map {
+    StagePort(port: $1.port, physicalIndex: $0 + 1, configuration: cfg($1))
+}
+@MainActor func legend(_ model: StageModel) -> [String] {
+    StageLegend.rows(for: model.ports, handoff: model.handoff).map { text($0.label) }
+}
+check(legend(legendStage) == ["In a bridge", "Ready for RDMA"], "no handoff: rings only, nothing names a ghost")
+legendStage.beginHandoff(for: "en6")
+check(legend(legendStage) == ["In a bridge", "Ready for RDMA", "The other Mac"],
+      "§S8's handoff up: one line joins the rings, last — The other Mac")
+check(StageLegend.rows(for: legendStage.ports, handoff: legendStage.handoff).last?.glyph == .ghost,
+      "…glyph first, a small faint box")
+legendStage.beginHandoff(for: nil)
+check(legend(legendStage).last == "The other Mac",
+      "the ghost is named whether or not the handoff has a near port to draw its line from")
+legendStage.endHandoff()
+check(legend(legendStage) == ["In a bridge", "Ready for RDMA"], "the line goes when the ghost does")
 
 // MARK: §4.8 — the callout quotes the row, verbatim.
 
@@ -781,6 +859,30 @@ dimStage.thawSelection()
 check(dims(dimStage) == [1, 1, 1], "thaw puts every receptacle back")
 check(dimStage.moment().frozenSelection == nil,
       "a thawed moment says 'not frozen' rather than 'frozen on nothing'")
+// §S8: "The line is that port's cable, so exactly one link reads — this port
+// to the other Mac": every other receptacle recedes to 25 %, and no
+// receptacle draws its own thread while the line is up.
+dimStage.beginHandoff(for: "en6")
+check(dims(dimStage) == [StageMoment.frozenDim, 1, StageMoment.frozenDim],
+      "§S8: the near port holds; every other receptacle recedes to 25 %, USB included")
+check(dimStage.moment().handoffHoldsTheOnlyLink,
+      "§S8: while the line is up it is the only link drawn — every thread stands down, the near port's and its neighbours'")
+check(dimStage.selectedID == "en6",
+      "§S8: that port becomes the selection as the handoff opens, so the list and the stage agree (§2.4)")
+// A row click, a click on the model, or the Port menu's Restore… (whose sheet
+// "turns to the port and rings it") selects another port while §S8 is up.
+dimStage.select("en5")
+check(dims(dimStage) == [1, 1, StageMoment.frozenDim],
+      "§S8: a receptacle the user selects while the screen is up comes forward, as a selection does")
+check(dimStage.handoff?.portID == "en6" && dimStage.moment().handoffHoldsTheOnlyLink,
+      "…and the line stays this link's, with no thread come back")
+dimStage.beginHandoff(for: nil)
+check(dims(dimStage) == [1, 1, 1] && !dimStage.moment().handoffHoldsTheOnlyLink,
+      "§S8 with no near port: no line, nothing singled out, nothing recedes, every thread stays")
+check(dimStage.selectedID == "en5", "…and the selection stays where it was")
+dimStage.endHandoff()
+check(dims(dimStage) == [1, 1, 1] && dimStage.handoff == nil && !dimStage.moment().handoffHoldsTheOnlyLink,
+      "the handoff over, every receptacle and every thread is back")
 
 // MARK: §S4 — the picker's rows: dimmed, with the explanatory subtitle.
 
@@ -1914,10 +2016,111 @@ check(RestoreRefusals.message(for: r28, port: farLeftPort.observed, overTheAssis
         .hasSuffix("won't quietly delete something you've made your own. Remove it yourself in Network settings if you're done with it.")
       && RestoreRefusals.message(for: r28, port: farLeftPort.observed, overTheAssistant: false) == r28.body,
       "…and over the picker, where the row has none, ends at the advice")
+let r28Replaced = Refusals.createdServiceReplaced(port: farLeftPort.observed)
+check(RestoreRefusals.message(for: r28Replaced, port: farLeftPort.observed, overTheAssistant: true)
+        == Refusals.createdServiceReplaced(port: farLeftPort.observed, offersStopManaging: false).body
+      && RestoreRefusals.message(for: r28Replaced, port: farLeftPort.observed, overTheAssistant: false)
+        == r28Replaced.body
+      && !RestoreRefusals.message(for: r28Replaced, port: farLeftPort.observed, overTheAssistant: true)
+        .contains("changed since"),
+      "§6.2 R28's replaced body keeps its own words over the picker, ending at the advice")
+check(RestoreRefusals.actions(for: r28Replaced.code) == RestoreRefusals.actions(for: r28.code),
+      "…and R28's row, with no default")
 var threeThings = twoThings
 threeThings.notesWritability = .notWritable(reason: "The folder isn't writable.")
 check(PreflightReport(threeThings).groupLabel.map(text) == "Checked — three things to sort out first",
       "§1.3 rule 1: the Checked count comes from the one formatter")
+
+// MARK: §S1, §S9 — RDMALink's service replaced by hand with a full match.
+
+// The service RDMALink made ("MINE") is gone, and one made by hand ("HAND"),
+// exactly what RDMALink would have made, stands in its place.
+let replacedMatch = snapshot(port("en6", "Back, left middle"),
+                             configuration: .readyForRDMA(serviceID: "HAND"), baseline: ownNote)
+check(replacedMatch.readiness == .drifted && replacedMatch.hasRDMALinksServiceReplacedByAMatch
+      && !replacedMatch.hasRDMALinksOwnServiceEdited && !replacedMatch.readiness.isReady,
+      "§S1, §4.3: RDMALink's service replaced by a full match made by hand is drift, never managed")
+check(managed.readiness == .managed && !managed.hasRDMALinksServiceReplacedByAMatch,
+      "…while RDMALink's own service, still ready, stays managed")
+check(ChoosePortReport.route(for: replacedMatch) == .adopt && !PortRowPresentation.offersSetUp(replacedMatch),
+      "§S1, R27: it routes to Adopt and is never offered a set-up")
+let replacedRow = PortRowPresentation(snapshot: replacedMatch)
+check(replacedRow.actions == [.adopt(portID: "en6")]
+      && text(replacedRow.detail.state) == "Not set up any more"
+      && replacedRow.symbol == "exclamationmark.circle" && replacedRow.symbolStyle == .attention
+      && replacedRow.compactBadge == nil,
+      "§S1: its row reads Not set up any more and offers Adopt…, with no Ready badge and no Restore…")
+check(Situation.drift(replacedMatch).actions == [.adopt(portID: "en6"), .stopManaging(portID: "en6")]
+      && Situation.drift(replacedMatch).detail != nil,
+      "§S1: the drift row offers the row's Adopt…, keeps Stop Managing…, and RDMALink's service really is gone")
+check(picker(replacedMatch).isDimmed && picker(replacedMatch).actions == [.adopt(portID: "en6")]
+      && text(picker(replacedMatch).detail.state) == "Set up outside RDMALink"
+      && ChoosePortReport.routingLine(for: .adopt, snapshot: replacedMatch).map(text)
+        == "This one was set up by hand, and properly. Adopt… looks after it without changing it.",
+      "§S4, R27: the picker dims it, reads Set up outside RDMALink, names Adopt… and prints the full match's line")
+check(cfg(replacedMatch) == .drift, "§4.3: its ring is drift's")
+check(text(ThisMacPresentation.readyRow([replacedMatch, outside]).text)
+        == "Ports ready for RDMA — None by RDMALink · two set up outside it"
+      && HubPresentation.changedSomethingElse(replacedMatch),
+      "§S1: the ready row counts it as set up outside RDMALink, and the note keeps 'Nothing else' off")
+
+// §S9: the full match over the old note, in its own form.
+check(AdoptForm(replacedMatch) == .fullMatch(replacing: ownNote)
+      && AdoptForm(replacedMatch)?.adoptIsDefault == false
+      && AdoptForm(replacedMatch)?.honestyNote.map(text) == AdoptPort.forgottenBridgesHonestyNote,
+      "§S9, §2.6: adopting over a note that records bridges says they go, and Adopt is not the default")
+let standaloneSetUpNote = PortBaseline(
+    bsdName: "en6", receptacle: 1, positionName: "Back, left middle",
+    createdService: CreatedServiceRecord(identifier: "MINE", interfaceBSDName: "en6"))
+let replacedStandalone = snapshot(port("en6", "Back, left middle"),
+                                  configuration: .readyForRDMA(serviceID: "HAND"), baseline: standaloneSetUpNote)
+check(replacedStandalone.readiness == .drifted
+      && AdoptForm(replacedStandalone)?.adoptIsDefault == true
+      && AdoptForm(replacedStandalone)?.honestyNote.map(text) == AdoptPort.replacedNoteHonestyNote,
+      "§S9: over a note that records no bridges nothing else goes, and Adopt stays the default")
+check(AdoptForm(outside) == .fullMatch(replacing: nil) && AdoptForm(outside)?.adoptIsDefault == true
+      && AdoptForm(outside)?.honestyNote.map(text) == AdoptPort.honestyNote,
+      "§S9: a port RDMALink never saw keeps the first honesty note")
+check(AdoptForm(staleMatch) == .fullMatch(replacing: returnRecord) && AdoptForm(staleMatch)?.adoptIsDefault == true
+      && AdoptForm(staleMatch)?.honestyNote.map(text) == AdoptPort.returnRecordHonestyNote,
+      "§S9: a port RDMALink returned to the bridge says RDMALink saw it, and Adopt stays the default")
+check(AdoptForm(managed) == nil && AdoptForm(adopted) == nil,
+      "§S9: a port RDMALink already looks after has nothing to adopt")
+check(AdoptForm(driftedNear) == nil && AdoptForm(driftedNearOther) != nil
+      && AdoptForm(nearMatch)?.honestyNote == nil && AdoptForm(nearMatch)?.adoptIsDefault == false,
+      "§S1, R28: RDMALink's own service edited since is no near match of S9's; a hand-made one is")
+let replacedHub = hubModel([farLeftPort, replacedMatch])
+check(replacedHub.canPerform(.adopt(portID: "en6")) && replacedHub.canPerform(.stopManaging(portID: "en6"))
+      && !replacedHub.canPerform(.returnToBridge(portID: "en6")),
+      "the hub's door: Adopt… and Stop Managing…, and no Return to Bridge… over the note's history")
+check(replacedHub.canPerform(.restore(portID: "en6"))
+      && !PortRowPresentation(snapshot: replacedMatch).actions.contains(.restore(portID: "en6")),
+      "§7.4: the row offers no Restore…, and the footer's or the Port menu's still opens the sheet, where R28 answers")
+check(!hubModel([farLeftPort, driftedNear]).canPerform(.adopt(portID: "en6")),
+      "§2.7: the Port menu's Adopt… is unavailable on RDMALink's own service edited since")
+
+// §S9, "The sheet follows the port": the near match put right with the sheet
+// up becomes the full match, and nothing moves once Adopt is pressed.
+let openedNear = AdoptForm(driftedNearOther)!
+let putRight = AdoptForm(replacedMatch)!
+check(AdoptForm.following(openedNear, live: putRight, adopting: false) == .fullMatch(replacing: ownNote),
+      "§S9: a near match corrected while the sheet is up becomes the full match, Adopt and all")
+check(AdoptForm.following(openedNear, live: nil, adopting: false) == nil
+      && AdoptForm.following(putRight, live: nil, adopting: false) == nil,
+      "…a port that stops being either keeps the form on screen: the near match its steps, the full match its Adopt, which reads the port again")
+let unreadable = snapshot(port("en6", "Back, left middle"), configuration: nil, baseline: ownNote)
+check(AdoptForm(unreadable) == nil && AdoptForm.following(putRight, live: AdoptForm(unreadable), adopting: false) == nil,
+      "…and a reading that fails for a moment moves nothing")
+check(AdoptForm.following(openedNear, live: openedNear, adopting: false) == nil,
+      "…the same form stays as it is")
+check(AdoptForm.following(openedNear, live: putRight, adopting: true) == nil
+      && AdoptForm.following(putRight, live: nil, adopting: true) == nil,
+      "…and nothing moves once Adopt is pressed")
+let adoptedOverOld = snapshot(port("en6", "Back, left middle"), configuration: .readyForRDMA(serviceID: "HAND"),
+                              baseline: PortBaseline.adopted(bsdName: "en6", receptacle: 1,
+                                                             positionName: "Back, left middle"))
+check(adoptedOverOld.readiness == .adopted && AdoptForm(adoptedOverOld) == nil,
+      "adopted, the port is RDMALink's to look after and the sheet has nothing left to switch to")
 
 
 if failures > 0 {

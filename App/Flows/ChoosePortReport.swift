@@ -28,10 +28,12 @@ enum ChooseRefusalRoute: Sendable, Equatable {
     /// bridge with no service (§S1, §7.4): the row offers `Restore…`, never a
     /// set-up, and is never pre-selected.
     case needsAHand
-    /// Set up by hand and out of every bridge, a near match included (§S9):
-    /// the row offers `Adopt…`. Core routes a port with a service of its own
-    /// to Adopt and never plans it (`routesToAdopt`), so choosing one would
-    /// open a Review with nothing to press.
+    /// Set up by hand and out of every bridge, a near match included (§S9),
+    /// and so is a port RDMALink set up before whose service has since been
+    /// replaced by hand with a full match (§S1, R27): the row offers
+    /// `Adopt…`. Core routes a port with a service of its own to Adopt and
+    /// never plans it (`routesToAdopt`), so choosing one would open a Review
+    /// with nothing to press.
     case adopt
     /// §S1's drifted port whose service is still the one RDMALink made,
     /// edited by hand since — nearly a match now, or given a fixed IPv4
@@ -194,8 +196,12 @@ struct ChoosePortReport: Sendable, Equatable {
         case .managed, .adopted: return .alreadyReady
         case .setUpElsewhere: return .adopt
         case .needsAHand: return .needsAHand
-        // A port whose setup has gone away is a port to set up again, and
-        // §7.4 calls that news rather than failure. Core's own preview is
+        // RDMALink's service gone and a full match made by hand in its place
+        // (§S1): a service of its own, which Core routes to Adopt and never
+        // plans, so the row offers `Adopt…` and never a set-up (R27).
+        case .drifted where snapshot.hasRDMALinksServiceReplacedByAMatch: return .adopt
+        // Any other port whose setup has gone away is a port to set up again,
+        // and §7.4 calls that news rather than failure. Core's own preview is
         // what decides whether it really can be — a stale note is never
         // reapplied to a world that moved — so the click is allowed through
         // and the plan answers. **Owed from the spec owner:** §S4 has no
