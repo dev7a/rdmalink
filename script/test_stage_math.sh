@@ -653,6 +653,19 @@ for width in [460.0, 522, 580, 640] {
           "the capsule never comes within 8 pt of the pop-up at \(width) pt")
     check(near(band.narration.x, (width - 163) / 2), "the capsule stays centered at \(width) pt")
 }
+// §S8: a pick that lands mid-fade hands over from where the fade stands.
+let settled = StageMath.crossFadeHandover(progress: 1, outgoingFrom: 1, fading: false)
+check(!settled.keepsOutgoing && settled.from == 1, "no fade running: the shape on stage goes out from full")
+let early = StageMath.crossFadeHandover(progress: 0.2, outgoingFrom: 1, fading: true)
+check(early.keepsOutgoing && near(early.from, 1 - StageMath.easeInOut(0.2), 1e-12),
+      "early in a fade the old shape still shows more and goes out from where it is")
+let late = StageMath.crossFadeHandover(progress: 0.8, outgoingFrom: 1, fading: true)
+check(!late.keepsOutgoing && near(late.from, StageMath.easeInOut(0.8), 1e-12),
+      "late in a fade the new shape shows more and goes out from where it is, never from full")
+let chained = StageMath.crossFadeHandover(progress: 0.5, outgoingFrom: 0.6, fading: true)
+check(near(chained.from, max(0.6 * (1 - StageMath.easeInOut(0.5)), StageMath.easeInOut(0.5)), 1e-12)
+      && chained.from < 1, "a second pick mid-fade never starts either shape at full")
+
 let narrowest = StageMath.topBand(width: 460, narration: capsule, picker: popUp)
 check(near(narrowest.narration.y, 12 + 26 + 8),
       "at the narrowest stage the capsule sits just below the pop-up's row")

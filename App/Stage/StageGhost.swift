@@ -206,6 +206,9 @@ final class StageGhostNode {
     /// the cross-fade has run, 0…1.
     private var outgoing: Entity?
     private var crossFade = 1.0
+    /// The opacity `outgoing` fades out from: full for a settled shape, less
+    /// when a pick landed mid-fade (``StageMath/crossFadeHandover(progress:outgoingFrom:fading:)``).
+    private var outgoingFrom = 1.0
 
     init(chassis: Chassis, palette: StagePalette, appearance: StageAppearance) {
         self.chassis = chassis
@@ -345,17 +348,26 @@ final class StageGhostNode {
     /// Swaps what the ghost draws. `offset` is where the old shape stood
     /// relative to the new centre, in centimetres.
     private func replaceShape(with chosen: Chassis?, fades: Bool, offset: SIMD3<Double>) {
-        outgoing?.removeFromParent()
+        // A pick that lands mid-fade keeps whichever of the two shapes is
+        // showing more, at the opacity it has now, and lets the other go, so
+        // running through several picks never snaps one back to full.
+        let handover = StageMath.crossFadeHandover(
+            progress: crossFade, outgoingFrom: outgoingFrom,
+            fading: crossFade < 1 && outgoing != nil)
+        let leaving = handover.keepsOutgoing ? outgoing : shape
+        (handover.keepsOutgoing ? shape : outgoing)?.removeFromParent()
         outgoing = nil
-        if let old = shape {
+        if let leaving {
             if fades {
-                old.position = SIMD3(
+                // It stays where it stood while the ghost's centre moves.
+                leaving.position += SIMD3(
                     StageMesh.metres(offset.x), StageMesh.metres(offset.y),
                     StageMesh.metres(offset.z)
                 )
-                outgoing = old
+                outgoing = leaving
+                outgoingFrom = handover.from
             } else {
-                old.removeFromParent()
+                leaving.removeFromParent()
             }
         }
         boxPort = nil
@@ -375,7 +387,7 @@ final class StageGhostNode {
         }
         let shown = Float(StageMath.easeInOut(crossFade))
         shape?.components.set(OpacityComponent(opacity: shown))
-        outgoing.components.set(OpacityComponent(opacity: 1 - shown))
+        outgoing.components.set(OpacityComponent(opacity: Float(outgoingFrom) * (1 - shown)))
     }
 
     /// **Any Mac**: a rounded box and nothing else but the far port.

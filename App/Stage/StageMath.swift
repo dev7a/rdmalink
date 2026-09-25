@@ -272,6 +272,21 @@ enum StageMath {
 
     /// Ease-in-ease-out over `0...1` (§3.5: camera moves are 0.7 s,
     /// ease-in-ease-out).
+    /// §S8: a new pick lands while the last cross-fade is still running.
+    /// Of the two shapes on stage — the one fading in, at `easeInOut(progress)`,
+    /// and the one fading out, at `outgoingFrom × (1 − that)` — the one showing
+    /// more goes out from the opacity it has now and the other is let go, so
+    /// nothing jumps back to full on the way through several picks. With no
+    /// fade running the shape on stage is at full and is the one that goes.
+    static func crossFadeHandover(
+        progress: Double, outgoingFrom: Double, fading: Bool
+    ) -> (keepsOutgoing: Bool, from: Double) {
+        guard fading else { return (false, 1) }
+        let shown = easeInOut(progress)
+        let leaving = outgoingFrom * (1 - shown)
+        return leaving > shown ? (true, leaving) : (false, shown)
+    }
+
     static func easeInOut(_ t: Double) -> Double {
         let t = min(max(t, 0), 1)
         return t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
