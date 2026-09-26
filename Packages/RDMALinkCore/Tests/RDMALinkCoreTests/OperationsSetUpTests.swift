@@ -137,13 +137,13 @@ struct OperationsSetUpTests {
 
         #expect(log.text == [
             "running Saving how to undo this…",
-            "done Saved",
-            "running Removing from Thunderbolt Bridge…",
-            "done Removed from Thunderbolt Bridge",
-            "running Creating the service…",
-            "done Created RDMA — Back, far left",
-            "running Setting the addresses…",
-            "done IPv4 off, IPv6 link-local only",
+            "done Saved how to undo this",
+            "running Leaving Thunderbolt Bridge…",
+            "done Left Thunderbolt Bridge",
+            "running Getting its own network service…",
+            "done Got its own network service, RDMA — Back, far left",
+            "running Turning IPv4 off, IPv6 to link-local…",
+            "done Turned IPv4 off, IPv6 to link-local",
             "running Checking every bridge…",
             "done Out of every bridge",
         ])
@@ -290,7 +290,7 @@ struct OperationsSetUpTests {
         #expect(rows[0].title == "Save how to undo this")
         #expect(rows[0].before == "Nothing saved")
         #expect(rows[0].after == "Saved")
-        #expect(rows[1].title == "Leave the Thunderbolt Bridge")
+        #expect(rows[1].title == "Leave Thunderbolt Bridge")
         #expect(rows[1].before == "In the bridge")
         #expect(rows[1].after == "Standalone")
         #expect(rows[1].body.contains("This port is a member of Thunderbolt Bridge."))
@@ -298,6 +298,64 @@ struct OperationsSetUpTests {
         #expect(rows[2].before == "Doesn't exist")
         #expect(rows[3].after == "IPv4 off, IPv6 link-local only")
         #expect(plan.defaultButtonTitle == "Set Up Port")
+    }
+
+    @Test("S6's checklist is S5's rows, word for word (§S6)")
+    func checklistIsTheReview() throws {
+        let plan = SetUpPorts(ports: [Fixtures.port]).preview(
+            world: Fixtures.world(ifconfig: Fixtures.inOneBridge))
+        let port = try #require(plan.ports.first)
+        let steps: [OperationStep] = [
+            .saveUndoNote, .leaveBridge(named: port.bridgeNames[0]),
+            .createService(named: port.serviceName), .setAddresses,
+        ]
+        #expect(steps.map(\.pending) == port.rows.map(\.title))
+        #expect(steps.map(\.running) == [
+            "Saving how to undo this…", "Leaving Thunderbolt Bridge…",
+            "Getting its own network service…", "Turning IPv4 off, IPv6 to link-local…",
+        ])
+        #expect(steps.map(\.done) == [
+            "Saved how to undo this", "Left Thunderbolt Bridge",
+            "Got its own network service, RDMA — Back, far left",
+            "Turned IPv4 off, IPv6 to link-local",
+        ])
+        #expect(OperationStep.leaveBridge(named: "Thunderbolt Bridge 2").pending
+                == "Leave Thunderbolt Bridge 2", "one step per bridge, each by its own name")
+        #expect(!SetUpPortsPlan.whatRDMALinkWontTouch.contains("The Thunderbolt Bridge"),
+                "Thunderbolt Bridge is a name, with no article (§1.3 rule 12)")
+    }
+
+    @Test("Orange asks for an act; what is plugged in only informs (§3.1, §S4, §S5)")
+    func separatesWarningsFromInformation() throws {
+        var empty = Fixtures.port
+        empty.link = .empty
+        var dock = Fixtures.port
+        dock.link = .device
+        let off = SetUpPorts(ports: [empty]).preview(
+            world: Fixtures.world(ifconfig: Fixtures.inOneBridge, ports: [empty], rdma: .off))
+        let emptyPlan = try #require(off.ports.first)
+        #expect(emptyPlan.warnings == [
+            "RDMA over Thunderbolt is still off. The port will be ready; RDMA will start using it after you turn that on and restart.",
+        ], "only switching RDMA on asks something of the user")
+        #expect(emptyPlan.informationalLines == [
+            "Nothing is plugged into this port yet. That's fine — the address appears when a Mac arrives.",
+        ])
+        let on = SetUpPorts(ports: [dock]).preview(
+            world: Fixtures.world(ifconfig: Fixtures.inOneBridge, ports: [dock],
+                                  rdma: .on(devices: ["rdma_en6"])))
+        let dockPlan = try #require(on.ports.first)
+        #expect(dockPlan.warnings.isEmpty)
+        #expect(dockPlan.informationalLines == [
+            SetUpPorts.informationalLine(for: .device) ?? "",
+        ])
+        #expect(SetUpPorts.informationalLine(for: .device)
+                == "There's a dock or a display in this port. It'll keep working exactly as it does now — RDMA will use the port once a Mac is on the other end.")
+        #expect(SetUpPorts.informationalLine(for: .device, naming: "Back, far right")
+                == "There's a dock or a display in Back, far right. It'll keep working exactly as it does now — RDMA will use the port once a Mac is on the other end.")
+        #expect(SetUpPorts.informationalLine(for: .empty, naming: "Back, far left")
+                == "Nothing is plugged into Back, far left yet. That's fine — the address appears when a Mac arrives.")
+        #expect(SetUpPorts.informationalLine(for: .macLinked) == nil
+                && SetUpPorts.informationalLine(for: .macLinkComingUp) == nil)
     }
 
     @Test("Two bridges get the spec's second sentence and its own chip")
@@ -335,7 +393,7 @@ struct OperationsSetUpTests {
         #expect(lines.contains("IPv6 configuration: Link-local only"))
     }
 
-    @Test("Two ports name the button for exactly what it will do")
+    @Test("Two ports name the button for exactly what it will do, the count spelled out")
     func namesTheButtonForTwoPorts() throws {
         // Nothing on the end of the second one: two linked Macs would be R1,
         // and the button would be gone rather than renamed.
@@ -346,7 +404,27 @@ struct OperationsSetUpTests {
         let plan = SetUpPorts(ports: [Fixtures.port, second]).preview(
             world: Fixtures.world(ifconfig: Fixtures.standalone,
                                   ports: [Fixtures.port, second]))
-        #expect(plan.defaultButtonTitle == "Set Up 2 Ports")
+        #expect(plan.defaultButtonTitle == "Set Up Two Ports")
+
+        var third = second
+        third.bsdName = "en8"
+        third.positionName = "Back, middle right"
+        let three = SetUpPorts(ports: [Fixtures.port, second, third]).preview(
+            world: Fixtures.world(ifconfig: Fixtures.standalone,
+                                  ports: [Fixtures.port, second, third]))
+        #expect(three.buttonTitle == "Set Up Three Ports")
+    }
+
+    @Test("Every count in the copy is spelled out by one formatter, in English (§1.3 rule 1)")
+    func spellsCountsOut() {
+        #expect(Counts.spelledOut(2, capitalized: true) == "Two")
+        #expect(Counts.spelledOut(3, capitalized: false) == "three")
+        #expect(Counts.spelledOut(11, capitalized: true) == "Eleven")
+        // Pinned to the language every sentence around it is written in,
+        // whatever the user's locale, so a count never lands in French.
+        #expect(Counts.english.identifier == "en_US")
+        #expect(RestoreAll.count(3, capitalized: true) == "Three ports")
+        #expect(RestoreAll.count(1, capitalized: false) == "one port")
     }
 
     @Test("The completion line is the spec's sentence")

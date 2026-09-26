@@ -12,6 +12,10 @@
 //  Nothing here edits an entry. An entry that has been undone is answered by a
 //  later entry, never by rewriting the old one.
 //
+//  Its buttons are band 4's while it is up (`ChangeLogFooter`): the hub's
+//  footer and link row step aside, so the window has one button row and one
+//  default (§2.3 band 4).
+//
 
 import SwiftUI
 import RDMALinkCore
@@ -24,16 +28,19 @@ struct ChangeLogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("What RDMALink has changed on this Mac")
-                .font(.title2.weight(.semibold))
             let rows = ChangeLogRows.rows(
                 entries: hub.log, ports: hub.ports, noted: hub.noted)
-            if rows.isEmpty {
-                Text("Nothing yet. When RDMALink changes something, it'll be listed here with a way back.")
+            // §S11: a headline and one body line, like every other screen —
+            // where the notes live, or the empty sentence in its place.
+            VStack(alignment: .leading, spacing: 8) {
+                Text(ChangeLogRows.headline)
+                    .font(.title2.weight(.semibold))
+                Text(ChangeLogRows.body(isEmpty: rows.isEmpty))
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-            } else {
+            }
+            if !rows.isEmpty {
                 ScrollView {
                     GroupedSection {
                         ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
@@ -44,22 +51,27 @@ struct ChangeLogView: View {
                 }
                 .scrollBounceBehavior(.basedOnSize)
             }
-            Text("RDMALink keeps one small note per port, in your Library folder. They're only notes — they don't change anything on their own.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 10) {
-                Button("Show Notes in Finder") { WizardFinder.showNotesFolder() }
-                Button("Save Diagnostics File…") { DiagnosticsFile.save() }
-                Spacer(minLength: 0)
-                Button("Done") { hub.closeChangeLog() }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task { await hub.reloadLog() }
         .onDisappear { stage.hover(nil) }
+    }
+}
+
+/// §S11's buttons, in band 4 while the log holds the working area:
+/// `Show Notes in Finder` · `Save Diagnostics File…` · `Done`, `Done` the
+/// default and trailing, the others just before it (§2.3 band 4).
+struct ChangeLogFooter: View {
+    let hub: HubActionsModel
+
+    var body: some View {
+        ScreenFooter {
+            Button("Show Notes in Finder") { WizardFinder.showNotesFolder() }
+            Button("Save Diagnostics File…") { DiagnosticsFile.save() }
+            Button("Done") { hub.closeChangeLog() }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+        }
     }
 }
 
@@ -88,9 +100,14 @@ struct ChangeLogEntryRow: View {
             // §6.2 R31: "the change log still work[s]" — as a record. Its
             // way back for each entry writes, so on a Mac RDMALink does not
             // recognize the entries are read and the buttons are absent.
-            if let action = row.action, !hub.isUnrecognized {
-                Button(action.title) { hub.perform(action) }
+            // §S1: an entry's set-up button is the port row's own, on the
+            // footer's terms — absent where the footer offers no set-up (R23),
+            // disabled while two Macs are connected (R1) — and it reads as
+            // the row's does.
+            if let action = row.action, !hub.isUnrecognized, hub.footer.offers(action) {
+                Button(action.rowTitle) { hub.perform(action) }
                     .inlineAction()
+                    .disabled(!hub.footer.allows(action))
             }
         }
         // §S11: undone entries stay, greyed, with the action replaced by a note.
@@ -102,96 +119,6 @@ struct ChangeLogEntryRow: View {
             // An entry for a port that is not here any more produces no
             // highlight, and the row has already said why.
             stage.hover(isInside ? row.portID : nil)
-        }
-    }
-}
-
-/// One line of §S11, ready to draw.
-struct ChangeLogRow: Sendable, Equatable, Identifiable {
-    var id: UUID
-    /// `3 September, 14:21 — Back, far left`.
-    var head: String
-    /// The sentence as it was written at the time. The record is kept, never
-    /// rewritten.
-    var sentence: String
-    /// What happened to it since, when something did.
-    var note: LocalizedStringResource?
-    var action: HubAction?
-    /// The receptacle to light on hover, or `nil` when the port has gone.
-    var portID: String?
-    var isDimmed: Bool
-}
-
-enum ChangeLogRows {
-    /// Newest first, each entry answered by whatever happened to it later.
-    static func rows(
-        entries: [ChangeEntry], ports: [PortSnapshot], noted: Set<String>
-    ) -> [ChangeLogRow] {
-        // §S11 lists entry sentences for set-up, adopt and a return to the
-        // bridge, and writes "Already put back on…" and its kin only as the
-        // **note** an answered entry carries. A restore, a stop and a forget
-        // are each already shown as that note on the entry they answer, so
-        // drawing them again as rows of their own would print one moment
-        // twice — the second time as a row that repeats its own timestamp and
-        // has no action. The entries stay in the file: the log is append-only
-        // and `ChangeLog.answer` matches on them. **Owed from the spec
-        // owner:** an entry sentence of their own, if they are meant to be
-        // rows.
-        entries.filter { isARow($0.kind) }.map { entry in
-            let port = ports.first { $0.port.bsdName == entry.port }
-            let head: String.LocalizationValue =
-                "\(Moments.dayAndTime(entry.date)) — \(entry.positionName)"
-            // Core decides what answers what and which of §S11's notes that
-            // is, so the app and the `rdmalink changes` tool read the same
-            // log the same way.
-            let later = ChangeLog.answer(to: entry, in: entries)
-            return ChangeLogRow(
-                id: entry.id,
-                head: String(localized: head),
-                sentence: entry.sentence,
-                note: note(for: entry, answeredBy: later, portIsHere: port != nil),
-                action: action(for: entry, answeredBy: later, port: port, noted: noted),
-                portID: port?.id,
-                isDimmed: later != nil)
-        }
-    }
-
-    private static func isARow(_ kind: ChangeKind) -> Bool {
-        switch kind {
-        case .setUp, .adopted, .returned: true
-        case .restored, .stoppedManaging, .forgotten: false
-        }
-    }
-
-    private static func note(
-        for entry: ChangeEntry, answeredBy later: ChangeEntry?, portIsHere: Bool
-    ) -> LocalizedStringResource? {
-        if let later {
-            return LocalizedStringResource(core: ChangeLog.note(for: entry, answeredBy: later))
-        }
-        guard !portIsHere else { return nil }
-        return LocalizedStringResource(core: ChangeSentence.portIsGone)
-    }
-
-    private static func action(
-        for entry: ChangeEntry,
-        answeredBy later: ChangeEntry?,
-        port: PortSnapshot?,
-        noted: Set<String>
-    ) -> HubAction? {
-        guard later == nil else { return nil }
-        guard let port else {
-            // §S11: the note for a port that has gone stays until it is
-            // cleared, and clearing it is the only thing left to offer.
-            return noted.contains(entry.port) ? .forgetThisNote(port: entry.port) : nil
-        }
-        switch entry.kind {
-        // §S11's returned entry offers `Set It Up Again`, which needs no note:
-        // it is the ordinary set-up of a port that is in the bridge.
-        case .returned: return .setItUpAgain(portID: port.id)
-        case .setUp: return port.baseline != nil ? .restore(portID: port.id) : nil
-        case .adopted: return port.baseline != nil ? .stopManaging(portID: port.id) : nil
-        case .restored, .stoppedManaging, .forgotten: return nil
         }
     }
 }

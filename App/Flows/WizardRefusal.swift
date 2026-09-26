@@ -42,6 +42,8 @@ enum WizardAction: String, Sendable, Equatable, Hashable, Identifiable, CaseIter
     case useThisPort
     case identifyAgain
     case identifyPort
+    /// S7's footer button beside `Done` (§S7, §2.3 band 4).
+    case whatToDoOnTheOtherMac
     case cancel
     case `continue`
 
@@ -67,8 +69,9 @@ enum WizardAction: String, Sendable, Equatable, Hashable, Identifiable, CaseIter
         case .takeAnotherLook: "Take Another Look"
         case .chooseFromList: "Choose from List"
         case .useThisPort: "Use This Port"
-        case .identifyAgain: "Identify Again"
+        case .identifyAgain: "Identify Again…"
         case .identifyPort: "Identify Port…"
+        case .whatToDoOnTheOtherMac: "What to Do on the Other Mac"
         case .cancel: "Cancel"
         case .continue: "Continue"
         }
@@ -105,6 +108,26 @@ struct WizardRefusal: Sendable, Equatable, Identifiable {
     var watchingLine: LocalizedStringResource?
 
     var id: String { code }
+
+    /// The same card without these buttons. The screen a card lands on
+    /// decides some of its row: in the working area the footer's leading
+    /// button is the way out and a card never repeats it (§6.1 rule 10), and
+    /// a run with no picker has no `Choose Another Port` (§6.2 R16).
+    func removing(_ unwanted: Set<WizardAction>) -> WizardRefusal {
+        var card = self
+        card.actions.removeAll { unwanted.contains($0) }
+        return card
+    }
+
+    /// The same card with `action` at the end of its row, unless it is there
+    /// already. A refused S6 hides the footer, so its card carries `Done`
+    /// (§S6).
+    func adding(_ action: WizardAction) -> WizardRefusal {
+        guard !actions.contains(action) else { return self }
+        var card = self
+        card.actions.append(action)
+        return card
+    }
 
     init(
         code: String,
@@ -173,11 +196,14 @@ enum WizardRefusals {
 
     // MARK: - R6, R7 — permission
 
+    // §6.1 rule 10: in the working area the footer's leading button is the way
+    // out, and a card never repeats it — so no card here carries `Back`.
+
     static let notAnAdministrator = WizardRefusal(
         code: "R6",
         headline: "This account can't change network settings",
         body: "macOS only lets an administrator rearrange network connections. Log in as an administrator, or ask someone who is to sit down for thirty seconds — that's genuinely all it takes. The name and password don't have to be yours.",
-        actions: [.openUsersAndGroups, .back]
+        actions: [.openUsersAndGroups]
     )
 
     static let noAuthorization = WizardRefusal(
@@ -185,10 +211,15 @@ enum WizardRefusals {
         symbol: "lock",
         headline: "No changes were made",
         body: "Without an administrator's permission RDMALink can't touch the bridge — and it didn't. Everything is exactly as it was. Try again whenever you're ready; the name and password don't have to be yours.",
-        actions: [.tryAgain, .back]
+        actions: [.tryAgain]
     )
 
     // MARK: - R8, R10, R11 — after a write
+
+    // §S6: on a refused S6 the footer's leading button is hidden, so these
+    // cards hold every way out. `Done` leaves the assistant
+    // (`SetUpFlow.leave()`); R11 has it too and never returns to S5 — which
+    // is why it has no `Check Again`, whose way on from S6 is S5 (§6.2 R11).
 
     static let credentialExpired = WizardRefusal(
         code: "R8",
@@ -224,7 +255,7 @@ enum WizardRefusals {
             headline: "One thing needs your hand",
             body: "RDMALink took \(positionName) out of Thunderbolt Bridge, then couldn't finish — and couldn't put it back either. Nothing is broken, but the port is currently in neither place. Open System Settings, under Network, choose Manage Virtual Interfaces, open Thunderbolt Bridge, and add the port back. Here is exactly how it was.",
             detail: "Bridge: \(bridgeDisplayName) (\(bridgeBSDName)) · Members before: \(membersBefore.formatted(.list(type: .and))) · Members now: \(membersNow.formatted(.list(type: .and))) · The port to add back: \(portBSDName) — \(positionName)",
-            actions: [.openNetworkSettings, .copyDetails, .checkAgain],
+            actions: [.openNetworkSettings, .copyDetails, .done],
             subjects: [portBSDName]
         )
     }
@@ -249,8 +280,8 @@ enum WizardRefusals {
             headline: "Something else has the network open",
             body: "System Settings, or another app, is editing the network configuration right now. RDMALink won't write over it — two things writing network settings at once is how configurations get mangled. Close that and RDMALink will try again.",
             actions: bySystemSettings
-                ? [.checkAgain, .quitSystemSettings, .back]
-                : [.checkAgain, .back]
+                ? [.checkAgain, .quitSystemSettings]
+                : [.checkAgain]
         )
     }
 
@@ -260,8 +291,8 @@ enum WizardRefusals {
         code: "R13",
         symbol: "building.2",
         headline: "This Mac's network settings are managed for you",
-        body: "A configuration profile on this Mac owns the network setup, and it will quietly put back anything RDMALink changes. It'd rather tell you now than have you wonder later why the link keeps vanishing. Whoever manages this Mac can make an exception for Thunderbolt.",
-        actions: [.showProfile, .copyDetailsForIT, .back]
+        body: "A configuration profile on this Mac owns the network setup, and it will quietly put back anything RDMALink changes. Better to say so now than have you wonder later why the link keeps vanishing. Whoever manages this Mac can make an exception for Thunderbolt.",
+        actions: [.showProfile, .copyDetailsForIT]
     )
 
     /// The refusal that protects every other promise in the app, and it comes
@@ -290,30 +321,50 @@ enum WizardRefusals {
         WizardRefusal(
             code: "R15",
             headline: "There's a bridge here RDMALink can't make sense of",
-            body: "\(positionName) belongs to a bridge whose settings RDMALink can't read properly, and a port has to be out of every bridge — even one that isn't switched on — before it can carry RDMA. It won't guess at this. Have a look in Network settings, under Manage Virtual Interfaces, and it'll check again when you're back.",
+            body: "\(positionName) belongs to a bridge whose settings RDMALink can't read properly, and a port has to be out of every bridge — even one that isn't switched on — before it can carry RDMA. RDMALink won't guess at this. Have a look in Network settings, under Manage Virtual Interfaces, and RDMALink checks again when you're back.",
             actions: [.openNetworkSettings, .checkAgain, .copyDetails],
             subjects: [portBSDName]
         )
     }
 
-    static func foreignService(positionName: String, portBSDName: String) -> WizardRefusal {
+    /// R16 in either of §6.2's bodies: a fixed IPv4 address, or a service of
+    /// the port's own while it is still in a bridge — which neither set-up
+    /// nor Adopt can take (§7.3, `PortSnapshot.hasAServiceInABridge`).
+    static func foreignService(
+        positionName: String, portBSDName: String, stillInABridge: Bool = false
+    ) -> WizardRefusal {
         WizardRefusal(
             code: "R16",
             headline: "This port already has a setup RDMALink didn't make",
-            body: "There's a service on \(positionName) with a fixed IPv4 address on it. It isn't RDMALink's and it isn't what a link needs, and RDMALink won't quietly rewrite something you or someone else set up on purpose. Remove it in Network settings if it's stale, or choose another port.",
+            body: stillInABridge
+                ? "There's a service of its own on \(positionName), and the port is still in a bridge. It isn't RDMALink's and it isn't what a link needs, and RDMALink won't quietly rewrite something you or someone else set up on purpose. Remove it in Network settings if it's stale, or choose another port."
+                : "There's a service on \(positionName) with a fixed IPv4 address on it. It isn't RDMALink's and it isn't what a link needs, and RDMALink won't quietly rewrite something you or someone else set up on purpose. Remove it in Network settings if it's stale, or choose another port.",
             actions: [.openNetworkSettings, .chooseAnotherPort, .copyDetails],
             subjects: [portBSDName]
         )
     }
 
-    static let arrangementChanged = WizardRefusal(
-        code: "R17",
-        symbol: "arrow.triangle.2.circlepath",
-        headline: "Something moved",
-        body: "A cable changed while this was on screen, so what you just read isn't true any more. RDMALink stopped before doing anything rather than act on old information.",
-        rollbackLine: WizardRefusalStrings.nothingChanged,
-        actions: [.takeAnotherLook]
-    )
+    /// R16 for the port as it was read.
+    static func foreignService(_ snapshot: PortSnapshot) -> WizardRefusal {
+        foreignService(
+            positionName: snapshot.port.positionName, portBSDName: snapshot.port.bsdName,
+            stillInABridge: snapshot.hasAServiceInABridge)
+    }
+
+    /// - Parameter subjects: the receptacles that moved, which ring while the
+    ///   card is up and breathe once when `Take Another Look` reads S5 again
+    ///   (§6.2 R17's recovery).
+    static func arrangementChanged(subjects: [String] = []) -> WizardRefusal {
+        WizardRefusal(
+            code: "R17",
+            symbol: "arrow.triangle.2.circlepath",
+            headline: "Something moved",
+            body: "A cable changed while this was on screen, so what you just read isn't true any more. RDMALink stopped before doing anything rather than act on old information.",
+            rollbackLine: WizardRefusalStrings.nothingChanged,
+            actions: [.takeAnotherLook],
+            subjects: subjects
+        )
+    }
 
     // MARK: - R26 — every Thunderbolt port is occupied
 
@@ -332,7 +383,7 @@ enum WizardRefusals {
             code: "R26",
             symbol: "cable.connector",
             headline: "Every Thunderbolt port has something in it",
-            body: "You can still prepare any of them — or free up the one you want for the link and RDMALink will be ready.",
+            body: "You can still prepare any of them — or free up the one you want for the link.",
             detail: detail,
             watchingLine: WizardRefusalStrings.keepWatching
         )
@@ -340,14 +391,30 @@ enum WizardRefusals {
 
     // MARK: - R27 — routing, not refusing
 
-    /// A port that is already ready: the row offers `Restore…` and the working
-    /// area prints one line. Not a refusal — there is no closed door here.
-    static let alreadyALink: LocalizedStringResource =
-        "This one's already a link. Want to see how it's doing?"
+    /// S9's full-match headline, which R27's backstop carries for a port that
+    /// is set up properly (§S5).
+    static let alreadySetUpHeadline: LocalizedStringResource = "This port is already set up"
 
-    /// A port somebody set up by hand: the app routes silently to Adopt.
-    static let alreadyDoneProperly: LocalizedStringResource =
-        "This one's already done — and done properly. Here's what RDMALink found."
+    /// §S5's backstop for R27: a port Core would route to Adopt and never plan
+    /// (`SetUpPortPlan.routesToAdopt`) that reached Review anyway. Never an
+    /// empty Review with four rows and nothing to press: its section is this
+    /// card — the line the picker would have printed for the port
+    /// (`ChoosePortReport.routingLine`) under a headline that follows the
+    /// route (`ChoosePortReport.backstopHeadline`) — with no button of its
+    /// own, because the footer's leading button is the way out (§6.1 rule 10)
+    /// and the row's route opens a sheet, which nothing opens over Review
+    /// (§2.6).
+    static func routesToAdopt(
+        line: LocalizedStringResource, headline: LocalizedStringResource, portBSDName: String
+    ) -> WizardRefusal {
+        WizardRefusal(
+            code: "R27",
+            symbol: "checkmark.circle",
+            headline: headline,
+            body: line,
+            subjects: [portBSDName]
+        )
+    }
 }
 
 // MARK: - Core's refusals
@@ -376,11 +443,17 @@ extension WizardRefusal {
             isAttention: Self.isAttention(refusal.code),
             headline: LocalizedStringResource(core: refusal.headline),
             body: LocalizedStringResource(core: refusal.body),
-            detail: refusal.detail.map { LocalizedStringResource(core: $0) },
+            // §6.2 R20 on S5: no Steps paragraph — its `Try Again` is the
+            // Restore sheet's, which S5 doesn't have.
+            detail: refusal.code == .notBackInBridge
+                ? nil : refusal.detail.map { LocalizedStringResource(core: $0) },
             rollbackLine: Self.rollbackLine(for: refusal.code),
             actions: Self.actions(for: refusal.code),
             subjects: refusal.subjects,
+            // §6.1 rule 5: a card with no button watches itself and clears —
+            // except R31, which never clears, so it says nothing of the kind.
             watchingLine: Self.actions(for: refusal.code).isEmpty
+                && refusal.code != .macNotRecognized
                 ? WizardRefusalStrings.keepWatching : nil)
     }
 
@@ -397,7 +470,9 @@ extension WizardRefusal {
 
     private static func isAttention(_ code: RefusalCode) -> Bool {
         switch code {
-        case .onlyRouteIsThunderbolt, .baselineUnwritable, .rollbackFailed: true
+        // §3.1: orange is for a refusal whose way through is the user's to
+        // take — R20's included, which set-up raises on S5 (§6.2 R20).
+        case .onlyRouteIsThunderbolt, .baselineUnwritable, .rollbackFailed, .notBackInBridge: true
         default: false
         }
     }
@@ -421,31 +496,41 @@ extension WizardRefusal {
         case .volumeMounted: [.showInFinder]
         case .onlyRouteIsThunderbolt: [.openNetworkSettings, .checkAgain]
         case .portStillInBridge: [.openNetworkSettings, .checkAgain, .copyDetails]
+        // §S6: a refused S6 hides the footer's leading button, so these
+        // three carry `Done`, which leaves the assistant — R11 included,
+        // which never returns to S5: its `Check Again` reads this Mac again
+        // in place and stays on S6 (`SetUpFlow.checkAgain`).
         case .rolledBack: [.tryAgain, .done, .copyDetails]
         case .credentialExpired: [.tryAgain, .done, .copyDetails]
         // §6.2 R12's `Quit System Settings` appears "only when System Settings
         // is the holder", which `SCPreferencesLock` does not report, so the
-        // two actions that are always honest stand.
+        // one action that is always honest stands: `Check Again` reads S5
+        // again, or goes back to it from S6 (`SetUpFlow.checkAgain`). The way
+        // out is the footer's (§6.1 rule 10).
         // **Owed from Core:** which process holds the configuration.
-        case .networkBusy: [.checkAgain, .back]
-        case .rollbackFailed: [.openNetworkSettings, .copyDetails, .checkAgain]
+        case .networkBusy: [.checkAgain]
+        case .rollbackFailed: [.openNetworkSettings, .copyDetails, .checkAgain, .done]
         case .baselineUnwritable: [.checkAgain, .showNotesInFinder, .copyDetails]
         case .bridgeUnreadable: [.openNetworkSettings, .checkAgain, .copyDetails]
         case .foreignService: [.openNetworkSettings, .chooseAnotherPort, .copyDetails]
         case .topologyChanged: [.takeAnotherLook]
-        // R19–R21 and R28–R30 are raised inside the Restore and Adopt sheets,
-        // which own their own button rows (§6.1 rule 1's one exception). If one
-        // reaches the assistant it gets the two actions every refusal can
-        // honour rather than a guess at the spec's row.
-        case .undoNoteMissing, .notBackInBridge, .originalBridgeGone,
+        // §6.2 R20's form on S5, where set-up raises it after the password
+        // for a port that needs putting back by hand: the way through is in
+        // Network settings, and the footer's leading button is the way out.
+        case .notBackInBridge: [.openNetworkSettings, .copyDetails]
+        // R19, R21 and R28–R30 are raised inside the Restore and Adopt
+        // sheets, which own their own button rows (§6.1 rule 1's one
+        // exception), and no set-up raises them. Should one reach the
+        // assistant it gets the two actions every refusal can honour rather
+        // than a guess at a row the spec doesn't give it.
+        case .undoNoteMissing, .originalBridgeGone,
             .createdServiceEdited, .noBridgeToReturnTo, .noteIsAReturnRecord:
             [.checkAgain, .copyDetails]
         // §6.2 R31: "Buttons: none." It never reaches the assistant — an
         // unrecognized Mac has no way into S3 (§S4) — and if one did, the
-        // only honest button is the way out §6.1 rule 10 leaves on every
-        // refusal. Not an empty row: that would print "RDMALink is watching",
-        // and R31 never clears.
-        case .macNotRecognized: [.back]
+        // footer's `Cancel` is the way out §6.1 rule 10 leaves, and the card
+        // carries no watching line, because R31 never clears (see `init`).
+        case .macNotRecognized: []
         }
     }
 }

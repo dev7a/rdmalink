@@ -127,7 +127,7 @@ public struct CreatedServiceRecord: Sendable, Codable, Equatable {
 ///
 /// Its presence is what makes a note a **return record**: the port already has
 /// everything the note describes, so there is nothing for `Restore…` to put
-/// back, and the note stays only so the row can offer `Set It Up Again`.
+/// back, and the note stays only so the row can offer `Set Up Again…`.
 public struct BridgeReturn: Sendable, Codable, Equatable {
     /// The kernel interface name, such as `bridge0`.
     public var bsdName: String
@@ -220,8 +220,9 @@ public struct PortBaseline: Sendable, Codable, Equatable {
     }
 
     /// The note for a port RDMALink adopted: no bridge history, because it
-    /// never saw which bridge the port came from, and no created service,
-    /// because it did not create one.
+    /// never saw which bridge the port came from — or let its old note go
+    /// when it adopted over it (UX_SPEC §S9) — and no created service,
+    /// because it did not create this one.
     public static func adopted(
         bsdName: String,
         receptacle: Int,
@@ -250,10 +251,25 @@ public struct PortBaseline: Sendable, Codable, Equatable {
     /// The identifier of the service RDMALink created, when it has one.
     public var createdServiceIdentifier: String? { createdService?.identifier }
 
+    /// True when this is a note RDMALink wrote when it set the port up — not
+    /// adopted, not a return record — that names the service RDMALink made,
+    /// and `serviceID` is a different service. Matched by identifier, never
+    /// by name (`docs/ARCHITECTURE.md`, rule 2). A note that names no service
+    /// RDMALink made is never this: there is no identity to tell apart.
+    ///
+    /// On a port whose one service is `serviceID`, it means the service
+    /// RDMALink made is gone and somebody else's stands in its place —
+    /// UX_SPEC §S1's drift even when that service is exactly what RDMALink
+    /// would have made, and a note §S9's `Adopt` replaces.
+    public func namesAServiceOtherThan(_ serviceID: String) -> Bool {
+        guard !isAdopted, !isReturned, let created = createdServiceIdentifier else { return false }
+        return created != serviceID
+    }
+
     /// True when this note is a return record: Return to Bridge wrote it, the
     /// port has everything it describes, and `Restore…` has nothing to do
-    /// with it (§7.5 step 5). `Set It Up Again` replaces it and `Forget This
-    /// Port` clears it.
+    /// with it (§7.5 step 5). `Set Up Again…` replaces it and `Stop
+    /// Managing…` clears it.
     public var isReturned: Bool { returnedToBridge != nil }
 
     /// True when this note is a return record **and** the port still has what

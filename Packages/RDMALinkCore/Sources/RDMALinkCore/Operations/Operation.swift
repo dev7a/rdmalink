@@ -85,19 +85,26 @@ public enum StepState: Sendable, Equatable {
 /// The three strings per row are the spec's own, from the §S6 table and the
 /// §S10 step list. Nothing here is assembled out of fragments: a row that
 /// names a bridge or a service takes the whole name as one placeholder.
+///
+/// Set-up's first four steps are Review's four rows (§S5), word for word:
+/// the pending label is the row's title (``SetUpPorts/rows(serviceName:bridgeNames:)``),
+/// and the running and done labels are the same words in their -ing and past
+/// forms, so what the user read is what they watch happen (§S6).
 public enum OperationStep: Sendable, Equatable {
 
     // MARK: UX_SPEC §S6 — setting up
 
-    /// Step 1. The gate that protects every other promise, and it goes first.
+    /// Step 1, Review's "Save how to undo this". The gate that protects
+    /// every other promise, and it goes first.
     case saveUndoNote
-    /// Step 2, once per bridge the port has to leave.
+    /// Step 2, Review's "Leave Thunderbolt Bridge", once per bridge the port
+    /// has to leave, named as System Settings names it.
     case leaveBridge(named: String)
-    /// Step 3.
+    /// Step 3, Review's "Get its own network service".
     case createService(named: String)
-    /// Step 4.
+    /// Step 4, Review's "Turn IPv4 off, IPv6 to link-local".
     case setAddresses
-    /// Step 5.
+    /// Step 5, the check, a row of its own.
     case checkOutOfEveryBridge
 
     // MARK: UX_SPEC §S10 — restoring
@@ -123,9 +130,9 @@ public enum OperationStep: Sendable, Equatable {
         case .saveUndoNote:
             return "Save how to undo this"
         case let .leaveBridge(named):
-            return "Remove from \(named)"
+            return "Leave \(named)"
         case .createService:
-            return "Create the RDMA service"
+            return "Get its own network service"
         case .setAddresses:
             return "Turn IPv4 off, IPv6 to link-local"
         case .checkOutOfEveryBridge:
@@ -152,11 +159,11 @@ public enum OperationStep: Sendable, Equatable {
         case .saveUndoNote:
             return "Saving how to undo this…"
         case let .leaveBridge(named):
-            return "Removing from \(named)…"
+            return "Leaving \(named)…"
         case .createService:
-            return "Creating the service…"
+            return "Getting its own network service…"
         case .setAddresses:
-            return "Setting the addresses…"
+            return "Turning IPv4 off, IPv6 to link-local…"
         case .checkOutOfEveryBridge:
             return "Checking every bridge…"
         case .deleteCreatedService, .deleteForeignService:
@@ -178,13 +185,13 @@ public enum OperationStep: Sendable, Equatable {
     public var done: String {
         switch self {
         case .saveUndoNote:
-            return "Saved"
+            return "Saved how to undo this"
         case let .leaveBridge(named):
-            return "Removed from \(named)"
+            return "Left \(named)"
         case let .createService(named):
-            return "Created \(named)"
+            return "Got its own network service, \(named)"
         case .setAddresses:
-            return "IPv4 off, IPv6 link-local only"
+            return "Turned IPv4 off, IPv6 to link-local"
         case .checkOutOfEveryBridge:
             return "Out of every bridge"
         case .deleteCreatedService, .rejoinBridge, .checkBackInBridge,

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Whether this Mac has RDMA over Thunderbolt switched on, and whether the
-/// RDMA devices have actually turned up.
+/// RDMA devices have actually appeared.
 ///
 /// The switch itself is not the app's to flip: it lives in System Settings and
 /// needs a restart. RDMALink only reports what it finds, and re-checks.

@@ -16,6 +16,15 @@
 //  `canPerform` answers no for all of them there, and `perform` refuses
 //  them as well, so a disabled item is not the only guard.
 //
+//  Nothing re-enters a run (§2.7). While the set-up assistant is up the same
+//  two answer no to everything but the picker's own: on S4 the route it
+//  names for a dimmed row (`Restore…`, `Return to Bridge…` or `Adopt…`) and
+//  `Identify Port…`, which starts its S4b; on S4b to S7, nothing. `Change
+//  Log` and Help's `What to Do on the Other Mac` and `Save Diagnostics
+//  File…` wait for it to close as well. And a sheet is never replaced from
+//  outside it (§2.6): while one is up every item here answers no, and so do
+//  Help's `RDMALink Help` and `Save Diagnostics File…`.
+//
 
 import SwiftUI
 
@@ -50,19 +59,24 @@ struct PortCommands: View {
         item(.stopManaging(portID: selectedID))
     }
 
-    /// §2.8: whenever a restorable note exists the Port menu's `Restore…` is
-    /// enabled — "the one exception is an unrecognized Mac", where it is
-    /// present and unavailable. The model decides which port it means, and
-    /// `canPerform` answers for both, as it does for every other item.
+    /// §2.7, §2.8: the Port menu's `Restore…` means one port — the port in
+    /// hand, or the only noted one — or it is unavailable, because `Restore
+    /// All Ports…` sits right under it and one sheet has one name there. It
+    /// is unavailable on an unrecognized Mac too, and on the picker it means
+    /// the dimmed row last clicked and nothing else (§2.7). The model decides
+    /// which port it means, and `canPerform` answers for it, as it does for
+    /// every other item.
     private var restoreItem: some View {
-        Button("Restore…") {
-            guard let hub else { return }
-            hub.perform(hub.restoreAction)
+        let action = hub?.restoreOnePort
+        return Button("Restore…") {
+            if let hub, let action { hub.perform(action) }
         }
-        .disabled(hub.map { !$0.canPerform($0.restoreAction) } ?? true)
+        .disabled(action.map { hub?.canPerform($0) != true } ?? true)
     }
 
-    private var selectedID: String { hub?.selectedPort?.id ?? "" }
+    /// The hub's selection — or, on the picker, the dimmed row last clicked,
+    /// which is "that row" in §2.7 (`HubActionsModel.menuPortID`).
+    private var selectedID: String { hub?.menuPortID ?? "" }
 
     private func item(_ action: HubAction, key: KeyEquivalent? = nil) -> some View {
         Button(action.title) { hub?.perform(action) }
@@ -99,7 +113,7 @@ struct CheckAgainCommand: View {
 }
 
 /// Whether the main window has one of its sheets up, handed to the menu bar
-/// so the Help menu's save can wait for it (§S12).
+/// so the Help menu's items can wait for it (§2.6, §S12).
 struct PresentsSheetFocusedValueKey: FocusedValueKey {
     typealias Value = Bool
 }
@@ -113,25 +127,60 @@ extension FocusedValues {
 
 /// §2.7's `Save Diagnostics File…`, unavailable while the main window has a
 /// sheet up: a sheet never stacks on a sheet, and an app-wide save panel over
-/// one would be the same stacking by another name (§S12).
+/// one would be the same stacking by another name (§S12). Unavailable while
+/// the set-up assistant is up too: the save panel is a sheet on the window,
+/// and nothing but What This All Means opens a sheet over a run (§2.6, §2.7).
+/// The router answers for the assistant, as it does for `OtherMacCommand`.
 struct SaveDiagnosticsCommand: View {
+    let router: HubRouter
     @FocusedValue(\.presentsSheet) private var presentsSheet
 
     var body: some View {
         Button("Save Diagnostics File…") { DiagnosticsFile.save() }
+            .disabled(presentsSheet == true || router.isAssistantUp)
+    }
+}
+
+/// §2.7's `RDMALink Help` ⌘?, which opens §S13's sheet. It is the one sheet
+/// that opens over any step of a run, because it only reads (§2.6) — but
+/// never over another sheet, which would stack on it.
+struct HelpCommand: View {
+    let show: () -> Void
+    @FocusedValue(\.presentsSheet) private var presentsSheet
+
+    var body: some View {
+        Button("RDMALink Help", action: show)
+            .keyboardShortcut("?", modifiers: .command)
             .disabled(presentsSheet == true)
     }
 }
 
 /// The View menu's last item (§2.7), which shows §S11 in place of the working
-/// area rather than opening a sheet.
+/// area rather than opening a sheet — and so is unavailable while the set-up
+/// assistant holds the working area, rather than queued behind it
+/// (`HubActionsModel.canPerform`).
 struct ChangeLogCommand: View {
     @FocusedValue(\.hubActions) private var hub: HubActionsModel?
 
     var body: some View {
         Button("Change Log") { hub?.perform(.changeLog) }
             .keyboardShortcut("l", modifiers: .command)
-            .disabled(hub == nil)
+            .disabled(hub?.canPerform(.changeLog) != true)
+    }
+}
+
+/// Help › `What to Do on the Other Mac` (§2.7, §S8). A screen in the working
+/// area, so it is unavailable while the set-up assistant holds it — never
+/// queued to appear when the run ends. The router says so rather than the
+/// focused window, so the answer holds with Settings in front too. With the
+/// window closed there is no assistant either, and the item brings it back.
+struct OtherMacCommand: View {
+    let router: HubRouter
+    let show: () -> Void
+
+    var body: some View {
+        Button("What to Do on the Other Mac", action: show)
+            .disabled(router.isAssistantUp)
     }
 }
 

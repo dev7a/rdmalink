@@ -800,7 +800,7 @@ enum StageMath {
         /// Four arcs with four gaps: a bridge member.
         case segmented
         /// §S5's hover-to-preview: the same four arcs with the gaps widened a
-        /// hair, which is what "Leave the Thunderbolt Bridge" looks like a
+        /// hair, which is what "Leave Thunderbolt Bridge" looks like a
         /// moment before anyone agrees to it.
         case segmentedWide
         /// §S6: the segmented ring part way through closing. `gaps` is how many

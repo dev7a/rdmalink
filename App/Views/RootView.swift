@@ -57,6 +57,14 @@ struct RootView: View {
             }
         }
         .frame(minWidth: 840, minHeight: 600)
+        // §S6, §S10: a write is never cut off. From the password dialog to
+        // the last step, the window's dismiss functionality — its close
+        // button and File › Close ⌘W — is turned off, rather than left
+        // looking live and doing nothing (a `windowShouldClose` that says
+        // no), and once writing starts quitting waits in `BurstGate`.
+        // Checked against SwiftUI's documented contract, never by running a
+        // write.
+        .windowDismissBehavior(holdsTheWindow ? .disabled : .automatic)
         .navigationTitle("RDMALink")
         .navigationSubtitle(model.windowSubtitle)
         // §2.7: the View menu drives the stage and the Port menu drives the
@@ -95,7 +103,7 @@ struct RootView: View {
             if shows { actions.closeChangeLog() }
         }
         .onChange(of: actions.showsChangeLog) { _, shows in
-            if shows { router.showsOtherMac = false }
+            if shows { router.otherMac = nil }
         }
         .task { await model.start() }
         // §2.8: `Restore…` is offered whenever a note exists, including a note
@@ -103,6 +111,8 @@ struct RootView: View {
         // read once rather than inferred from the ports.
         .task {
             actions.attach(stage: stage)
+            // §S8 from the Help menu is about the port selected here.
+            router.attach(stage: stage)
             await actions.refreshNotes()
         }
         // §2.4: the inventory is mirrored onto the stage every time it changes,
@@ -126,7 +136,22 @@ struct RootView: View {
         .onChange(of: actions.pendingSetUp) { _, request in
             guard let request else { return }
             actions.pendingSetUp = nil
-            startSetUp(portID: request.portID)
+            startSetUp(request)
+        }
+        // §2.6, §2.7: the hub's actions and the menus leave the run alone
+        // while it is up, so they are told how far it has got.
+        .onChange(of: flow?.presence, initial: true) { _, presence in
+            actions.assistant = presence
+            router.isAssistantUp = presence != nil
+        }
+        // The router outlives the window; a window that goes takes its
+        // assistant with it.
+        .onDisappear { router.isAssistantUp = false }
+        // §S4b: the Port menu's ⌘I on the picker is the picker's Identify.
+        .onChange(of: actions.pendingIdentify) { _, requested in
+            guard requested else { return }
+            actions.pendingIdentify = false
+            flow?.beginIdentify()
         }
         // Every live read reaches the assistant, which re-derives every
         // screen from it — that is what makes a check flip in the same beat
@@ -206,13 +231,13 @@ struct RootView: View {
         )
     }
 
-    /// §S1: "double-clicking a configurable one starts set-up for it". Only
+    /// §S1: "double-clicking a configurable one opens Review for it". Only
     /// on the hub — inside a run the choice is the picker's — and only for a
     /// port set-up can take, the same question the row's `Set Up…` asks
     /// (`PortRowPresentation.offersSetUp`), so a ready, hand-configured or
     /// near-match port is not sent to a review that would refuse it or have
-    /// nothing to press. The run then opens on Review, the port already
-    /// chosen (§S4).
+    /// nothing to press. The double-click names its port, so the run opens
+    /// on Review, step 1 of 2, with no picker in it (§S4).
     private var doubleClickSetUp: ((StagePort) -> Void)? {
         guard flow == nil else { return nil }
         return { port in
@@ -277,23 +302,33 @@ struct RootView: View {
         switch route {
         case .hub:
             break
-        case .choose, .review, .reviewFromPicker:
+        case .choose, .review, .reviewFromPicker, .ready:
             // §S4: "An unrecognized Mac never reaches this screen: R31 offers
             // no set-up." The hook stops at the hub, as a person would.
             guard !actions.isUnrecognized else { return }
             switch route {
             case .choose:
-                // The picker, whatever a pre-selection would have done.
-                startSetUp(portID: nil)
-                flow?.route(to: .choose, openedOn: .choose)
+                // The picker as the footer opens it, pre-selection and all.
+                startSetUp(.choose(suggested: nil))
             case .review:
-                // As it opens from a port chosen on the hub: two steps.
-                startSetUp(portID: thunderbolt?.id)
-                flow?.route(to: .review, openedOn: .review)
+                // As a control that names its port opens it: two steps, and
+                // `Cancel` leading. The first port set-up can take, so the
+                // picture is of a plan rather than of R27's card.
+                let port = model.ports.first(where: PortRowPresentation.offersSetUp) ?? thunderbolt
+                guard let port else { return }
+                startSetUp(.port(port.id))
             case .reviewFromPicker:
-                // As it opens from the picker's `Continue`: three steps.
-                startSetUp(portID: nil)
+                // As it opens from the picker's `Continue`: three steps, and
+                // `Back` leading.
+                startSetUp(.choose(suggested: nil))
                 flow?.route(to: .review, openedOn: .choose)
+            case .ready:
+                // S7 for the port `review` names, in the run it opened —
+                // drawn from that port as it is, with nothing written.
+                let port = model.ports.first(where: PortRowPresentation.offersSetUp) ?? thunderbolt
+                guard let port else { return }
+                startSetUp(.port(port.id))
+                flow?.route(to: .ready, openedOn: .review)
             default:
                 break
             }
@@ -315,24 +350,42 @@ struct RootView: View {
         case .changelog:
             actions.perform(.changeLog)
         case .otherMac:
-            router.showsOtherMac = true
+            // As the Help menu opens it: about the port selected on the stage
+            // if that one is ready, and otherwise §S8's own rule.
+            router.showOtherMacFromHelp()
+        case .otherMacFromReady:
+            // As S7's `What to Do on the Other Mac` opens it, about the port
+            // the run set up. No run is made: the first ready port in
+            // physical order stands in for the port a run just set up.
+            guard let port = model.ports.ready.first else { return }
+            router.otherMac = .run(setUp: port.id)
         }
     }
 
     /// S7's `What to Do on the Other Mac`. §S8 is reached from S7, whose work
     /// is finished, so the assistant closes exactly as `Done` closes it and
-    /// the screen takes the working area it leaves. The Help menu reaches the
-    /// same screen without an assistant to close.
+    /// the screen takes the working area it leaves — about the port the run
+    /// just set up, the first in physical order when it set up several
+    /// (§S8 "Whose link"), read before the run is let go. The Help menu
+    /// reaches the same screen without an assistant to close.
     private func showOtherMac() {
-        if let flow, flow.step == .ready { flow.goForward() }
-        router.showsOtherMac = true
+        guard let flow, flow.step == .ready, let setUp = flow.selectedPorts.first?.id else {
+            router.otherMac = .help(selected: stage.selectedID)
+            return
+        }
+        flow.goForward()
+        router.otherMac = .run(setUp: setUp)
     }
 
     // MARK: - The set-up assistant (S4–S7)
 
     /// Builds the flow, hands it the reading it already has, and opens it on
-    /// the screen the choice calls for (§S4 "When this screen appears").
-    private func startSetUp(portID: String?) {
+    /// the screen the request calls for (§S4 "When this screen appears").
+    private func startSetUp(_ request: SetUpRequest) {
+        // Nothing re-enters a run (§2.7): a second request while one is up
+        // would drop the first — mid-burst, its answer unseen. The menus and
+        // the hub's door already refuse it; this is the last guard.
+        guard flow == nil else { return }
         // Reached from the hub alone, where this Mac is known and — on an
         // unrecognized one — every way in is absent (§S4, R31).
         guard let hardware = model.hardware, hardware.isRecognized else { return }
@@ -347,7 +400,18 @@ struct RootView: View {
             })
         self.flow = flow
         updateFlow()
-        flow.open(choosing: portID)
+        flow.open(request)
+    }
+
+    /// §S6, §S10: from the moment macOS's password dialog is asked for until
+    /// the last step lands — S6's run, or a Restore sheet's checklist. Not
+    /// from the first reported step: the burst writes the instant the
+    /// password is accepted, before any report reaches the main actor.
+    /// Quitting asks `BurstGate`, which opens with the credential.
+    private var holdsTheWindow: Bool {
+        let phase = flow?.apply?.phase
+        return phase == .authorizing || phase == .running
+            || actions.run?.holdsTheWindow == true
     }
 
     /// The whole assistant re-derives itself from this.

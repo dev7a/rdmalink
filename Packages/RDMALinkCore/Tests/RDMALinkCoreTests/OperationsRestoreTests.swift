@@ -77,19 +77,66 @@ struct OperationsRestoreTests {
         let writer = FakeWriter()
         writer.presentServiceIDs = ["XYZ"]  // somebody else's, same name
         writer.kernel = { _ in Fixtures.snapshot(Fixtures.inOneBridge) }
+        let bridge0 = BridgeSPI.Membership(bsdName: "bridge0", displayName: "Thunderbolt Bridge",
+                                           members: ["en5"])
 
+        // On another port it is simply not RDMALink's: the port goes back.
+        var elsewhere = Self.service(id: "XYZ", name: "RDMA — Back, far left")
+        elsewhere.interfaceBSDName = "en7"
         let result = try RestorePort(port: Fixtures.port).perform(
             writer: writer,
-            world: Fixtures.world(
-                ifconfig: Fixtures.standalone,
-                services: [Self.service(id: "XYZ", name: "RDMA — Back, far left")],
-                bridges: [BridgeSPI.Membership(bsdName: "bridge0",
-                                               displayName: "Thunderbolt Bridge",
-                                               members: ["en5"])]),
+            world: Fixtures.world(ifconfig: Fixtures.standalone, services: [elsewhere],
+                                  bridges: [bridge0]),
             environment: Fixtures.environment(store: store), progress: { _, _ in })
-
         #expect(result.serviceWasAlreadyGone, "RDMALink's own service is gone")
         #expect(writer.presentServiceIDs.contains("XYZ"), "somebody else's is untouched")
+    }
+
+    @Test("R28: a service set up by hand in the place of RDMALink's is neither deleted nor bridged")
+    func refusesAServiceReplacedByHand() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let note = Self.note(serviceID: "ABC")
+        try store.save(note)
+        let writer = FakeWriter()
+        writer.presentServiceIDs = ["XYZ"]
+        writer.kernel = { _ in Fixtures.snapshot(Fixtures.inOneBridge) }
+        // Exactly what RDMALink would have made, even under its name — and
+        // still not the service RDMALink made (§S1's drift).
+        let world = Fixtures.world(
+            ifconfig: Fixtures.standalone,
+            services: [Self.service(id: "XYZ", name: "RDMA — Back, far left")],
+            bridges: [BridgeSPI.Membership(bsdName: "bridge0", displayName: "Thunderbolt Bridge",
+                                           members: ["en5"])])
+
+        let plan = RestorePort(port: Fixtures.port).preview(note: note, world: world)
+        #expect(plan.refusal == Refusals.createdServiceReplaced(port: Fixtures.port.observed))
+        #expect(plan.refusal?.code == .createdServiceEdited && plan.refusal?.detail == nil)
+        #expect(plan.refusal?.headline == "This port's service isn't the one RDMALink made any more")
+        #expect(plan.refusal?.body == """
+            The service RDMALink created on Back, far left isn't there any more, and \
+            the one on the port now was set up by hand. RDMALink won't delete a service \
+            it didn't make, so it can't put the port back the way it was while that one \
+            is there. Remove it yourself in Network settings if you're done with it, or \
+            Stop Managing leaves everything exactly where it is.
+            """)
+        #expect(Refusals.createdServiceReplaced(port: Fixtures.port.observed, offersStopManaging: false)
+            .body.hasSuffix("while that one is there. Remove it yourself in Network settings if you're done with it."))
+        #expect(!plan.canProceed && !plan.mayRemoveServiceOnly)
+
+        #expect {
+            try RestorePort(port: Fixtures.port).perform(
+                writer: writer, world: world,
+                environment: Fixtures.environment(store: store), progress: { _, _ in })
+        } throws: { ($0 as? Refusal) == Refusals.createdServiceReplaced(port: Fixtures.port.observed) }
+        #expect(writer.calls == [.lock], "nothing is deleted and nothing rejoins a bridge")
+        #expect(writer.presentServiceIDs.contains("XYZ"))
+        #expect(try store.load(port: "en6") == note, "the note is kept")
+
+        // Once that service is gone, the port goes back.
+        let cleared = RestorePort(port: Fixtures.port).preview(
+            note: note, world: Fixtures.world(ifconfig: Fixtures.standalone, bridges: [Fixtures.bridge0]))
+        #expect(cleared.canProceed && cleared.isServiceAlreadyGone)
     }
 
     @Test("R19: no note means RDMALink won't guess")
@@ -210,7 +257,7 @@ struct OperationsRestoreTests {
                 environment: Fixtures.environment(store: store), progress: { _, _ in })
         } throws: { ($0 as? Refusal)?.code == .noteIsAReturnRecord }
         #expect(writer.calls == [.lock], "nothing is written, and no service is touched")
-        #expect(try store.load(port: "en6") == note, "the record stays for Set It Up Again")
+        #expect(try store.load(port: "en6") == note, "the record stays for Set Up Again")
     }
 
     @Test("R30's adopted form: an adopted note is named for what it is, and nothing is written")
@@ -378,9 +425,14 @@ struct OperationsRestoreTests {
             world: Fixtures.world(
                 ifconfig: Fixtures.standalone,
                 services: [Self.service(id: "ABC", name: "RDMA — Back, far left")]))
-        #expect(plan.headline == "Put Back, far left the way it was?")
+        #expect(plan.headline == "Put this port back the way it was?")
+        #expect(RestorePort.runningHeadline == "Putting this port back")
+        #expect(ReturnToBridge.headline() == "Return this port to Thunderbolt Bridge?"
+                && ReturnToBridge.runningHeadline() == "Returning this port to Thunderbolt Bridge")
+        #expect(RestoreAll.headline == "Put every port back?"
+                && RestoreAll.runningHeadline == "Putting every port back")
         #expect(plan.body.hasPrefix(
-            "RDMALink will delete the service it made and return the port to Thunderbolt Bridge — exactly as it was on "))
+            "RDMALink will delete the service it made and return Back, far left to Thunderbolt Bridge — exactly as it was on "))
         #expect(plan.rows == [
             "Delete the service RDMA — Back, far left",
             "Add the port back to Thunderbolt Bridge",

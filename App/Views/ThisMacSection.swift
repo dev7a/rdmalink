@@ -30,9 +30,12 @@ struct ThisMacRow: View {
             Text(row.text)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            // §2.3 band 3: `Turn It On…` and `Tell Me More` are inline
+            // actions beside the row's words, drawn as every other one in the
+            // column is — S7's `Turn It On…` included — in the accent.
             if let action = row.action {
                 Button(title(for: action)) { perform(action) }
-                    .controlSize(.small)
+                    .inlineAction()
             }
         }
         .padding(.vertical, 6)

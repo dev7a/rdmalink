@@ -14,25 +14,37 @@ import Foundation
 import RDMALinkCore
 
 /// What the configuration says about a port — UX_SPEC §4.3's outer track,
-/// reduced to the six answers the hub can actually observe.
+/// reduced to the seven answers the hub can actually observe.
 enum PortReadiness: Sendable, Equatable {
     /// Nothing to say beyond what is plugged in. Also the honest answer when
     /// the stored network configuration could not be read this time round: the
     /// app states what it observed and no more (§1.3 rule 10).
     case plain
-    /// Set up by RDMALink, and still exactly as RDMALink left it.
+    /// Set up by RDMALink, and still exactly as RDMALink left it: the service
+    /// on the port is the one RDMALink made, matched by identifier.
     case managed
     /// Already set up by hand, then adopted, and still matching.
     case adopted
     /// Exactly what RDMALink would have made, but RDMALink did not make it.
     case setUpElsewhere
-    /// RDMALink has a note for this port and the setup it describes is gone.
+    /// RDMALink has a note for this port and the setup it describes is gone —
+    /// its service replaced by hand included, even by exactly what RDMALink
+    /// would have made (§4.3, §S1): that one is ready, but it isn't
+    /// RDMALink's until the port is adopted (§S9).
     case drifted
     /// RDMALink itself put this port back into the Thunderbolt Bridge (§7.5),
     /// its note is still there, and the port still has what the note
     /// describes: it is in that bridge and has no service. Not drift (§4.3),
     /// and never a situation row.
     case returned
+    /// §S1, §7.4: a note that records the bridges the port came from, and
+    /// the port is now in none of them and has no service of its own — R11's
+    /// or R20's note kept on purpose, or the service RDMALink made removed by
+    /// hand since, whoever removed it. Observed, never remembered. A drift the app can name more
+    /// precisely, so it is its own state: its row offers `Restore…` and never
+    /// a set-up, which would write a fresh note over the only record of where
+    /// the port came from.
+    case needsAHand
 
     /// True for the ports §S1 counts under "Ports ready for RDMA".
     ///
@@ -45,12 +57,15 @@ enum PortReadiness: Sendable, Equatable {
     var isReady: Bool {
         switch self {
         case .managed, .adopted: true
-        case .plain, .setUpElsewhere, .drifted, .returned: false
+        case .plain, .setUpElsewhere, .drifted, .returned, .needsAHand: false
         }
     }
 
     /// §4.3 and §S9: exactly what RDMALink would have made, made by somebody
-    /// else. It is the one state `Adopt…` is offered from.
+    /// else, with no note of RDMALink's describing anything else. The other
+    /// rows that offer `Adopt…` are a near match (§S9) and a drifted port
+    /// whose service was replaced by hand (`PortSnapshot
+    /// .hasRDMALinksServiceReplacedByAMatch`).
     var isAdoptable: Bool { self == .setUpElsewhere }
 }
 
@@ -85,8 +100,52 @@ struct PortSnapshot: Sendable, Equatable, Identifiable {
             if holds { return .returned }
             return matches ? .setUpElsewhere : .plain
         }
-        guard matches else { return .drifted }
-        return baseline.isAdopted ? .adopted : .managed
+        guard matches else {
+            // Observed, never remembered: a note that records the bridges
+            // the port came from, a port that is now in none of them, and no
+            // service of its own. An adopted note has no bridge history and
+            // can never be this.
+            if !baseline.isAdopted, !baseline.bridges.isEmpty,
+                case .unconfigured(let bridges) = configuration, bridges.isEmpty {
+                return .needsAHand
+            }
+            return .drifted
+        }
+        if baseline.isAdopted { return .adopted }
+        // §S1, §4.3: "its service has been edited or replaced". The service
+        // RDMALink made is gone and the one standing in its place — exactly
+        // what RDMALink would have made — was made by hand, told apart by
+        // identifier as `hasRDMALinksOwnServiceEdited` tells them apart. It is
+        // not RDMALink's set-up, so the row is drift with `Adopt…`, never
+        // "Ready for RDMA" with a `Restore…` that would claim it.
+        if case .readyForRDMA(let serviceID) = configuration,
+            baseline.namesAServiceOtherThan(serviceID) {
+            return .drifted
+        }
+        return .managed
+    }
+
+    /// §S1's drifted port with a service of its own, split by identity: the
+    /// service on the port now is the very one RDMALink made — matched by
+    /// identifier, never by name (`docs/ARCHITECTURE.md` rule 2) — and it has
+    /// been edited since, into a near match or a fixed IPv4 address. Restore
+    /// raises R28 about it, truthfully; Adopt would tell the user "RDMALink
+    /// didn't make this service", and R16 "It isn't RDMALink's", both false.
+    var hasRDMALinksOwnServiceEdited: Bool {
+        guard readiness == .drifted, let created = baseline?.createdServiceIdentifier else {
+            return false
+        }
+        return serviceIdentifier == created
+    }
+
+    /// §S1's drifted port the other way round: the service RDMALink made is
+    /// gone, and a service made by hand that is exactly what RDMALink would
+    /// have made stands in its place. Ready, but not RDMALink's: set-up
+    /// would route it to Adopt and never plan it, and Adopt takes it,
+    /// replacing the note (§S9, §7.3).
+    var hasRDMALinksServiceReplacedByAMatch: Bool {
+        guard readiness == .drifted, case .readyForRDMA? = configuration else { return false }
+        return true
     }
 
     /// The link-local address with its scope suffix, the way UX_SPEC §S1 prints
@@ -117,9 +176,13 @@ extension Array where Element == PortSnapshot {
     /// The ports §S1's "Ports ready for RDMA" row names, in physical order.
     var ready: [PortSnapshot] { filter { $0.readiness.isReady } }
 
-    /// The ports §S1 offers `Adopt…` on, and the ones its ready row counts as
-    /// "set up outside RDMALink".
-    var adoptable: [PortSnapshot] { filter { $0.readiness.isAdoptable } }
+    /// The ports §S1's ready row counts as "set up outside RDMALink": exactly
+    /// what RDMALink would have made, made by somebody else — whether or not
+    /// RDMALink once set the port up and kept a note whose service has since
+    /// been replaced by that one. Each is offered `Adopt…`.
+    var adoptable: [PortSnapshot] {
+        filter { $0.readiness.isAdoptable || $0.hasRDMALinksServiceReplacedByAMatch }
+    }
 
     /// Ports with an established link to another Mac.
     var withLinkedMac: [PortSnapshot] { filter { $0.port.link == .macLinked } }
@@ -157,6 +220,18 @@ extension PortSnapshot {
         case .readyForRDMA?, .nearMatch?, .foreign?: true
         case .unconfigured?, nil: false
         }
+    }
+
+    /// A service of the port's own on a port that is still a member of a
+    /// bridge. Core classifies it as a near match whose first difference is
+    /// the bridge (`ConfigurationDifference.isBridgeMembership`), but Adopt is
+    /// only for a port out of every bridge (§7.3) and set-up never plans a
+    /// port with a service of its own (R27), so neither can take it: R16
+    /// answers for it (§6.2, `ChoosePortReport.route`), and `AdoptForm`
+    /// makes the same call.
+    var hasAServiceInABridge: Bool {
+        guard case .nearMatch(_, let differences)? = configuration else { return false }
+        return differences.contains(where: \.isBridgeMembership)
     }
 
     /// That service's identifier. Matching is by identifier, never by name

@@ -291,6 +291,18 @@ func runSetUp(_ names: [String]) throws {
     let operation = SetUpPorts(ports: ports)
     let plan = operation.preview(world: world)
 
+    // What the burst asks before it writes a thing and the preview cannot,
+    // because it reads the note: a port that needs putting back by hand is
+    // never set up over the only record of its bridges (UX_SPEC §S1, §6.2
+    // R20). The app never offers the set-up; the tool says what would happen.
+    var keptForAHand: [String: Refusal] = [:]
+    for port in plan.ports {
+        if let kept = try? notesStore.load(port: port.port.bsdName),
+            let refusal = SetUpPorts.keptForAHand(kept, plan: port, world: world) {
+            keptForAHand[port.port.bsdName] = refusal
+        }
+    }
+
     print(SetUpPortsPlan.headline)
     print(SetUpPortsPlan.body)
     if let refusal = plan.refusal {
@@ -301,7 +313,11 @@ func runSetUp(_ names: [String]) throws {
     for port in plan.ports {
         print("")
         print("\(port.header)  (\(port.port.bsdName))")
-        if let refusal = port.refusal { show(refusal); continue }
+        if let refusal = port.refusal ?? keptForAHand[port.port.bsdName] {
+            print("  In the way:")
+            show(refusal)
+            continue
+        }
         if port.routesToAdopt {
             print("  already set up — this port routes to Adopt, never to set-up")
         }
@@ -310,11 +326,13 @@ func runSetUp(_ names: [String]) throws {
             print("      \(row.body)")
         }
         for warning in port.warnings { print("  warning: \(warning)") }
+        for line in port.informationalLines { print("  note: \(line)") }
         print("  technical names:")
         for line in port.technicalNames { print("      \(line)") }
     }
     print("")
-    print("button: \(plan.defaultButtonTitle ?? "none — nothing to press")")
+    let button = keptForAHand.isEmpty ? plan.defaultButtonTitle : nil
+    print("button: \(button ?? "none — nothing to press")")
     print(SetUpPortsPlan.footnote)
 }
 
@@ -353,8 +371,8 @@ func runRestore(_ bsdName: String?) throws {
         print("Refusing: \(bsdName)'s note is a return record, not an undo note — Return to "
             + "Bridge put the port in \(returned.name) (\(returned.bsdName)) on "
             + "\(note.recordedAt.formatted(.iso8601)) and kept the note so the port can be "
-            + "set up again. There is nothing to restore. Set It Up Again or Forget This "
-            + "Port apply in the app; `rdmalink setup \(bsdName)` and "
+            + "set up again. There is nothing to restore. Set Up Again or Stop Managing "
+            + "apply in the app; `rdmalink setup \(bsdName)` and "
             + "`rdmalink stop-managing \(bsdName)` preview them.")
         return
     }
@@ -373,7 +391,7 @@ func runRestore(_ bsdName: String?) throws {
         print("")
         print("Refusing: \(bsdName)'s note is an adoption record, not an undo note — RDMALink "
             + "adopted the port as it found it on \(note.recordedAt.formatted(.iso8601)) and "
-            + "never saw which bridge it came from. There is nothing to restore; the port keeps "
+            + "keeps no record of which bridge it came from. There is nothing to restore; the port keeps "
             + "its setup. Stop Managing applies in the app; `rdmalink stop-managing "
             + "\(bsdName)` previews it.")
         return
@@ -406,7 +424,7 @@ func runRestoreAll() throws {
     for name in skipped { print("  (skipped \(name): its note records nothing to put back)") }
     guard !ports.isEmpty else { return }
     let operation = RestoreAll(ports: ports)
-    print(operation.headline)
+    print(RestoreAll.headline)
     print(operation.body)
     for port in ports { print("  · \(port.positionName) (\(port.bsdName))") }
     // Each port's restore would refuse with R31 before reading its note
@@ -465,7 +483,11 @@ func runAdopt(_ bsdName: String?) throws {
     let inventory = try Inventory.read()
     let port = operationPort(bsdName, in: inventory)
     let world = try observe([port], inventory)
-    let operation = AdoptPort(port: port)
+    // The note says which form the app would show: RDMALink's own service,
+    // still ready or edited since, is nothing to adopt, and a note whose
+    // service is gone, a matching one made by hand in its place, is one
+    // adopting replaces — which the honesty note owns up to (§S9).
+    let operation = AdoptPort(port: port, existingNote: try? notesStore.load(port: bsdName))
     let plan = operation.preview(world: world)
 
     print(plan.headline)
@@ -478,7 +500,9 @@ func runAdopt(_ bsdName: String?) throws {
         print("In the way:")
         show(refusal)
     }
-    print("buttons: \(list(plan.buttonTitles))")
+    // §2.6: adopting over a note that records bridges forgets the way back,
+    // so the app's sheet has no default there.
+    print("buttons: \(list(plan.buttonTitles))" + (plan.forgetsTheWayBack ? " (no default)" : ""))
 }
 
 /// `stop-managing <bsd>` — what forgetting the note would say. The app forgets
@@ -487,8 +511,10 @@ func runStopManaging(_ bsdName: String?) throws {
     guard let bsdName else { fail("usage: rdmalink stop-managing <bsd>") }
     let inventory = try Inventory.read()
     let port = operationPort(bsdName, in: inventory)
-    let operation = StopManaging(port: port)
-    print(operation.headline)
+    // The note says which form the app would show: a note that records the
+    // bridges the port came from adds that it can't be put back afterwards.
+    let operation = StopManaging(port: port, note: try? notesStore.load(port: bsdName))
+    print(StopManaging.headline)
     print(operation.body)
     // Forgetting a note is a write, and `perform` refuses it first with R31
     // (§6.2 R31); the preview says so in the same words.

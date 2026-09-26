@@ -19,7 +19,7 @@ public struct RestorePortPlan: Sendable, Equatable {
     public var missingBridges: [String]
     /// Set when the note is a return record (§7.5): Return to Bridge wrote it
     /// and the port already has everything it describes, so there is nothing
-    /// here to put back. `Set It Up Again` and `Forget This Port` are the
+    /// here to put back. `Set Up Again…` and `Stop Managing…` are the
     /// actions that apply, and ``refusal`` is set as well.
     public var returnedToBridge: BridgeReturn?
     public var refusal: Refusal?
@@ -84,6 +84,14 @@ public struct RestorePort: Sendable {
         case serviceOnly
     }
 
+    /// §S10's question. It names no port: the camera has already turned to
+    /// the port and ringed it, and a position name at the head of a question
+    /// reads as part of the verb ("Put Back, far left…"). The body names it.
+    public static let headline = "Put this port back the way it was?"
+    /// The same sheet while its checklist runs: what is happening, not a
+    /// question the button has already answered.
+    public static let runningHeadline = "Putting this port back"
+
     /// The spec's fixed lines.
     public static let identifierNote = """
         RDMALink matches the service by its identifier, not its name, so it \
@@ -122,7 +130,7 @@ public struct RestorePort: Sendable {
     public func preview(note: PortBaseline?, world: ObservedWorld) -> RestorePortPlan {
         var plan = RestorePortPlan(
             port: port,
-            headline: "Put \(port.positionName) the way it was?",
+            headline: Self.headline,
             body: "",
             rows: [],
             notes: [],
@@ -190,8 +198,9 @@ public struct RestorePort: Sendable {
 
         let named = bridgeNames.first ?? "Thunderbolt Bridge"
         plan.body = """
-            RDMALink will delete the service it made and return the port to \
-            \(named) — exactly as it was on \(Moment.text(note.recordedAt)).
+            RDMALink will delete the service it made and return \
+            \(port.positionName) to \(named) — exactly as it was on \
+            \(Moment.text(note.recordedAt)).
             """
         plan.rows = [
             "Delete the service \(plan.serviceName ?? note.positionName)",
@@ -203,13 +212,23 @@ public struct RestorePort: Sendable {
         if note.bridges.count > 1 { plan.notes.append(Self.twoBridgesNote) }
         if plan.isServiceAlreadyGone { plan.notes.append(Self.serviceAlreadyGone) }
 
+        // The service RDMALink made has gone from the port, and one set up by
+        // hand stands there instead (§S1's drift). It isn't RDMALink's to
+        // delete, and putting the port back around it would leave it on a
+        // bridge member, or forget the note over a port that is not as it was.
+        let isReplacedByHand = note.createdService != nil && plan.isServiceAlreadyGone
+            && !NetworkServices.services(for: port.bsdName, in: world.services).isEmpty
+
         // In the order the spec raises them: a mounted volume means Restore is
-        // not offered at all, a service somebody has taken over is not
-        // RDMALink's to delete, and a bridge that has gone gets R21's offer.
+        // not offered at all, a service somebody has taken over — or set up by
+        // hand in the place of RDMALink's — is not RDMALink's to delete (R28),
+        // and a bridge that has gone gets R21's offer.
         if let refusal = Refusals.nothingMountedOverThunderbolt(world.mountedVolumes) {
             plan.refusal = refusal
         } else if let refusal = removal?.refusal {
             plan.refusal = refusal
+        } else if isReplacedByHand {
+            plan.refusal = Refusals.createdServiceReplaced(port: port.observed)
         } else if let missing = plan.missingBridges.first {
             plan.refusal = Refusals.originalBridgeGone(port: port.observed, bridgeName: missing)
         }
@@ -409,7 +428,9 @@ public struct RestoreAll: Sendable {
 
     public init(ports: [OperationPort]) { self.ports = ports }
 
-    public var headline: String { "Put every port back?" }
+    public static let headline = "Put every port back?"
+    /// The same sheet while its checklist runs (§S10).
+    public static let runningHeadline = "Putting every port back"
 
     /// §S10 writes this sentence for **two** ports — "their services", "covers
     /// both" — and the sheet is reachable with one port (an adopted note is
@@ -452,25 +473,18 @@ public struct RestoreAll: Sendable {
             """
     }
 
-    /// "One port", "Two ports" — the spec writes small counts as words.
-    ///
-    /// Spelled out through `NumberFormatter` rather than an English table, so
-    /// the sentence still reads in the languages §8.9 asks for. The plural of
-    /// "port" is still English, and is one of the strings localization owes.
+    /// "One port", "Two ports" — the spec writes counts as words, from the
+    /// one formatter every count in the copy comes from (``Counts``).
     static func count(_ value: Int, capitalized: Bool) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .spellOut
-        let words = formatter.string(from: NSNumber(value: value)) ?? String(value)
-        let word = capitalized ? words.prefix(1).uppercased() + words.dropFirst() : words
-        return "\(word) port\(value == 1 ? "" : "s")"
+        "\(Counts.spelledOut(value, capitalized: capitalized)) port\(value == 1 ? "" : "s")"
     }
 
     /// The port the run stopped on.
     ///
     /// An error that is **not** one of the spec's refusals keeps its own text
     /// rather than borrowing a number: relabelling a lock conflict or an
-    /// unreadable bridge as R19 hands the user a `Stop Managing This Port`
-    /// button that deletes a note that was never the problem.
+    /// unreadable bridge as R19 hands the user a `Stop Managing…` button
+    /// that deletes a note that was never the problem.
     public struct Unfinished: Sendable {
         public var port: String
         /// The refusal, when the failure had a number.

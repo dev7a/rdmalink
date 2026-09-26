@@ -230,19 +230,16 @@ struct PreflightReport: Sendable, Equatable {
     /// are satisfied, the count of what is left to sort out otherwise. `nil`
     /// while a row is still checking, because there is nothing true to say.
     ///
-    /// §S3 writes the count for one and for two and stops there. Four rows
-    /// can all be unsatisfied at once, so three and four follow the same
-    /// shape with the count spelled out the way the hub spells its counts.
-    /// **Owed from the spec owner:** the sentence past two.
+    /// Counts are words, from the one formatter every count in the app uses
+    /// (§1.3 rule 1): **Checked — two things to sort out first**, up to four,
+    /// one for each row.
     var groupLabel: LocalizedStringResource? {
         guard !isChecking else { return nil }
         switch unsatisfiedCount {
         case 0: return "Checked: one cable, nothing mounted, another way in, room for the undo note."
         case 1: return "Checked — one thing to sort out first"
-        case 2: return "Checked — two things to sort out first"
-        case 3: return "Checked — three things to sort out first"
-        // There are four rows, so four is the most there can be.
-        default: return "Checked — four things to sort out first"
+        case let count:
+            return "Checked — \(ThisMacPresentation.spelledOut(count, capitalized: false)) things to sort out first"
         }
     }
 

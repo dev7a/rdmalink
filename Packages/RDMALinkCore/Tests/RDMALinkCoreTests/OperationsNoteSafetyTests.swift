@@ -158,6 +158,58 @@ struct OperationsNoteSafetyTests {
         #expect(result.bridgeName == "Thunderbolt Bridge")
     }
 
+    // MARK: - Set-up
+
+    /// What R11 and R20 leave behind: a note that records the bridge the port
+    /// came from and the service RDMALink made, kept on purpose.
+    private static func keptForAHand() -> PortBaseline {
+        PortBaseline(
+            bsdName: "en6", receptacle: 1, positionName: "Back, far left",
+            bridges: [BridgeMembership(bridgeName: "bridge0", members: ["en5", "en6"],
+                                       isActive: true)],
+            createdService: created, recordedAt: recordedAt)
+    }
+
+    @Test("Set-up never writes over a note kept because the port needs a hand: R20, nothing written")
+    func refusesToOverwriteANoteKeptForAHand() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        try store.save(Self.keptForAHand())
+        // The port is in no bridge and has no service: the hub's
+        // "needs putting back by hand" row (UX_SPEC §S1).
+        let world = Fixtures.world(ifconfig: Fixtures.quiet, bridges: [Self.thunderboltBridge])
+        let plan = SetUpPorts(ports: [Fixtures.port]).preview(world: world)
+        #expect(plan.canProceed, "the plan alone can't see the note: the burst is where it is read")
+
+        let writer = FakeWriter()
+        writer.kernel = { _ in Fixtures.snapshot(Fixtures.quiet) }
+        #expect {
+            try SetUpPorts(ports: [Fixtures.port]).perform(
+                writer: writer, world: world,
+                environment: Fixtures.environment(store: store), progress: { _, _ in })
+        } throws: {
+            ($0 as? Refusal) == Refusals.notBackInBridge(
+                port: Fixtures.port.observed, bridgeName: "Thunderbolt Bridge", removedService: true)
+        }
+        #expect(writer.calls == [.lock], "nothing is written")
+        #expect(try store.load(port: "en6") == Self.keptForAHand(),
+                "the note that says where the port came from is still the one on disk")
+    }
+
+    @Test("A drifted port back in its bridge is still set up again over its note (§7.4)")
+    func setsADriftedBridgedPortUpAgain() throws {
+        let store = Fixtures.store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        try store.save(Self.keptForAHand())
+        let writer = FakeWriter()
+        writer.kernel = { _ in Fixtures.snapshot(Fixtures.standalone) }
+        let result = try SetUpPorts(ports: [Fixtures.port]).perform(
+            writer: writer, world: Fixtures.world(ifconfig: Fixtures.inOneBridge),
+            environment: Fixtures.environment(store: store), progress: { _, _ in })
+        #expect(result.ports.count == 1)
+        #expect(try store.load(port: "en6").createdService?.identifier == "NEW-SERVICE-ID")
+    }
+
     // MARK: - Restore All's sentence
 
     @Test("Restore All counts its ports rather than always saying two")

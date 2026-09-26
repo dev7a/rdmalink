@@ -42,7 +42,9 @@ public enum RefusalCode: String, Sendable, Equatable, CaseIterable {
     /// The bridge the port came from doesn't exist any more, at Restore.
     case originalBridgeGone = "R21"
     /// The service RDMALink created has been edited since, so Restore will not
-    /// delete it.
+    /// delete it. The same number covers its other body: that service has
+    /// gone and one set up by hand stands in its place, which Restore will
+    /// not delete either.
     case createdServiceEdited = "R28"
     /// There is no Thunderbolt Bridge to return a standalone port to, and
     /// RDMALink never creates one. The copy is §S10's no-bridge form.
@@ -139,5 +141,30 @@ func englishList(_ items: [String]) -> String {
     case 1: return items[0]
     case 2: return items[0] + " and " + items[1]
     default: return items.dropLast().joined(separator: ", ") + " and " + items[items.count - 1]
+    }
+}
+
+/// Counts as the copy writes them: in words, in a button or a counter as in a
+/// sentence — `Set Up Two Ports`, "Two ports selected", "Setting up three
+/// ports" (UX_SPEC §1.3 rule 1).
+///
+/// The one `.spellOut` formatter. Core's copy uses it, and so does the app's
+/// (`ThisMacPresentation.spelledOut`), so one count is never written two ways.
+/// It is pinned to English, the language every sentence around it is written
+/// in: until the app is genuinely localized, a count spelled in the user's
+/// locale would land a French "deux" inside an English button.
+public enum Counts {
+    public static let english = Locale(identifier: "en_US")
+
+    /// `two`, or `Two` at the head of a sentence or in a Title Case button.
+    public static func spelledOut(_ value: Int, capitalized: Bool) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .spellOut
+        formatter.locale = english
+        guard let words = formatter.string(from: NSNumber(value: value)) else {
+            return String(value)
+        }
+        guard capitalized else { return words }
+        return words.prefix(1).uppercased() + words.dropFirst()
     }
 }

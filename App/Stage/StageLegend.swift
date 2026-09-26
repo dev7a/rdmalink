@@ -2,8 +2,9 @@
 //  StageLegend.swift
 //
 //  UX_SPEC §4.8's legend, as data: which outer-ring shapes are on this Mac
-//  right now, and the panel's word for each. Pure — Foundation and Core only —
-//  so script/test_presentation.sh can assert the rows without a window.
+//  right now, and the panel's word for each — and, while §S8's handoff is up,
+//  the one line that names the ghost second Mac. Pure — Foundation and Core
+//  only — so script/test_presentation.sh can assert the rows without a window.
 //
 //  It also holds the one place a port's outer ring is decided from what the
 //  hub observed, so the ring on the model and the line in the legend can only
@@ -26,7 +27,9 @@ extension StagePort.Configuration {
         switch snapshot.readiness {
         case .managed, .adopted: self = .ready
         case .setUpElsewhere: self = .outside
-        case .drifted: self = .drift
+        // §4.3: a port that needs putting back by hand wears drift's dashed
+        // ring; the panel names it in its own words.
+        case .drifted, .needsAHand: self = .drift
         // §4.3: "Provenance is a panel matter: the ring says only that the
         // port is in the bridge."
         case .returned: self = .bridge
@@ -61,12 +64,17 @@ enum StageLegendGlyph: Hashable, Sendable {
     case solidAccent
     /// The drift ring.
     case dashed
+    /// §S8's ghost second Mac: a small faint box, as featureless as the
+    /// ghost itself.
+    case ghost
 }
 
 /// One line of the legend.
 struct StageLegendRow: Hashable, Sendable, Identifiable {
     let glyph: StageLegendGlyph
-    /// §4.8: "Labels are the panel's own words".
+    /// §4.8: the ring lines' "labels are the panel's own words"; the ghost's
+    /// is §4.8's **The other Mac**, "a name for a picture, not a word from
+    /// the panel".
     let label: LocalizedStringResource
 
     var id: StageLegendGlyph { glyph }
@@ -80,12 +88,20 @@ enum StageLegend {
     /// RDMALink** · **Ready for RDMA** · **Needs a look**.
     static let order: [StagePort.Configuration] = [.bridge, .none, .outside, .ready, .drift]
 
+    /// §4.8: "One line joins them, last, only while §S8's handoff is up: a
+    /// small faint box and **The other Mac**, naming the ghost second Mac,
+    /// because nothing is ever written on the ghost itself".
+    static let ghostRow = StageLegendRow(glyph: .ghost, label: "The other Mac")
+
     /// "One line per outer-ring shape present on this Mac right now" — in
     /// the spec's order, never the ports', so the legend does not reshuffle
     /// as a Mac is plugged in. USB-only receptacles never take a ring (§4.5)
-    /// and so never put a line here.
-    static func rows(for ports: [StagePort]) -> [StageLegendRow] {
-        rows(for: ports.filter(\.isThunderbolt).map(\.cfg))
+    /// and so never put a line here. While `handoff` is up the ghost's line
+    /// follows them; it comes and goes with the ghost, whether or not the
+    /// handoff has a near port to draw its line from.
+    static func rows(for ports: [StagePort], handoff: StageHandoff? = nil) -> [StageLegendRow] {
+        let rings = rows(for: ports.filter(\.isThunderbolt).map(\.cfg))
+        return handoff == nil ? rings : rings + [ghostRow]
     }
 
     static func rows(for configurations: [StagePort.Configuration]) -> [StageLegendRow] {

@@ -155,7 +155,7 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
         self.accessibilityLabel = Self.accessibilityLabel(for: snapshot, detail: detail)
         self.accessibilityValue = detail.address
         // §S4: a row the picker lets you choose carries no button — choosing
-        // it is the action, and the hub's `Set Up…` or `Set It Up Again`
+        // it is the action, and the hub's `Set Up…` or `Set Up Again…`
         // would be a second way into the run already under way.
         self.actions = mode == .picker && route == nil
             ? [] : Self.actions(for: snapshot, dimmedBy: route)
@@ -171,69 +171,71 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
     /// `Restore…` is the same journey with the destination the note remembers,
     /// and offering both would be two buttons for one thing (§1.3 rule 5).
     /// A drifted port has nothing to put back — its note describes a world
-    /// that moved — so it is offered the way forward instead.
+    /// that moved — so it is offered the way forward instead, unless it has
+    /// a service of its own (§S1): set-up routes a near match to Adopt and
+    /// never plans it, and refuses a fixed IPv4 address (R16), so the row
+    /// offers what the picker would name for it — `Restore…` for RDMALink's
+    /// own service edited since, which raises R28 and says what changed,
+    /// `Adopt…` for a new service made by hand — a near match, or a full
+    /// match standing where RDMALink's used to — and nothing where neither
+    /// can take it. A port that needs a hand offers `Restore…` and never a
+    /// set-up.
     ///
-    /// On §S4's picker a dimmed row keeps the routes §S4 names for it and no
-    /// more. Its states name two: "Already-ready port clicked (row reads
-    /// **Already ready for RDMA** and offers `Restore…`)" and "Hand-configured
-    /// port clicked (routes to Adopt, S9 — **never to set-up**)". `Restore…`
-    /// and `Adopt…` are those two journeys; `Return to Bridge…` and `Stop
-    /// Managing…` are the hub offering a third one mid-choice, which a picker
-    /// is not the place for.
-    ///
-    /// `Adopt…` stays because it is the only thing on the screen that reaches
-    /// S9: clicking the row prints R27's line — "Here's what RDMALink found"
-    /// — and nothing else happens (`SetUpFlow.routeClick`), so filtering the
-    /// button away would leave the sentence with nowhere to land (§1.3 rule 5).
-    /// **Owed from the spec owner:** whether that click should open S9 itself,
-    /// which is what §S4's "routes to Adopt" reads like.
-    ///
-    /// A row whose state can offer neither keeps the hub's buttons rather than
-    /// none, for the same reason: an adopted port is ready too, but its note is
-    /// an adoption record and §S10's restore form has nothing to put back, so
-    /// `Restore…` cannot be minted for it — and its click prints "Want to see
-    /// how it's doing?", which has to have somewhere to answer. R16's row is
-    /// the other one, and §S4 gives it no subtitle either. **Owed from the
-    /// spec owner:** what a dimmed adopted row offers.
-    ///
-    /// Never a set-up button, though: R16's row can be a drifted one — a
-    /// service RDMALink made, since switched to a manual address — whose hub
-    /// row carries `Set It Up Again`, and on the picker that would be a second
-    /// way into the run already under way (§S4 "Layout").
+    /// On §S4's picker a dimmed row keeps the route §S4 names for it and
+    /// nothing else (`ChoosePortReport.namedAction`): `Restore…`, `Return to
+    /// Bridge…` or `Adopt…`, the one sheet the picker lets open over the
+    /// assistant (§2.6), which is
+    /// also exactly what the Port menu offers there (§2.7). A USB-only row
+    /// and R16's keep none — the card their click raises is their answer —
+    /// and no dimmed row ever carries a set-up button, which would be a
+    /// second way into the run already under way (§S4 "Layout").
     private static func actions(
         for snapshot: PortSnapshot, dimmedBy route: ChooseRefusalRoute?
     ) -> [HubAction] {
-        guard route == nil else {
-            let hub = actions(for: snapshot, dimmedBy: nil).filter { !$0.opensSetUp }
-            let named = hub.filter {
-                switch $0 {
-                case .restore, .adopt: true
-                default: false
-                }
-            }
-            return named.isEmpty ? hub : named
-        }
         let id = snapshot.id
+        if let route {
+            return ChoosePortReport.namedAction(for: route, snapshot: snapshot).map { [$0] } ?? []
+        }
         switch snapshot.readiness {
         case .managed: return [.restore(portID: id)]
         case .adopted: return [.returnToBridge(portID: id), .stopManaging(portID: id)]
         case .setUpElsewhere: return [.adopt(portID: id), .returnToBridge(portID: id)]
-        case .drifted: return [.setItUpAgain(portID: id)]
-        // §4.3 and §S1 give the returned row one button. `Forget This Port`
-        // clears its note (§7.5) and lives in the Port menu's `Stop
-        // Managing…`, which the model offers for this state too.
-        case .returned: return [.setItUpAgain(portID: id)]
+        case .needsAHand: return [.restore(portID: id)]
+        case .drifted:
+            switch ChoosePortReport.route(for: snapshot) {
+            case nil: return [.setUpAgain(portID: id)]
+            case .editedService?: return [.restore(portID: id)]
+            // A new service made by hand that Adopt can take: a near match,
+            // whose sheet says what to change, or a full match in place of the
+            // service RDMALink made, which it adopts over the old note (§S9).
+            case .adopt?: return [.adopt(portID: id)]
+            // A service RDMALink didn't make that neither Adopt nor set-up
+            // can take — a fixed IPv4 address, or a service of its own on a
+            // port back in a bridge (§S1, R16): the row offers nothing, and
+            // the drift row keeps only `Stop Managing…`. A port set-up can't
+            // take is never offered a set-up control (§S4).
+            default: return []
+            }
+        // §4.3 and §S1 give the returned row one button. Its note is cleared
+        // with the Port menu's `Stop Managing…` (§7.5 step 5), which the
+        // model offers for this state too.
+        case .returned: return [.setUpAgain(portID: id)]
         case .plain:
             // §S1: a port that has never been set up carries `Set Up…`, first,
             // so every port that can be set up visibly can be. §S9's near
             // match is reached from the row's `Adopt…` — the sheet is where it
             // says it cannot adopt this one *yet*, and what to change so it
-            // can. A port that is out of every bridge can always be put back
-            // (§7.5), whoever took it out and whether it was given a service
-            // or left bare — §S10 has a form for each.
+            // can — but only where the sheet has a form for it: a service of
+            // its own on a port still in a bridge has none (§S9, R16), and a
+            // button that could only close again is not drawn. A port that is
+            // out of every bridge can always be put back (§7.5), whoever took
+            // it out and whether it was given a service or left bare — §S10
+            // has a form for each.
             var actions: [HubAction] = []
             if offersSetUp(snapshot) { actions.append(.setUpPort(portID: id)) }
-            if case .nearMatch? = snapshot.configuration { actions.append(.adopt(portID: id)) }
+            if case .nearMatch? = snapshot.configuration, AdoptForm(snapshot) != nil {
+                actions.append(.adopt(portID: id))
+            }
             if snapshot.isOutOfEveryBridge { actions.append(.returnToBridge(portID: id)) }
             return actions
         }
@@ -243,22 +245,20 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
     /// about it (`.plain`), §S1's "a Thunderbolt port with no setup and no
     /// service of its own", which the row offers `Set Up…`. The stage's
     /// double-click asks the same question (`RootView.doubleClickSetUp`), so
-    /// the row and the receptacle agree on which port is "configurable" (§S1).
+    /// the row and the receptacle agree on which port is "configurable" (§S1),
+    /// and so does the footer's `Set Up Port…` before it chooses the hub's
+    /// selection for the picker (`SetUpFlow.open(_:)`).
     ///
-    /// The first half is the picker's own test: a USB-only receptacle, a
-    /// ready port and R16's static address are routes, never set-ups. The
-    /// second is Core's: `SetUpPorts.preview` routes a port that already has
-    /// a service to Adopt and never plans a set-up for it (`routesToAdopt`),
-    /// so a near match offered `Set Up…` would open a review with nothing to
-    /// press. Its row keeps `Adopt…`, where §S9 says what to change.
+    /// It is the picker's own test: a USB-only receptacle, a ready port, a
+    /// port that needs a hand, a service of the port's own — R16's static
+    /// address, or a near match Core would route to Adopt and never plan —
+    /// are routes, never set-ups.
     ///
     /// Whether the hub is taking set-ups at all right now — R1, R23, R31 — is
     /// the footer's answer, and the row asks it where it draws the button
     /// (`HubFooterModel.offers(_:)`).
     static func offersSetUp(_ snapshot: PortSnapshot) -> Bool {
-        guard ChoosePortReport.route(for: snapshot) == nil else { return false }
-        if case .nearMatch? = snapshot.configuration { return false }
-        return true
+        ChoosePortReport.route(for: snapshot) == nil
     }
 
     private static func symbol(for snapshot: PortSnapshot) -> String {
@@ -267,6 +267,8 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
         case .adopted: return "checkmark.seal.fill"
         case .setUpElsewhere: return "checkmark.circle"
         case .drifted: return "exclamationmark.circle"
+        // §3.3: "Needs putting back by hand — `hand.raised`, `.orange`".
+        case .needsAHand: return "hand.raised"
         case .returned: return "arrow.uturn.backward.circle"
         case .plain: break
         }
@@ -283,7 +285,7 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
         switch snapshot.readiness {
         case .managed, .adopted: .accent
         case .setUpElsewhere, .returned: .secondary
-        case .drifted: .attention
+        case .drifted, .needsAHand: .attention
         case .plain: snapshot.port.isThunderbolt ? .secondary : .tertiary
         }
     }
@@ -318,6 +320,8 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
             return PortRowDetail(state: "Set up outside RDMALink")
         case .drifted:
             return PortRowDetail(state: "Not set up any more")
+        case .needsAHand:
+            return PortRowDetail(state: "Needs putting back by hand")
         case .returned:
             // §S1: "the link-state subtitle and the membership phrase stay".
             return PortRowDetail(

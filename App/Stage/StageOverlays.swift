@@ -178,11 +178,13 @@ extension View {
 /// UX_SPEC §4.8: "A `.caption` `.secondary` list in the stage's top-leading
 /// corner, one line per outer-ring shape present on this Mac right now, glyph
 /// first: the ring geometries themselves at small scale. … Nothing about the
-/// inner track, nothing about selection, no title."
+/// inner track, nothing about selection, no title." While §S8's handoff is
+/// up, one line joins them, last: a small faint box and **The other Mac**.
 ///
 /// The rows are `StageLegend.rows(for:)`; this only draws them. It is hidden
-/// from VoiceOver like the narration capsule: its words are the panel's own,
-/// read there in full, and the ring shapes it explains are a sighted aid.
+/// from VoiceOver like the narration capsule: its ring lines are the panel's
+/// own words, read there in full, and its ghost line names a picture that is
+/// itself a sighted aid — §S8's screen says the same in words.
 struct StageLegendView: View {
     let rows: [StageLegendRow]
 
@@ -205,7 +207,9 @@ struct StageLegendView: View {
 /// One ring geometry at small scale, around the slot it would ring: the
 /// same spans `StageMath.spans(for:)` gives the model, walked round a
 /// rounded rectangle, so the legend's segmented ring has the model's four
-/// gaps and its dashed ring the model's dashes.
+/// gaps and its dashed ring the model's dashes. §S8's ghost is the one glyph
+/// that is not a ring: a small faint box with no slot, because the ghost has
+/// no receptacle to show and "never gains detail, ever".
 struct StageLegendGlyphView: View {
     let glyph: StageLegendGlyph
 
@@ -213,14 +217,23 @@ struct StageLegendGlyphView: View {
     private static let slot = CGSize(width: 5, height: 9)
     private static let ring = CGSize(width: 11, height: 15)
     private static let outerRing = CGSize(width: 14, height: 18)
+    /// The ghost: a desktop box seen from the side, wider than it is tall,
+    /// as wide as the glyph column, and as faint as the ghost's 40 %.
+    private static let box = CGSize(width: 16, height: 9)
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(.secondary.opacity(0.35))
-                .frame(width: Self.slot.width, height: Self.slot.height)
+            if glyph == .ghost {
+                RoundedRectangle(cornerRadius: 2.5)
+                    .fill(.secondary.opacity(0.4))
+                    .frame(width: Self.box.width, height: Self.box.height)
+            } else {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(.secondary.opacity(0.35))
+                    .frame(width: Self.slot.width, height: Self.slot.height)
+            }
             switch glyph {
-            case .emptySlot:
+            case .emptySlot, .ghost:
                 EmptyView()
             case .segmented:
                 ring(.segmented, size: Self.ring, lineWidth: 1, style: .secondary)

@@ -38,18 +38,30 @@
 //  so §6.2 R31's read-only hub can be reviewed on a Mac the catalogue knows.
 //  `twoMacs` is this Mac with a second Mac on the end of its first two
 //  Thunderbolt ports, both in the bridge, so §S3's row 1 says no (R1) and
-//  S5's Checked group can be reviewed open. A fixture replaces every read of
+//  S5's Checked group can be reviewed open. `oneMac` is this Mac with a
+//  second Mac on the end of its first Thunderbolt port alone, so the picker
+//  opens with RDMALink's pick lit and its reason printed (§S4
+//  "Pre-selection"). A fixture replaces every read of
 //  this Mac's identity and ports for the run and nothing else; the services,
 //  notes and stored bridges are still this Mac's.
 //
 //  `RDMALINK_SNAPSHOT_ROUTE` opens one of the app's own routes on the live
-//  inventory first: `hub`, `choose`, `review`, `review-from-picker`,
-//  `restore-sheet`, `adopt-sheet`, `changelog` or `other-mac` (§S8, a screen
-//  in the working area, with the ghost second Mac on the stage). `review` is
-//  S5 as it opens from a port chosen on the hub — the first Thunderbolt port
-//  — with the two-step label; `review-from-picker` is S5 as it opens from
-//  S4's `Continue`, with the three-step label; `choose` is S4 whatever a
-//  pre-selection would have done. **Every one of them is a read.**
+//  inventory first: `hub`, `choose`, `review`, `review-from-picker`, `ready`,
+//  `restore-sheet`, `adopt-sheet`, `changelog`, `other-mac` or
+//  `other-mac-from-ready` (§S8, a screen in the working area, with the ghost
+//  second Mac on the stage). `other-mac` is §S8 as the Help menu opens it;
+//  `other-mac-from-ready` is §S8 as S7's `What to Do on the Other Mac` opens
+//  it, about the first ready port in physical order standing in for the port
+//  a run just set up — no run is made to get there. `review` is
+//  S5 in a run a control that names its port opened — a row's `Set Up…` on
+//  the first port set-up can take — with the two-step label and `Cancel`
+//  leading; `review-from-picker` is S5 in a run the footer's `Set Up Port…`
+//  opened, reached with S4's `Continue`, with the three-step label and `Back`
+//  leading; `choose` is S4 as the footer opens it, pre-selection and all
+//  (UX_SPEC §S4 "When this screen appears"); `ready` is S7 for the port
+//  `review` names, drawn from that port as it is now — the screen, its label
+//  and its footer, with nothing set up to get there. **Every one of them is a
+//  read.**
 //  The two review routes run `SetUpPorts.preview` and stop; no route reaches
 //  `perform`, opens an `AuthorizedSession` or raises the administrator
 //  prompt — that is S5's default button, which nothing here presses.
@@ -103,10 +115,12 @@ enum SnapshotHook {
         case choose
         case review
         case reviewFromPicker = "review-from-picker"
+        case ready
         case restoreSheet = "restore-sheet"
         case adoptSheet = "adopt-sheet"
         case changelog
         case otherMac = "other-mac"
+        case otherMacFromReady = "other-mac-from-ready"
     }
 
     static var route: Route? {
@@ -125,6 +139,10 @@ enum SnapshotHook {
         /// ports and both of them in `bridge0` — R1's state, which the checks
         /// derive from the receptacles alone (App/Views/RootView.swift).
         case twoMacs
+        /// This Mac, with another Mac on the end of its first Thunderbolt
+        /// port and nothing else changed — §S4's pre-selection, which the
+        /// picker lights and explains.
+        case oneMac
 
         /// The Mac the fixture stands for, without reading its ports.
         var model: HardwareModel {
@@ -134,7 +152,7 @@ enum SnapshotHook {
                     identifier: "Mac99,99", marketingName: "Mac", chip: "M5 Max",
                     archetype: .unknown, recognition: Recognition.none
                 )
-            case .twoMacs:
+            case .twoMacs, .oneMac:
                 Inventory.readModel()
             }
         }
@@ -158,6 +176,12 @@ enum SnapshotHook {
                         if !inventory.ports[index].bridges.contains(where: { $0.name == bridge.name }) {
                             inventory.ports[index].bridges.append(bridge)
                         }
+                    }
+                    return inventory
+                case .oneMac:
+                    var inventory = try Inventory.read()
+                    if let index = inventory.ports.firstIndex(where: \.isThunderbolt) {
+                        inventory.ports[index].link = .macLinked
                     }
                     return inventory
                 }

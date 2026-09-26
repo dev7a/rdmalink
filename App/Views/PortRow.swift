@@ -17,9 +17,10 @@ struct PortRow: View {
     let showsTechnicalNames: Bool
     /// §2.3 band 3. **Full** carries the detail line and the trailing buttons;
     /// **compact** is "symbol, title, and a short trailing badge only" — which
-    /// is also why an action button has no business in it: §2.6 raises Adopt,
-    /// Restore and Return to Bridge from the hub, never over a running
-    /// assistant.
+    /// is also why an action button has no business in it: a sheet that acts
+    /// opens over the assistant only on the picker, and only for the route
+    /// the picker itself names (§2.6) — a full-density list — and never over
+    /// S5 to S7, where the list is compact.
     var density: PortListDensity = .full
     /// The compact badge for this row, when it has one.
     var badge: LocalizedStringResource?
@@ -71,7 +72,10 @@ struct PortRow: View {
             .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
             // §6.2 R31: on a Mac RDMALink does not recognize no row carries a
             // button — absent, not disabled — because every one of them writes.
-            if density == .full, let actions, !actions.isUnrecognized {
+            // §2.6: nor while Identify is up over the picker, whose list is
+            // still full density — nothing opens a sheet over S4b.
+            if density == .full, let actions, !actions.isUnrecognized,
+                actions.assistant != .underWay {
                 PortRowActions(actions: presentation.actions, hub: actions)
             }
         }
@@ -96,13 +100,13 @@ struct PortRow: View {
 }
 
 /// §S1's trailing buttons: `Set Up…` · `Adopt…` · `Restore…` · `Return to
-/// Bridge…` · `Stop Managing…` · `Set It Up Again`, borderless so the row
+/// Bridge…` · `Stop Managing…` · `Set Up Again…`, borderless so the row
 /// stays a row, and in the accent so they read as buttons (§2.3 band 3).
 struct PortRowActions: View {
     let actions: [HubAction]
     let hub: HubActionsModel
 
-    /// §S1: the row's set-up button — `Set Up…` or `Set It Up Again` — is the
+    /// §S1: the row's set-up button — `Set Up…` or `Set Up Again…` — is the
     /// footer's `Set Up Port…` for that one port, on the same terms: absent
     /// where the footer's primary is absent (R23; R31 has no row buttons at
     /// all), disabled where it is disabled (R1, the reason printed above the

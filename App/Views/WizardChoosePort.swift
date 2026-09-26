@@ -20,7 +20,7 @@ struct WizardChoosePort: View {
         // §S4b is a modal *state* within S4: the working area swaps, the stage
         // stays fully live, and the port list stays where it is.
         if flow.identify != nil {
-            WizardIdentify(flow: flow, perform: perform)
+            WizardIdentify(flow: flow)
                 .transition(.opacity)
         } else {
             chooser(flow.choose)
@@ -42,7 +42,10 @@ struct WizardChoosePort: View {
             // which is also where §4.7 promotes it on a recognized Mac whose
             // port names are only macOS's numbering. In the accent, at its
             // regular size (§2.3 band 3): borderless, it would otherwise draw
-            // in the same gray as the lines around it.
+            // in the same gray as the lines around it. No shortcut of its
+            // own: ⌘I is the Port menu's, which starts this same Identify on
+            // this screen (§S4, §2.7) — one declaration, so AppKit never has
+            // two to choose between.
             Button {
                 perform(.identifyPort)
             } label: {
@@ -50,7 +53,6 @@ struct WizardChoosePort: View {
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.tint)
-            .keyboardShortcut("i", modifiers: .command)
             .frame(maxWidth: .infinity, alignment: .leading)
 
             ForEach(report.informationalLines) { line in
@@ -78,13 +80,16 @@ struct WizardChoosePort: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .transition(.opacity)
             }
+            // §6.1 rule 3: both cards sit under the picker's own headline, so
+            // theirs steps down to `.headline`.
             if let refusal = flow.refusal {
-                WizardRefusalCard(refusal: refusal, model: model, perform: perform)
+                WizardRefusalCard(refusal: refusal, model: model, perform: perform, isNested: true)
             }
             if let occupied = report.everyPortOccupied, flow.refusal == nil {
                 // R26 — a dead end handled kindly. No buttons: it watches and
                 // clears itself.
-                WizardRefusalCard(refusal: occupied, model: model, perform: perform)
+                WizardRefusalCard(
+                    refusal: occupied, model: model, perform: perform, isNested: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

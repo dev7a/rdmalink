@@ -357,6 +357,20 @@ struct CreatedServiceEditedTests {
         #expect(refusal.detail == "it's been switched off and IPv4 is set to Manual now.")
         #expect(refusal.subjects == ["en5"])
     }
+
+    @Test("It names Stop Managing only where the row has it")
+    func namesStopManagingWhereOffered() {
+        let offered = Refusals.createdServiceEdited(port: farLeft, differences: [])
+        #expect(offered.body.hasSuffix(
+            "Remove it yourself in Network settings if you're done with it, "
+                + "or Stop Managing leaves everything exactly where it is."))
+        let overThePicker = Refusals.createdServiceEdited(
+            port: farLeft, differences: [], offersStopManaging: false)
+        #expect(overThePicker.body.hasSuffix(
+            "you've made your own. Remove it yourself in Network settings if you're done with it."))
+        #expect(!overThePicker.body.contains("Stop Managing"))
+        #expect(overThePicker.headline == offered.headline)
+    }
 }
 
 @Suite("R20 — the bridge doesn't have it back yet")
@@ -413,7 +427,7 @@ struct NoteIsAReturnRecordTests {
         #expect(refusal.headline == "Nothing to put back")
         #expect(refusal.body == """
             RDMALink's note for Back, far left only records that it put the port back \
-            in Thunderbolt Bridge. There's nothing to undo — Set It Up Again takes the \
+            in Thunderbolt Bridge. There's nothing to undo — Set Up Again takes the \
             port out of the bridge, and Stop Managing forgets the note.
             """)
         #expect(refusal.detail == nil)
@@ -449,11 +463,11 @@ struct NoteIsAReturnRecordTests {
         #expect(refusal.subjects == ["en6"])
     }
 
-    @Test("The adopted form never claims the note is missing, and never offers Set It Up Again")
+    @Test("The adopted form never claims the note is missing, and never offers Set Up Again")
     func adoptedFormIsNotR19() {
         let adopted = Refusals.noteIsAnAdoptionRecord(port: farLeft)
         #expect(!adopted.body.contains("missing"))
-        #expect(!adopted.body.contains("Set It Up Again"), "the port keeps its setup")
+        #expect(!adopted.body.contains("Set Up Again"), "the port keeps its setup")
         #expect(adopted.headline != Refusals.undoNoteMissing(port: farLeft).headline)
         #expect(adopted.headline == Refusals.noteIsAReturnRecord(
             port: farLeft, bridgeName: "Thunderbolt Bridge").headline)

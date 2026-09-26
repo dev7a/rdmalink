@@ -94,8 +94,9 @@ final class ApplyRun {
     ///
     /// A later port's failure rolls back only that port, so a refusal is never
     /// the whole story: §S10's rule that a summary never rounds up applies to
-    /// set-up too, and the screen states both.
-    private(set) var landed: [String] = []
+    /// set-up too, and the screen states both. `Try Again` plans only the
+    /// ports that are not in here (`SetUpFlow.tryAgain`, §S6).
+    private(set) var landed: [SetUpPortResult] = []
 
     private let runner: Runner
     private var task: Task<Void, Never>?
@@ -134,11 +135,10 @@ final class ApplyRun {
     /// True while the burst is undoing what it did.
     var isReversing: Bool { rows.contains { $0.state == .reversing } }
 
-    /// One line per port that landed, in §S7's words for a port that is ready.
-    /// **Owed from the spec owner:** a sentence for "these landed, this one
-    /// was put back" — §S10 writes one for restore and §S6 writes none.
+    /// One line per port that landed, in §S7's words for a port that is ready:
+    /// §S6 lists them under a refused S6's card (**Back, far left is ready**).
     var landedLines: [LocalizedStringResource] {
-        landed.map { LocalizedStringResource(core: "\($0) is ready") }
+        landed.map { LocalizedStringResource(core: "\($0.positionName) is ready") }
     }
     // §S6's rollback status line — "Something didn't take. Putting the port
     // back exactly as it was…" — has nowhere to be drawn: `OperationProgress`
@@ -147,14 +147,14 @@ final class ApplyRun {
     // observed (§1.3 rule 10). The rollback is stated by R10's own copy
     // instead. **Owed from Core:** a rollback event on the progress callback.
 
-    /// §S6: "Setting up Back, far left" / "Setting up two ports". The spec
-    /// writes the count in words for two and stops there; three or more takes
-    /// the digit. **Owed from the spec owner:** the plural past two.
+    /// §S6: "Setting up Back, far left" / "Setting up two ports" / "Setting
+    /// up three ports" — the count in words, as the button that started the
+    /// run wrote it (`Set Up Three Ports`, §1.3 rule 1).
     var runningHeadline: LocalizedStringResource {
         switch plan.ports.count {
         case 1: "Setting up \(plan.ports[0].header)"
-        case 2: "Setting up two ports"
-        default: "Setting up \(plan.ports.count) ports"
+        default:
+            "Setting up \(ThisMacPresentation.spelledOut(plan.ports.count, capitalized: false)) ports"
         }
     }
 
@@ -218,7 +218,7 @@ final class ApplyRun {
             if phase == .authorizing { enter(.running) }
             update(step, to: state)
         case let .finished(result):
-            landed = result.ports.map(\.positionName)
+            landed = result.ports
             completionLine = result.completionLine
             // A run that stopped on a port has an answer per port, not one
             // answer: the ports above stand, and the refusal names only the

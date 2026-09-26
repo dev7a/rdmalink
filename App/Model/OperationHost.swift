@@ -27,13 +27,16 @@ enum OperationHost {
     /// The session is created, used and ended inside one detached task, which
     /// is what keeps a type that owns an `AuthorizationRef` and an open
     /// `SCPreferences` on one thread.
+    ///
+    /// From the moment the credential is in hand until the session ends the
+    /// burst holds `BurstGate` open, so quitting waits for the last write to
+    /// land (§S6, §S10). While only the password dialog is up it does not:
+    /// nothing has been written, and quitting cancels as it always did.
     static func burst<T: Sendable>(
         _ body: @escaping @Sendable (AuthorizedSession) throws -> T
     ) async throws -> T {
         try await Task.detached(priority: .userInitiated) {
-            let session = try AuthorizedSession.begin()
-            defer { session.end() }
-            return try body(session)
+            try burstSynchronously(body)
         }.value
     }
 
@@ -44,7 +47,11 @@ enum OperationHost {
         _ body: (AuthorizedSession) throws -> T
     ) throws -> T {
         let session = try AuthorizedSession.begin()
-        defer { session.end() }
+        BurstGate.shared.begin()
+        defer {
+            session.end()
+            BurstGate.shared.end()
+        }
         return try body(session)
     }
 

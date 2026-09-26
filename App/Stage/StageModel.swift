@@ -175,7 +175,7 @@ enum StageIdentify: Equatable, Sendable {
 enum StagePreview: String, Equatable, Sendable, CaseIterable {
     /// **Save how to undo this** — a bookmark glyph at the stage's trailing edge.
     case note
-    /// **Leave the Thunderbolt Bridge** — this receptacle's ribbon links fade
+    /// **Leave Thunderbolt Bridge** — this receptacle's ribbon links fade
     /// away and the segmented ring's gaps widen a hair.
     case leaveBridge
     /// **Get its own network service** — a small accent node beside the
@@ -194,13 +194,17 @@ struct StagePreviewIntent: Equatable, Sendable {
 /// UX_SPEC §S8's handoff: "the ghost second Mac". The camera pulls back and
 /// pans so this Mac occupies the leading third of the stage, a featureless
 /// rounded box at 40 % slides in from the trailing side with a single thin
-/// line between the two, and when the far end answers a pulse travels back
-/// along the line and blooms at the near receptacle, once. The ghost never
-/// gains detail, ever — it is explicitly *a Mac the app can't see*.
+/// line from the near port to it, and when the far end answers a pulse
+/// travels back along the line and blooms at the near receptacle, once. The
+/// ghost never gains detail, ever — it is explicitly *a Mac the app can't
+/// see*; the legend names it (§4.8).
 struct StageHandoff: Equatable, Sendable {
     /// The receptacle "this link" is on — the near port, which carries the
-    /// line. `nil` when RDMALink has set up no port yet: the ghost still
-    /// arrives, and there is no cable to draw.
+    /// line. The line is its cable, so no receptacle's thread is drawn and
+    /// every other receptacle recedes but a selection
+    /// (``StageMoment/dim(for:)``). `nil` when no port qualifies (§S8 "Whose
+    /// link"): the ghost still arrives, there is no cable to draw, and
+    /// nothing recedes.
     var portID: StagePort.ID?
     /// The face the handoff is staged on: the near port's, or the face in
     /// front when there is no near port.
@@ -567,11 +571,18 @@ final class StageModel {
 
     // MARK: - §S8: the ghost second Mac
 
-    /// "Now the other Mac" is up. The near port is the one §S8 step 4 names,
-    /// or none when RDMALink has set up no port yet; the stage turns to its
-    /// face if it is not in front, then pulls back and lets the ghost in.
+    /// "Now the other Mac" is up. The near port is the one §S8 is about and
+    /// step 4 names (`OtherMacReport`), or none when no port qualifies (§S8
+    /// "Whose link"); the stage turns to its face if it is not in front, then
+    /// pulls back and lets the ghost in.
     /// Calling it again with a different port re-aims the line without
     /// starting the handoff over.
+    ///
+    /// The near port becomes the selection, so the handoff opens with one
+    /// lit port and the list agrees with the stage about it (§2.4); a port
+    /// the user selects afterwards comes forward as a selection does. It is
+    /// set here rather than through ``select(_:)``, whose turn would be a
+    /// second camera move on top of the handoff's own.
     func beginHandoff(for id: StagePort.ID?) {
         let face = ports.first { $0.id == id }?.face ?? handoff?.face ?? currentFace
         let intent = StageHandoff(portID: id, face: face)
@@ -581,6 +592,10 @@ final class StageModel {
         if face != currentFace {
             currentFace = face
             say("Turning the Mac around", showing: face)
+        }
+        if let id, chassis != nil, !isSelectionFrozen,
+           ports.contains(where: { $0.id == id && $0.isThunderbolt }) {
+            for index in ports.indices { ports[index].selected = ports[index].id == id }
         }
         if wasStaged != face { request(.handoff(face)) }
     }
@@ -726,7 +741,10 @@ extension StageMoment {
     /// §S5's 25 %: "unselected receptacles fade to 25 %, so the scene shows
     /// the subject and its context and nothing else". §S6 keeps it — the
     /// camera is locked and nothing else in the scene moves — and §S7 keeps
-    /// it while the configured receptacle holds its solid accent ring.
+    /// it while the configured receptacle holds its solid accent ring. §S8's
+    /// handoff recedes every receptacle but the near port and the selection
+    /// "to 25 %, its rings and plug with it, as unselected receptacles do on
+    /// S5".
     static let frozenDim: Float = 0.25
     /// §4.5: a hovered USB-only receptacle "dims 15 % and that is the whole
     /// answer the model gives".
@@ -750,10 +768,29 @@ extension StageMoment {
     /// clears and refuses hover for the duration), so the two never argue —
     /// but stating the order here keeps §4.5's hub behaviour and §S5's review
     /// behaviour in one readable place instead of two branches in the scene.
+    ///
+    /// §S8's handoff is the screen's rule too, and never up during a run: with
+    /// a near port, every other receptacle recedes so that "exactly one link
+    /// reads — this port to the other Mac". The selection does not: the
+    /// handoff opens with the near port selected, and a receptacle the user
+    /// selects while it is up — a row, the model, a Port menu item that turns
+    /// to it — "comes forward, as a selection does", so the list and the
+    /// stage never disagree about the port in hand (§2.4). With no near port,
+    /// nothing is singled out and nothing recedes.
     func dim(for port: StagePort) -> Float {
         if port.attention { return 1 }
         if let frozenSelection, !frozenSelection.contains(port.id) { return Self.frozenDim }
+        if let near = handoff?.portID, near != port.id, !port.selected { return Self.frozenDim }
         if !port.isThunderbolt, port.hovered { return Self.usbHoverDim }
         return 1
     }
+
+    /// §S8: "The line is that port's cable, so exactly one link reads" —
+    /// while the handoff draws its line no receptacle draws its own light
+    /// thread (§4.2): not the near port beside the line, and not a linked
+    /// neighbour, whose thread at 25 % still reads as a second cable against
+    /// the dark appearance's background — nor one the user selects, which
+    /// comes forward while its thread stays down. With no near port there is
+    /// no line, and every thread stays.
+    var handoffHoldsTheOnlyLink: Bool { handoff?.portID != nil }
 }

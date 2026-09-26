@@ -4,7 +4,9 @@
 //  Band 4 of the assistant column on the hub: §S1's link row under the port
 //  list, the reason the primary is unavailable when it is, and the button row
 //  itself — `Quit` at the leading edge, then `Set Up Port…` as the default
-//  with `Restore…` beside it whenever a note exists (§S1, §2.3, §2.8).
+//  with `Restore…` beside it whenever a note exists (§S1, §2.3, §2.8). While
+//  §S8 or §S11 holds the working area this steps aside for that screen's own
+//  footer (`ScreenFooter`), so the window has one button row and one default.
 //
 
 import SwiftUI
@@ -13,11 +15,6 @@ struct HubActionsFooter: View {
     let footer: HubFooterModel
     let hub: HubActionsModel
     let router: HubRouter
-    /// Whether the primary is the window's default. Not while §S11 or §S8
-    /// holds the working area: that screen's `Done` is then the one default,
-    /// and the primary stays here as a plain button (§S1), so Return never
-    /// has two buttons to choose between.
-    var primaryIsDefault = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -56,16 +53,13 @@ struct HubActionsFooter: View {
                 }
                 // R23 and R31 remove the primary rather than disabling it
                 // (§1.3 rule 5: a disabled button is still an invitation).
+                // §S1: `Set Up Port…`, the Port menu's ⌘N's own title, so the
+                // two can never name one command two ways.
                 if let primary = footer.primary {
-                    let button = Button(footer.primaryTitle) { hub.perform(primary) }
+                    Button(primary.title) { hub.perform(primary) }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
                         .disabled(!footer.isPrimaryEnabled)
-                    if primaryIsDefault {
-                        button
-                            .buttonStyle(.borderedProminent)
-                            .keyboardShortcut(.defaultAction)
-                    } else {
-                        button
-                    }
                 }
             }
             .padding(.top, 10)
@@ -73,15 +67,38 @@ struct HubActionsFooter: View {
         .animation(.smooth(duration: 0.18), value: footer)
     }
 
-    /// §S1's `.caption` link row, directly under the list, in the link color
-    /// `.link` gives it — a link drawn gray is a label nobody clicks.
+    /// §S1's `.caption` link row, directly under the list, drawn as every
+    /// other inline action in the column is — in the user's accent, not the
+    /// system's link blue — so every clickable word here is one color
+    /// (§2.3 band 3). A link drawn gray is a label nobody clicks.
     private var linkRow: some View {
         HStack(spacing: 14) {
             Button("Change Log") { hub.perform(.changeLog) }
+                .inlineAction()
             Button("What This All Means") { router.sheet = .whatThisAllMeans }
+                .inlineAction()
             Spacer(minLength: 0)
         }
-        .buttonStyle(.link)
         .font(.caption)
+    }
+}
+
+/// §2.3 band 4 for a screen that holds the working area on its own — §S8 and
+/// §S11 — while the hub's footer steps aside: a separator, then the screen's
+/// own buttons trailing, its default last. The same rule and the same place
+/// as the assistant's footer (`WizardFooter`), so the default is always
+/// bottom-trailing and there is only ever one.
+struct ScreenFooter<Buttons: View>: View {
+    @ViewBuilder var buttons: Buttons
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Divider()
+            HStack(spacing: 12) {
+                Spacer(minLength: 0)
+                buttons
+            }
+            .padding(.top, 10)
+        }
     }
 }

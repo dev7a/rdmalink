@@ -29,8 +29,10 @@ struct Situation: Sendable, Equatable, Identifiable {
 }
 
 extension Situation {
-    /// §7.4 and R20's aftermath: the service is gone, the bridge has not taken
-    /// the port back, and the note was deliberately kept.
+    /// §7.4 and §S1: the service is gone, the port is in no bridge, and the
+    /// note that records the bridges it came from is still there — kept on
+    /// purpose by R11 or R20, or left behind when the service was removed in
+    /// System Settings.
     static func needsAHand(_ port: PortSnapshot) -> Situation {
         Situation(
             id: "needsAHand",
@@ -40,12 +42,28 @@ extension Situation {
     }
 
     /// §7.4: "Drift is news, not failure."
+    ///
+    /// Its first button is the port row's own, so the two can never be on
+    /// different terms: `Set Up Again…`, or — for a drifted port with a
+    /// service of its own, which set-up would route to Adopt or refuse and
+    /// never plan — `Restore…`, `Adopt…` or nothing, split by whose service
+    /// it is (§S1). Its second is `Stop
+    /// Managing…`, which opens S10's stop-managing form: forgetting a note
+    /// that is the port's only way back is asked about in a sheet with no
+    /// default, never done on one click (§S1, §S10, §2.6). The detail line says the
+    /// service RDMALink made is gone, which is only true when it is: an
+    /// edited one is still there, and the line is left off rather than
+    /// claimed (§1.3 rule 10).
     static func drift(_ port: PortSnapshot) -> Situation {
-        Situation(
+        let serviceIsGone = port.serviceIdentifier == nil
+            || port.serviceIdentifier != port.baseline?.createdServiceIdentifier
+        return Situation(
             id: "drift",
             text: "\(port.port.positionName) isn't set up any more.",
-            detail: "The network service RDMALink made is gone — it may have been removed in System Settings.",
-            actions: [.setItUpAgain(portID: port.id), .forgetThisPort(portID: port.id)]
+            detail: serviceIsGone
+                ? "The network service RDMALink made is gone — it may have been removed in System Settings."
+                : nil,
+            actions: PortRowPresentation(snapshot: port).actions + [.stopManaging(portID: port.id)]
         )
     }
 
@@ -69,9 +87,10 @@ extension Situation {
 /// `Restore…`).
 struct HubFooterModel: Sendable, Equatable {
     /// Absent, not disabled, in R23's and R31's read-only modes (§S1: "The
-    /// footer's primary button is **absent**, not disabled").
+    /// footer's primary button is **absent**, not disabled"). The footer draws
+    /// its title, `Set Up Port…` — the Port menu's ⌘N's words — however many
+    /// ports are ready (§S1's primary action).
     var primary: HubAction?
-    var primaryTitle: LocalizedStringResource
     var isPrimaryEnabled: Bool
     /// §S1: with two Macs connected the primary is disabled "with the reason
     /// printed above the footer separator".
@@ -85,8 +104,8 @@ struct HubFooterModel: Sendable, Equatable {
 }
 
 extension HubFooterModel {
-    /// §S1: a row's set-up button — `Set Up…` or `Set It Up Again`, and the
-    /// drift situation row's `Set It Up Again` — is this footer's `Set Up
+    /// §S1: a row's set-up button — `Set Up…` or `Set Up Again…`, and the
+    /// drift situation row's `Set Up Again…` — is this footer's `Set Up
     /// Port…` for one port, on the same terms. Where the primary is absent —
     /// R23's Thunderbolt 4 Mac and R31's unrecognized one — so is every one of
     /// them. Every other action is not the footer's to answer, and is offered
@@ -97,9 +116,10 @@ extension HubFooterModel {
 
     /// And where the primary is disabled — two Macs connected, R1, with the
     /// reason printed above the footer separator — so is every set-up button.
-    /// `HubActionsModel.perform` does not ask the footer itself, so a button
-    /// that raises a set-up is kept from it here, and `canPerform` gives the
-    /// Port menu and the stage's double-click this same answer.
+    /// A button draws itself disabled by this, `canPerform` gives the Port
+    /// menu and the stage's double-click the same answer, and
+    /// `HubActionsModel.perform` — the one door every set-up goes through —
+    /// refuses by it too, so no caller can open a run on other terms (§S1).
     func allows(_ action: HubAction) -> Bool {
         offers(action) && (!action.opensSetUp || isPrimaryEnabled)
     }
@@ -160,13 +180,15 @@ enum HubPresentation {
             )
         }
         let ready = ports.ready
-        guard let first = ready.first else {
+        guard !ready.isEmpty else {
             return HubCopy(
                 headline: "Set up a Thunderbolt link",
                 body: "RDMALink prepares one Thunderbolt port on this Mac so it can carry RDMA straight to another Mac. You'll do the same on the other Mac afterwards."
             )
         }
-        return HubCopy(headline: headline(readyCount: ready.count), body: steadyStateBody(first))
+        return HubCopy(
+            headline: headline(readyCount: ready.count),
+            body: steadyStateBody(ready, changedSomethingElse: ports.contains(where: changedSomethingElse)))
     }
 
     /// §S1 writes the count in words and gives one and two. Three or more has
@@ -180,11 +202,49 @@ enum HubPresentation {
         }
     }
 
-    /// Names the first ready port and says whether a Mac is on the end of it.
-    private static func steadyStateBody(_ port: PortSnapshot) -> LocalizedStringResource {
-        port.port.link == .macLinked
-            ? "\(port.port.positionName) is set up and linked. Nothing else on this Mac was changed."
-            : "\(port.port.positionName) is set up and waiting for a Mac. Nothing else on this Mac was changed."
+    /// §S1's steady-state body, which agrees with the headline: it names every
+    /// ready port, in physical order, and says which have a Mac linked and
+    /// which are waiting for one — and "Nothing else on this Mac was changed"
+    /// only while that is true (§1.3 rule 10).
+    static func steadyStateBody(
+        _ ready: [PortSnapshot], changedSomethingElse: Bool
+    ) -> LocalizedStringResource {
+        let english = ThisMacPresentation.english
+        let names = { (ports: [PortSnapshot]) in
+            ports.map(\.port.positionName).formatted(.list(type: .and).locale(english))
+        }
+        let linked = ready.filter { $0.port.link == .macLinked }
+        let waiting = ready.filter { $0.port.link != .macLinked }
+        let sentence: String
+        switch (linked.count, waiting.count) {
+        case (1, 0):
+            sentence = String(localized: "\(names(linked)) is set up and linked.")
+        case (_, 0):
+            sentence = String(localized: "\(names(linked)) are set up and linked.")
+        case (0, 1):
+            sentence = String(localized: "\(names(waiting)) is set up and waiting for a Mac.")
+        case (0, _):
+            sentence = String(localized: "\(names(waiting)) are set up and waiting for a Mac.")
+        case (1, 1):
+            sentence = String(localized: "\(names(linked)) is set up and linked, and \(names(waiting)) is set up and waiting for a Mac.")
+        case (1, _):
+            sentence = String(localized: "\(names(linked)) is set up and linked, and \(names(waiting)) are set up and waiting for a Mac.")
+        case (_, 1):
+            sentence = String(localized: "\(names(linked)) are set up and linked, and \(names(waiting)) is set up and waiting for a Mac.")
+        default:
+            sentence = String(localized: "\(names(linked)) are set up and linked, and \(names(waiting)) are set up and waiting for a Mac.")
+        }
+        guard !changedSomethingElse else { return LocalizedStringResource(core: sentence) }
+        return "\(sentence) Nothing else on this Mac was changed."
+    }
+
+    /// A note that says RDMALink changed something on this Mac besides the
+    /// ports that are ready: a port it returned to the bridge (§7.5), one
+    /// that drifted since it set it up, one that needs putting back by hand.
+    /// With one of these about, "Nothing else on this Mac was changed" would
+    /// be false (§S1).
+    static func changedSomethingElse(_ port: PortSnapshot) -> Bool {
+        port.baseline != nil && !port.readiness.isReady
     }
 
     /// The situation rows, in the order §S1 lists them, at most one of each.
@@ -205,26 +265,21 @@ enum HubPresentation {
         return result
     }
 
-    /// §7.4's "a port needing putting back by hand", which is R20's state seen
-    /// on a later launch: RDMALink's service is gone, the bridge has not taken
-    /// the port back, and the note was kept on purpose.
-    ///
-    /// Observed, never remembered: a note that records the bridges the port
-    /// came from, a port that is now in none of them, and no service of its
-    /// own. An adopted note has no bridge history and can never be this.
+    /// §7.4's "a port needing putting back by hand": a note that records the
+    /// bridges the port came from, over a port that is now in none of them
+    /// and has no service — R11's or R20's kept note, or a service RDMALink
+    /// made that was removed by hand, whoever removed it (§7.4). Its own row
+    /// state, so the row, the picker and this line agree
+    /// (`PortReadiness.needsAHand`).
     static func needsAHand(_ port: PortSnapshot) -> Bool {
-        guard let baseline = port.baseline, !baseline.isAdopted, !baseline.bridges.isEmpty else {
-            return false
-        }
-        guard case .unconfigured(let bridges)? = port.configuration else { return false }
-        return bridges.isEmpty
+        port.readiness == .needsAHand
     }
 
     /// Drift proper: there is a note, and what it describes is not there any
     /// more. The half-restored port above is a drift the app can name more
-    /// precisely, so it is taken out of this one.
+    /// precisely, so it is a state of its own and never this one.
     static func hasDrifted(_ port: PortSnapshot) -> Bool {
-        port.readiness == .drifted && !needsAHand(port)
+        port.readiness == .drifted
     }
 
     /// §S1's footer: the primary action, and `Restore…` beside it whenever a
@@ -246,12 +301,11 @@ enum HubPresentation {
         let readOnly = unrecognized || hardware?.isThunderbolt4 == true
         return HubFooterModel(
             primary: readOnly ? nil : .setUpPort(portID: nil),
-            primaryTitle: ports.ready.isEmpty ? "Set Up Port…" : "Set Up Another Port…",
             isPrimaryEnabled: !twoMacs,
-            // §S1 asks for "the reason printed above the footer separator" and
-            // does not write one there. This is S3's own reason for the same
-            // condition, which is the nearest sentence the spec has.
-            disabledReason: twoMacs ? "Unplug one of the two cables to continue." : nil,
+            // §S1: the reason printed above the footer separator. The hub has
+            // nothing under way to "continue", as S3's reason for the same
+            // condition does; what waits on the cable is setting up.
+            disabledReason: twoMacs ? "Unplug one of the two cables to set up a port." : nil,
             offersRestore: !unrecognized
         )
     }

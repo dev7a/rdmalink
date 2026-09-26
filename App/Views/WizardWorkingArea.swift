@@ -7,6 +7,8 @@
 //  is what makes eight screens feel like one place.
 //
 //  Drop it in beside the hub's `WorkingArea` and put `WizardFooter` in band 4.
+//  Every button a screen owns is the footer's (§2.3 band 4); what is left in
+//  band 2 is inline actions tied to one line, and refusal cards.
 //
 
 import SwiftUI
@@ -22,31 +24,20 @@ struct WizardWorkingArea: View {
     /// window supplies one and this view calls it with the hovered change and
     /// the port it is about. **Owed from the stage owner:** the four previews.
     var preview: (ReviewPreview?, String) -> Void = { _, _ in }
-    /// §6.2 R3's recovery, which only the window can run: it owns the port
-    /// list the eligible receptacles come from.
-    var turnAndBreathe: () -> Void = {}
-    /// `Check Again` and ⌘R: re-run the full probe **and** the checks' own
-    /// reads, so a check that is not about a cable can clear (§S3, §6.2 R4,
-    /// R5, R14).
-    var recheck: () -> Void = {}
-    /// S7's `What to Do on the Other Mac`, which closes the assistant and
-    /// opens §S8's screen in its place — the window's to do, since it owns
-    /// both. Absent by default rather than present and inert.
-    var showOtherMac: (() -> Void)?
+    /// What a button does. The footer presses the same buttons (`WizardPerformer`).
+    let perform: (WizardAction) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // §2.3 band 1: a label, never a progress bar. The step's own
-            // headline lives in the screen below it, so nothing is said twice.
-            Text(flow.stepCaption)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .trailing)
             screen
                 .id(flow.step)
                 .transition(push)
+                // §2.3 band 1: the step label rides on the first line of the
+                // screen's own headline, so the headline starts where the
+                // hub's does and nothing sits above it.
+                .environment(\.stepCaption, flow.stepCaption)
                 // §S5: "OS password dialog up (the working area dims 20 % and
                 // says nothing over it)".
                 .opacity(flow.isAuthorizing ? 0.8 : 1)
@@ -79,7 +70,13 @@ struct WizardWorkingArea: View {
                 stage.thawSelection()
             }
         }
-        .onChange(of: flow.selection) { _, selection in
+        // §2.4: the stage and the list are one selection, from the picker's
+        // first frame. `SetUpFlow.open` chooses before this view is drawn —
+        // the hub's port, RDMALink's pick, or nothing — so the stage is told
+        // on appearance too: the pick is lit, and a hub selection the picker
+        // didn't take is put out rather than left ringed beside a pick named
+        // only in words.
+        .onChange(of: flow.selection, initial: true) { _, selection in
             guard !flow.isSelectionFrozen else { return }
             stage.select(orderedFirst(of: selection))
         }
@@ -99,7 +96,7 @@ struct WizardWorkingArea: View {
             }
         }
         // §4.4: the ribbon stays up for the whole of the review and the apply,
-        // so what "leave the Thunderbolt Bridge" means is on screen while it
+        // so what "Leave Thunderbolt Bridge" means is on screen while it
         // is being described and while it happens.
         .onChange(of: flow.step, initial: true) { _, step in
             stage.ribbons = step == .review || step == .apply ? .all : .automatic
@@ -162,8 +159,7 @@ struct WizardWorkingArea: View {
         case .apply:
             WizardApply(flow: flow, model: model, perform: perform)
         case .ready:
-            WizardReady(
-                flow: flow, model: model, perform: perform, showOtherMac: showOtherMac)
+            WizardReady(flow: flow, model: model)
         }
     }
 
@@ -189,13 +185,39 @@ struct WizardWorkingArea: View {
         model.ports.first { $0.port.bsdName == bsdName }?.id
     }
 
-    /// The one place a wizard button turns into something happening.
-    private func perform(_ action: WizardAction) {
+}
+
+/// The one place a wizard button turns into something happening — a card's
+/// in band 2 and the footer's in band 4 alike, so one button means one thing
+/// wherever it sits (§2.3).
+@MainActor
+struct WizardPerformer {
+    let flow: SetUpFlow
+    /// `Check Again` and ⌘R: re-run the full probe **and** the checks' own
+    /// reads, so a check that is not about a cable can clear (§S3, §6.2 R4,
+    /// R5, R14).
+    var recheck: () -> Void
+    /// §6.2 R3's recovery, which only the window can run: it owns the port
+    /// list the eligible receptacles come from.
+    var turnAndBreathe: () -> Void
+    /// S7's `What to Do on the Other Mac`, which closes the assistant and
+    /// opens §S8's screen in its place — the window's to do, since it owns
+    /// both.
+    var showOtherMac: () -> Void
+
+    func callAsFunction(_ action: WizardAction) {
         switch action {
         case .continue: flow.goForward()
         case .back, .cancel: flow.goBack()
-        case .done: flow.goBack()
-        case .checkAgain: recheck()
+        // §S6: `Done` on a refused S6's card closes the assistant (R8, R10,
+        // R11). S7's `Done` is the footer's primary, and goes forward.
+        case .done: flow.leave()
+        // The window's re-read, and then the card's own: a card the run put
+        // up, or one no check is about, is looked at again by the flow
+        // (§6.2 R12, §S6).
+        case .checkAgain:
+            recheck()
+            flow.checkAgain()
         case .showThunderboltPorts: turnAndBreathe()
         case .openNetworkSettings: WizardSettingsPane.open(WizardSettingsPane.network)
         case .openUsersAndGroups: WizardSettingsPane.open(WizardSettingsPane.usersAndGroups)
@@ -206,12 +228,14 @@ struct WizardWorkingArea: View {
             guard let volume = flow.findings.mountedThunderboltVolumes?.first else { return }
             WizardFinder.showVolume(named: volume)
         case .tryAgain: flow.tryAgain()
-        case .takeAnotherLook: flow.goBack()
+        // §6.2 R17: S5 read again in place, the port that moved breathing once.
+        case .takeAnotherLook: flow.takeAnotherLook()
         case .chooseAnotherPort: flow.chooseAnotherPort()
         case .identifyPort: flow.beginIdentify()
         case .identifyAgain: flow.identify?.restart()
         case .useThisPort: flow.useIdentifiedPort()
         case .chooseFromList: flow.dismissIdentify()
+        case .whatToDoOnTheOtherMac: showOtherMac()
         // Handled by `CopyDetailsButton`, which needs the payload and not an
         // intent (§6.1 rule 8).
         case .copyDetails, .copyDetailsForIT: break
@@ -219,16 +243,48 @@ struct WizardWorkingArea: View {
     }
 }
 
+extension EnvironmentValues {
+    /// §2.3 band 1's `Step 2 of 3`, for the screen's headline to carry
+    /// trailing on its first line. Set by the assistant alone; `nil` on the
+    /// hub, the change log, the other-Mac screen and in every sheet.
+    @Entry var stepCaption: LocalizedStringResource? = nil
+}
+
+/// §2.3 band 1: the step label, trailing on the first line of a headline and
+/// sharing its baseline. It never wraps and never truncates — the headline
+/// gives way to it.
+struct HeadlineRow<Headline: View>: View {
+    @Environment(\.stepCaption) private var stepCaption
+    @ViewBuilder var headline: Headline
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            headline
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let stepCaption {
+                Text(stepCaption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+            }
+        }
+    }
+}
+
 /// The headline-and-body pair every wizard screen opens with (§2.3 band 2):
-/// `.title2` semibold over `.body` secondary.
+/// `.title2` semibold over `.body` secondary, with the step label on the
+/// headline's first line (§2.3 band 1).
 struct WizardHeadline: View {
     let headline: LocalizedStringResource
     var message: LocalizedStringResource?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(headline)
-                .font(.title2.weight(.semibold))
+            HeadlineRow {
+                Text(headline)
+                    .font(.title2.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let message {
                 Text(message)
                     .font(.body)
