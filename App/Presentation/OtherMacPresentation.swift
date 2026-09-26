@@ -5,10 +5,85 @@
 //  step 4 names, and whether the far end has answered. Pure over the hub's
 //  snapshots and the way the screen was reached, so the screen, its footer's
 //  copy and the stage's handoff agree about the port and the script can check
-//  the rule.
+//  the rule. And which Mac the user says the other one is, for the stage's
+//  picture of it (`OtherMacChoice`, §S8 "The other Mac's picture"), and
+//  where the pop-up that says so stands (`OtherMacPickerPlace`).
 //
 
 import Foundation
+import RDMALinkCore
+
+/// §S8's `Other Mac:` pop-up: which Mac the stage draws the ghost second Mac
+/// as. "It changes the stage's picture of the other Mac and nothing else",
+/// and "the choice is remembered across launches" (`AppSettings.otherMac`).
+/// The raw values are what is remembered, so they never change.
+enum OtherMacChoice: String, CaseIterable, Identifiable, Sendable {
+    case anyMac
+    case macBookPro
+    case macStudio
+    case macMini
+
+    /// "**Any Mac**, the default".
+    static let standard = OtherMacChoice.anyMac
+
+    var id: Self { self }
+
+    /// The item, verbatim: Title Case, and no ellipsis, because choosing one
+    /// finishes the command (§1.3 rule 11).
+    var title: LocalizedStringResource {
+        switch self {
+        case .anyMac: "Any Mac"
+        case .macBookPro: "MacBook Pro"
+        case .macStudio: "Mac Studio"
+        case .macMini: "Mac mini"
+        }
+    }
+
+    /// The model a family is drawn as — "a current Thunderbolt 5 model of it:
+    /// the Mac Studio (M5 Max), the Mac mini (M5 Pro) and the 14-inch MacBook
+    /// Pro (M5 Pro or M5 Max)" — by the identifier Core's catalogue lists it
+    /// under, so the chassis is the catalogue's and never a second table's.
+    /// `nil` for **Any Mac**, which "draws the featureless box".
+    var representative: String? {
+        switch self {
+        case .anyMac: nil
+        case .macBookPro: "Mac17,7"
+        case .macStudio: "Mac17,14"
+        case .macMini: "Mac17,16"
+        }
+    }
+
+    /// The chassis family the ghost is drawn as, or `nil` for the box.
+    var archetype: Archetype? {
+        representative.flatMap(HardwareModel.archetype(forIdentifier:))
+    }
+}
+
+/// Where §S8's `Other Mac:` pop-up stands, if anywhere (UX_SPEC §S8 "The
+/// other Mac's picture", §2.3). One answer for the stage and the working
+/// area, so the pop-up is never in both places, and never in neither while
+/// the screen is up on a Mac the stage can draw.
+enum OtherMacPickerPlace: Equatable, Sendable {
+    /// "On the stage, in its top-trailing corner — above where the ghost
+    /// settles, across from the legend".
+    case stage
+    /// "Below 900 pt the stage is §8.5's 180 pt strip, which the pair fills
+    /// from top to bottom, so there the pop-up leaves the stage for the
+    /// working area … below the note and above the honesty line".
+    case workingArea
+
+    /// - Parameters:
+    ///   - showsOtherMac: §S8 holds the working area — not merely asked for:
+    ///     the set-up assistant's working area comes first.
+    ///   - recognized: the stage draws a model. "On an unrecognized Mac
+    ///     (R31) the stage draws no model and no ghost, so the pop-up is not
+    ///     there, on the stage or in the working area."
+    ///   - stageIsStrip: §8.5's single column, below 900 pt.
+    static func place(showsOtherMac: Bool, recognized: Bool, stageIsStrip: Bool) -> Self? {
+        guard showsOtherMac, recognized else { return nil }
+        return stageIsStrip ? .workingArea : .stage
+    }
+}
 
 /// How §S8 was reached, which decides whose link it is about (UX_SPEC §S8
 /// "Whose link").

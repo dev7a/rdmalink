@@ -137,7 +137,16 @@ made up; they are not the rig's.
   screen and the neighbours' rings sit above the hovered centre. The legend
   moves to the top-trailing corner only when that corner is clear; the
   chassis's projected bounds span nearly the stage's width, so a box that
-  reaches one top corner can reach both, and then the legend stays.
+  reaches one top corner can reach both, and then the legend stays. §S8's
+  `Other Mac:` pop-up is not placed from the projection at all: it holds the
+  top-trailing corner (`StageMath.topBand`, which also sets the narration
+  capsule below its row rather than let the two meet), the legend does not
+  yield into that corner while it is there, and the callout drops below its
+  row rather than reach it. It keeps its widest item's width whichever Mac is
+  picked (`StageOtherMacPicker`), so that corner, the capsule's drop and the
+  callout's keep-out never change with the pick. Below 900 pt the stage is a strip the ghost
+  fills, so the window stands the pop-up in §S8's working area instead
+  (`OtherMacPickerPlace`).
 - **Bridge membership is two facts, not one** (measured 2026-09-20). The
   network preferences keep their own member list —
   `VirtualNetworkInterfaces` → `Bridge` → `bridgeN` → `Interfaces`, with
@@ -454,6 +463,10 @@ public struct HardwareModel: Sendable {
     public var chip: String              // "M3 Ultra"
     public var archetype: Archetype
     public var recognition: Recognition  // which UX_SPEC §4.7 rule decided the archetype
+
+    // The identifier catalogue's row, for drawing a Mac the app is only told
+    // about (UX_SPEC §S8's other Mac) — never for recognizing this one.
+    public static func archetype(forIdentifier: String) -> Archetype?
 }
 
 public enum PortFace: String, Sendable { case back, front, left, right }

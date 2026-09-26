@@ -54,6 +54,11 @@ struct StageView: View {
     /// remembered."
     @AppStorage(AppSettings.showsLegend) private var showsLegend = true
     @AppStorage(AppSettings.showTechnicalNames) private var showsTechnicalNames = false
+    /// §S8's `Other Mac:` pop-up, which the window puts on the stage while
+    /// that screen is up and the stage is wider than §8.5's strip.
+    @Environment(\.otherMacPickerPlace) private var otherMacPickerPlace
+    /// What the pop-up measured last, so the callout can stand clear of it.
+    @State private var otherMacPickerSize: CGSize?
 
     private var appearance: StageAppearance {
         StageAppearance(
@@ -101,22 +106,24 @@ struct StageView: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel(Text(containerSummary))
             .accessibilityChildren { accessibilityElements }
-            .overlay(alignment: .top) {
-                StageNarration(line: model.narration, appearance: appearance)
-                    .padding(.top, 14)
-            }
+            // §2.3's top band: the narration capsule, and §S8's pop-up in the
+            // top-trailing corner, which the capsule makes way for.
+            .overlay { topBand }
             // §4.8's legend, "shown whenever the rings are live" — with the
-            // line that names §S8's ghost while the handoff is up.
+            // line that names §S8's ghost while the handoff is up. It stays
+            // out of the corner §S8's pop-up holds.
             .overlay {
                 if showsLegend {
                     StageLegendOverlay(
                         rows: StageLegend.rows(for: model.ports, handoff: model.handoff),
                         projection: scene.projection,
-                        viewport: scene.viewport, appearance: appearance
+                        viewport: scene.viewport, appearance: appearance,
+                        trailingCornerTaken: showsOtherMacPicker
                     )
                 }
             }
-            // §4.8's callout, beside the receptacle it is about.
+            // §4.8's callout, beside the receptacle it is about — and never
+            // over §S8's pop-up.
             .overlay(alignment: .topLeading) {
                 let port = calloutPort
                 StageCalloutOverlay(
@@ -124,7 +131,8 @@ struct StageView: View {
                     projection: scene.projection,
                     rowIDs: model.ports.filter { $0.face == port?.face }.map(\.id),
                     receptaclePointSize: scene.receptaclePointSize,
-                    viewport: scene.viewport, appearance: appearance
+                    viewport: scene.viewport, appearance: appearance,
+                    pickerSize: showsOtherMacPicker ? otherMacPickerSize : nil
                 )
             }
             .overlay(alignment: .bottom) { faceSelector }
@@ -327,6 +335,32 @@ struct StageView: View {
     }
 
     // MARK: - Overlays
+
+    /// §S8's pop-up is on the stage while the window puts it here and the
+    /// ghost is up: "it comes and goes with the ghost".
+    private var showsOtherMacPicker: Bool {
+        otherMacPickerPlace == .stage && model.handoff != nil
+    }
+
+    private var topBand: some View {
+        StageTopBand {
+            StageNarration(line: model.narration, appearance: appearance)
+            if showsOtherMacPicker {
+                StageOtherMacPicker(appearance: appearance)
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: {
+                        otherMacPickerSize = $0
+                    }
+                    .layoutValue(key: StageTopBand.SlotKey.self, value: .picker)
+                    // §S8: "it fades in as the ghost arrives and out as the
+                    // ghost leaves, over 150 ms, and under Reduce Motion it
+                    // simply appears and goes."
+                    .transition(.opacity)
+            }
+        }
+        .animation(
+            appearance.reduceMotion ? nil : .smooth(duration: 0.15), value: showsOtherMacPicker
+        )
+    }
 
     @ViewBuilder
     private var faceSelector: some View {
@@ -595,7 +629,8 @@ struct StageView: View {
 /// The legend in the top-leading corner — or the top-trailing one while the
 /// chassis reaches under the leading one: "It never overlaps a receptacle: it
 /// yields to the model by moving to the top-trailing corner when the chassis
-/// reaches under it." The two positions cross-fade (§3.5's state change).
+/// reaches under it and that corner is clear." The two positions cross-fade
+/// (§3.5's state change).
 ///
 /// A view of its own so that only this re-lays out when the projection moves
 /// under a camera arc, not the whole stage.
@@ -604,6 +639,10 @@ private struct StageLegendOverlay: View {
     let projection: StageProjection
     let viewport: CGSize
     let appearance: StageAppearance
+    /// §4.8: "while §S8's `Other Mac:` pop-up holds that corner the legend
+    /// stays where it is, and the handoff has pulled this Mac back into the
+    /// leading third, clear of it."
+    let trailingCornerTaken: Bool
 
     @State private var size = CGSize.zero
 
@@ -647,7 +686,8 @@ private struct StageLegendOverlay: View {
     /// size is what it measured last, so the first frame decides from an
     /// empty rectangle and the next one corrects it.
     private var yields: Bool {
-        guard let chassis = projection.chassisBounds, size != .zero else { return false }
+        guard !trailingCornerTaken, let chassis = projection.chassisBounds, size != .zero
+        else { return false }
         let leading = CGRect(origin: .zero, size: size)
             .insetBy(dx: -Self.clearance, dy: -Self.clearance)
         let trailing = CGRect(origin: CGPoint(x: viewport.width - size.width, y: 0), size: size)
@@ -672,6 +712,10 @@ private struct StageCalloutOverlay: View {
     let receptaclePointSize: Double
     let viewport: CGSize
     let appearance: StageAppearance
+    /// §S8's `Other Mac:` pop-up, while it is on the stage: its size, in the
+    /// top-trailing corner `StageMath.topBand` puts it in. "It never covers
+    /// §S8's `Other Mac:` pop-up" (§4.8).
+    let pickerSize: CGSize?
 
     @State private var size = CGSize.zero
 
@@ -696,7 +740,8 @@ private struct StageCalloutOverlay: View {
     /// Beside the receptacle: to its trailing side when that fits and its
     /// leading side otherwise, and above it — the callout's bottom edge at
     /// the top of the receptacle's *row* — so a row of receptacles stays in
-    /// view under it, falling below the row when there is no room above.
+    /// view under it, falling below the row when there is no room above — or
+    /// when the place above would reach §S8's pop-up (§4.8).
     ///
     /// The row, not the one receptacle: a Mac Studio's back row recedes in
     /// perspective, so the receptacles beside the hovered one sit higher on
@@ -721,10 +766,23 @@ private struct StageCalloutOverlay: View {
         let top = row.map(\.y).min() ?? centre.y
         let bottom = row.map(\.y).max() ?? centre.y
         var y = top - standoff - size.height
-        if y < Self.margin {
+        if y < Self.margin || reachesPicker(CGRect(x: x, y: y, width: size.width, height: size.height)) {
             y = min(bottom + standoff, max(viewport.height - size.height - Self.margin, Self.margin))
         }
         return CGSize(width: x, height: y)
+    }
+
+    /// True when `frame` comes within the callout's own margin of §S8's
+    /// pop-up.
+    private func reachesPicker(_ frame: CGRect) -> Bool {
+        guard let pickerSize,
+              let origin = StageMath.topBand(
+                  width: viewport.width, narration: .zero, picker: pickerSize
+              ).picker
+        else { return false }
+        return frame.intersects(
+            CGRect(origin: origin, size: pickerSize).insetBy(dx: -Self.margin, dy: -Self.margin)
+        )
     }
 }
 

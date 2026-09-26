@@ -3,8 +3,9 @@
 //
 //  Every number the stage needs that is not a RealityKit call: the orbit rig,
 //  the dolly limits that keep a receptacle clickable (UX_SPEC §3.4, §8.4), the
-//  easing for the 0.7 s camera arc (§3.5), and the rounded-rectangle outlines
-//  the ring tracks are built from (§4.1).
+//  easing for the 0.7 s camera arc (§3.5), the rounded-rectangle outlines
+//  the ring tracks are built from (§4.1), and where the narration capsule and
+//  §S8's pop-up stand in the stage's top band (§2.3).
 //
 //  This file imports nothing but Foundation, CoreGraphics and simd on purpose:
 //  it is the only part of the stage that can be compiled and exercised on its
@@ -128,6 +129,39 @@ enum StageMath {
         )
     }
 
+    // MARK: - §2.3's top band
+
+    /// How far §S8's `Other Mac:` pop-up stands in from the stage's top and
+    /// trailing edges — the legend's inset across the stage from it.
+    static let cornerInset = 12.0
+    /// Where §9.1's narration capsule hangs from the stage's top edge.
+    static let narrationTop = 14.0
+    /// §2.3: the narration capsule "is set just below the pop-up's row
+    /// whenever, centered, it would come within 8 pt of it".
+    static let topBandGap = 8.0
+
+    /// Where the stage's top band puts its two floating things in a stage
+    /// `width` points wide, as top-leading corners in the stage's own
+    /// coordinates: §9.1's narration capsule, top-center, and §S8's pop-up
+    /// in the top-trailing corner — `picker` is its size, `nil` when it is
+    /// not on the stage.
+    ///
+    /// The pop-up never moves for the capsule, because "a label gives way to
+    /// a control, never the reverse" (§2.3): it stays where the pointer left
+    /// it, and the capsule, up for 1.4 s at a time, drops below its row
+    /// instead of meeting it. A capsule that clears it keeps its place.
+    static func topBand(
+        width: Double, narration: CGSize, picker: CGSize?
+    ) -> (narration: CGPoint, picker: CGPoint?) {
+        let narrationX = (width - narration.width) / 2
+        guard let picker else { return (CGPoint(x: narrationX, y: narrationTop), nil) }
+        let pickerOrigin = CGPoint(x: width - cornerInset - picker.width, y: cornerInset)
+        let meets = narration.width > 0
+            && narrationX + narration.width + topBandGap > pickerOrigin.x
+        let narrationY = meets ? cornerInset + picker.height + topBandGap : narrationTop
+        return (CGPoint(x: narrationX, y: narrationY), pickerOrigin)
+    }
+
     // MARK: - §S8's handoff
 
     /// The world direction that is screen-right for a camera at `yaw`: the
@@ -142,15 +176,43 @@ enum StageMath {
         SIMD3(sin(yaw), 0, cos(yaw))
     }
 
+    /// `point` turned `yaw` about the vertical, the way an entity oriented by
+    /// that yaw turns its children: `+z` becomes ``outwardNormal(yaw:)``. How
+    /// a place on §S8's ghost, in its own chassis's frame, lands in the world.
+    static func turn(_ point: SIMD3<Double>, yaw: Double) -> SIMD3<Double> {
+        SIMD3(
+            point.x * cos(yaw) + point.z * sin(yaw),
+            point.y,
+            -point.x * sin(yaw) + point.z * cos(yaw)
+        )
+    }
+
     /// Daylight between this Mac and the ghost, in centimetres: enough that
     /// the two read as two, not so much that the pair leaves the frame.
     static let handoffClearance = 6.0
 
-    /// Centre-to-centre distance to the ghost. `extentAlongRight` is the ghost
-    /// box's width along ``screenRight(yaw:)``; `across` is this Mac's
-    /// footprint circumcircle, which is its silhouette at any pose.
-    static func handoffGap(extentAlongRight: Double, across: Double) -> Double {
-        extentAlongRight / 2 + across / 2 + handoffClearance
+    /// Centre-to-centre distance to the ghost. `extentAlongRight` is the ghost's
+    /// width along ``screenRight(yaw:)``; `across` is this Mac's footprint
+    /// circumcircle, which is its silhouette at any pose; `overhang` is how far
+    /// the ghost reaches past its footprint towards this Mac — a MacBook Pro's
+    /// open lid, leaning back over its hinge.
+    static func handoffGap(
+        extentAlongRight: Double, across: Double, overhang: Double = 0
+    ) -> Double {
+        extentAlongRight / 2 + overhang + across / 2 + handoffClearance
+    }
+
+    /// How far along screen-right §S8's framing reaches from this Mac's
+    /// centre: to the far side of the ghost's silhouette, `gap` out with
+    /// `ghostAcross` its footprint circumcircle, but never short of where the
+    /// box's far side would be, `boxGap` out with this Mac's own `across`. A
+    /// ghost that fits where the box stood is given the box's room, so this
+    /// Mac keeps its place and size on the stage beside a Mac mini as beside
+    /// the box; only a larger ghost pulls the camera back.
+    static func handoffFarEdge(
+        gap: Double, ghostAcross: Double, boxGap: Double, across: Double
+    ) -> Double {
+        max(gap + ghostAcross / 2, boxGap + across / 2)
     }
 
     /// How far the ghost starts beyond its resting place before it slides in.
@@ -163,15 +225,25 @@ enum StageMath {
 
     /// §S8's "single thin connecting line": out of the near port, across, and
     /// into the far one. Four points in the chassis's own centimetres, near
-    /// end first. A straight line between two ports on the same face would
-    /// lie *on* that face, over every other receptacle on it.
+    /// end first. Both ports face the same way, `normal` (a unit vector), but
+    /// not always from the same depth along it: the box stands where this Mac
+    /// does, while a chosen model's face can stand further out or further in
+    /// — a MacBook Pro's left side is 15.6 cm out of its centre, a Mac mini's
+    /// back 6.4 cm. So each end leaves its own face straight out, and the run
+    /// between them is level, `handoffReach` beyond whichever face stands
+    /// further out. A straight line from port to port would lie on a face,
+    /// over every other receptacle on it; a run kept at a fixed reach from
+    /// each face would slant back through the corner of the Mac whose face
+    /// stands further out, and read as a second point of contact.
     static func handoffCable(
         from near: SIMD3<Double>, to far: SIMD3<Double>, normal: SIMD3<Double>
     ) -> [SIMD3<Double>] {
-        [
+        let nearDepth = simd_dot(near, normal), farDepth = simd_dot(far, normal)
+        let level = max(nearDepth, farDepth) + handoffReach
+        return [
             near + normal * handoffStandoff,
-            near + normal * handoffReach,
-            far + normal * handoffReach,
+            near + normal * (level - nearDepth),
+            far + normal * (level - farDepth),
             far + normal * handoffStandoff,
         ]
     }
@@ -200,6 +272,21 @@ enum StageMath {
 
     /// Ease-in-ease-out over `0...1` (§3.5: camera moves are 0.7 s,
     /// ease-in-ease-out).
+    /// §S8: a new pick lands while the last cross-fade is still running.
+    /// Of the two shapes on stage — the one fading in, at `easeInOut(progress)`,
+    /// and the one fading out, at `outgoingFrom × (1 − that)` — the one showing
+    /// more goes out from the opacity it has now and the other is let go, so
+    /// nothing jumps back to full on the way through several picks. With no
+    /// fade running the shape on stage is at full and is the one that goes.
+    static func crossFadeHandover(
+        progress: Double, outgoingFrom: Double, fading: Bool
+    ) -> (keepsOutgoing: Bool, from: Double) {
+        guard fading else { return (false, 1) }
+        let shown = easeInOut(progress)
+        let leaving = outgoingFrom * (1 - shown)
+        return leaving > shown ? (true, leaving) : (false, shown)
+    }
+
     static func easeInOut(_ t: Double) -> Double {
         let t = min(max(t, 0), 1)
         return t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2

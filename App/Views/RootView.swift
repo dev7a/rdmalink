@@ -50,11 +50,25 @@ struct RootView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            if proxy.size.width < Self.singleColumnThreshold {
-                singleColumn
-            } else {
-                splitColumns(availableWidth: proxy.size.width)
+            let isStrip = proxy.size.width < Self.singleColumnThreshold
+            Group {
+                if isStrip {
+                    singleColumn
+                } else {
+                    splitColumns(availableWidth: proxy.size.width)
+                }
             }
+            // §S8's `Other Mac:` pop-up floats on the stage, and stands in the
+            // working area only while the stage is §8.5's strip — decided
+            // here, where both halves of the question are known. §S8 holds
+            // the working area only with no assistant up (AssistantColumn).
+            .environment(
+                \.otherMacPickerPlace,
+                OtherMacPickerPlace.place(
+                    showsOtherMac: flow == nil && router.showsOtherMac,
+                    recognized: stage.chassis != nil, stageIsStrip: isStrip
+                )
+            )
         }
         .frame(minWidth: 840, minHeight: 600)
         // §S6, §S10: a write is never cut off. From the password dialog to

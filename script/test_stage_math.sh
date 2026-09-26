@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Exercises App/Stage/StageMath.swift on its own.
 #
-# The stage's numbers — the orbit clamps, the 24 pt dolly floor, the easing and
-# the rounded-rectangle outlines the ring tracks are built from — are the part
+# The stage's numbers — the orbit clamps, the 24 pt dolly floor, the easing,
+# the rounded-rectangle outlines the ring tracks are built from, and where the
+# narration capsule and §S8's pop-up stand in the top band — are the part
 # of the 3D code that can be wrong without looking wrong. StageMath imports
 # nothing but Foundation and simd so exactly this is possible: no Xcode
 # project, no RealityKit, no window.
@@ -431,6 +432,44 @@ for yaw in stride(from: -Double.pi, through: .pi, by: 0.37) {
 }
 check(near(StageMath.handoffGap(extentAlongRight: 19.7, across: 27.86), 9.85 + 13.93 + 6),
       "the gap is half the ghost, half this Mac's silhouette, and the clearance")
+check(near(StageMath.handoffGap(extentAlongRight: 22.12, across: 27.86, overhang: 5.3), 11.06 + 5.3 + 13.93 + 6),
+      "a MacBook Pro ghost's lid, leaning back towards this Mac, is kept clear of it too")
+// §S8: "A ghost that fits where the box stood is given the box's room" — a
+// Mac Studio's box is 19.7 cm across its back and 27.86 cm round; a Mac mini
+// ghost 12.7 and 17.96; a MacBook Pro ghost, side on, 22.12 and 38.33.
+let studioBoxGap = StageMath.handoffGap(extentAlongRight: 19.7, across: 27.86)
+check(near(StageMath.handoffFarEdge(gap: studioBoxGap, ghostAcross: 27.86, boxGap: studioBoxGap, across: 27.86),
+           studioBoxGap + 13.93),
+      "the box's framing reaches its own far side")
+let miniGap = StageMath.handoffGap(extentAlongRight: 12.7, across: 27.86)
+check(near(StageMath.handoffFarEdge(gap: miniGap, ghostAcross: 17.96, boxGap: studioBoxGap, across: 27.86),
+           studioBoxGap + 13.93),
+      "a Mac mini beside a Mac Studio is framed as the box is, so this Mac keeps its size")
+let notebookGap = StageMath.handoffGap(extentAlongRight: 22.12, across: 27.86, overhang: 5.3)
+check(near(StageMath.handoffFarEdge(gap: notebookGap, ghostAcross: 38.33, boxGap: studioBoxGap, across: 27.86),
+           notebookGap + 19.165),
+      "a MacBook Pro, larger than the box, is framed to its own far side")
+// §S8's ghost drawn as a chosen model is turned so its usual face looks the
+// way this Mac's port does: turning is the entity's own, +z out of the face.
+for yaw in stride(from: -Double.pi, through: .pi, by: 0.41) {
+    let out = StageMath.turn(SIMD3(0, 0, 1), yaw: yaw), normal = StageMath.outwardNormal(yaw: yaw)
+    check(near(out.x, normal.x) && near(out.z, normal.z), "turning +z by a face's yaw points out of that face")
+    let across = StageMath.turn(SIMD3(1, 0, 0), yaw: yaw), right = StageMath.screenRight(yaw: yaw)
+    check(near(across.x, right.x) && near(across.z, right.z),
+          "…and +x along screen-right, so u still runs from the viewer's left")
+    let point = StageMath.turn(SIMD3(3, 2, -4), yaw: yaw)
+    check(near(point.y, 2) && near(simd_length(point), simd_length(SIMD3<Double>(3, 2, -4))),
+          "a turn keeps height and distance")
+}
+// A MacBook Pro ghost staged on this Mac's back is turned by yaw(back) −
+// yaw(left) = 3π/2: its left side faces out of the back, and its hinge —
+// where the lid leans — faces this Mac, which is on the ghost's -right side.
+let notebookGhostYaw = Double.pi - (-Double.pi / 2)
+let turnedLeft = StageMath.turn(SIMD3(-1, 0, 0), yaw: notebookGhostYaw)
+check(near(turnedLeft.x, backNormal.x, 1e-9) && near(turnedLeft.z, backNormal.z),
+      "the notebook ghost's left side looks the way this Mac's back does")
+let turnedRear = StageMath.turn(SIMD3(0, 0, -1), yaw: notebookGhostYaw)
+check(near(simd_dot(turnedRear, -rightOfBack), 1), "…and its rear faces this Mac")
 let nearPort = SIMD3<Double>(8, 4, -9.85), farPort = SIMD3<Double>(-22, 4, -9.85)
 let cable = StageMath.handoffCable(from: nearPort, to: farPort, normal: backNormal)
 check(cable.count == 4, "the cable is out, across and in")
@@ -439,6 +478,27 @@ check(near(cable[0].z, -9.85 - StageMath.handoffStandoff) && near(cable[3].z, -9
 check(near(cable[1].z, cable[2].z) && near(cable[1].z, -9.85 - StageMath.handoffReach),
       "the run between the Macs is clear of both faces")
 check(cable.allSatisfy { near($0.y, 4) }, "the cable stays at the ports' height")
+// A chosen ghost's face need not stand where this Mac's does: this Mac a
+// MacBook Pro, its left side 15.63 cm out, beside a Mac mini ghost whose back
+// is 6.35 cm out. A run kept 3.2 cm off each face slanted back through this
+// Mac's corner; the run is level, in front of both, whichever stands out.
+let depthOut = { (point: SIMD3<Double>) in simd_dot(point, backNormal) }
+for (nearDepth, farDepth) in [(15.63, 6.35), (6.35, 15.63), (9.85, 9.85)] {
+    let nearReceptacle = SIMD3<Double>(8, 1.3, -nearDepth)
+    let farReceptacle = SIMD3<Double>(-26, 2.2, -farDepth)
+    let run = StageMath.handoffCable(from: nearReceptacle, to: farReceptacle, normal: backNormal)
+    check(run.count == 4, "the cable is out, across and in, whatever the two depths")
+    check(near(depthOut(run[1]), depthOut(run[2])),
+          "the run between faces \(nearDepth) and \(farDepth) cm out is level")
+    check(near(depthOut(run[1]), max(nearDepth, farDepth) + StageMath.handoffReach),
+          "…at the reach beyond whichever face stands further out")
+    check(near(depthOut(run[0]), nearDepth + StageMath.handoffStandoff)
+          && near(depthOut(run[3]), farDepth + StageMath.handoffStandoff),
+          "…and each end still stands off its own face")
+    check(near(run[0].x, run[1].x) && near(run[0].y, run[1].y)
+          && near(run[2].x, run[3].x) && near(run[2].y, run[3].y),
+          "…leaving it straight out")
+}
 let farEnd = StageMath.cablePoint(cable, at: 0), nearEnd = StageMath.cablePoint(cable, at: 1)
 check(near(farEnd.x, cable[3].x) && near(farEnd.z, cable[3].z), "the pulse starts at the far end")
 check(near(nearEnd.x, cable[0].x) && near(nearEnd.z, cable[0].z), "and ends at the near port")
@@ -567,6 +627,50 @@ check(aside.map { $0.x < 290 && near($0.y, 334, 1e-6) } == true,
 check(StageMath.project(
         SIMD3(0, 0, -2), camera: eye, target: .zero, verticalFieldOfView: fov, viewport: stage
       ) == nil, "a point behind the camera does not project")
+
+// UX_SPEC §2.3's top band: the narration capsule top-center, §S8's pop-up
+// top-trailing, and "a label gives way to a control, never the reverse".
+let capsule = CGSize(width: 163, height: 29)
+// The pop-up's capsule as drawn: one width whichever item is chosen, its
+// widest item's (§S8), measured at 191 × 26 pt with MacBook Pro and with Any
+// Mac alike in a real capture (2026-09-25).
+let popUp = CGSize(width: 191, height: 26)
+let alone = StageMath.topBand(width: 580, narration: capsule, picker: nil)
+check(alone.picker == nil && near(alone.narration.x, (580 - 163) / 2) && near(alone.narration.y, 14),
+      "with no pop-up the capsule hangs top-center, 14 pt down")
+let roomy = StageMath.topBand(width: 900, narration: capsule, picker: popUp)
+check(roomy.picker.map { near($0.x, 900 - 12 - 191) && near($0.y, 12) } == true,
+      "the pop-up stands 12 pt in from the top and trailing edges, level with the legend")
+check(near(roomy.narration.y, 14), "a capsule that clears the pop-up keeps its place")
+for width in [460.0, 522, 580, 640] {
+    let band = StageMath.topBand(width: width, narration: capsule, picker: popUp)
+    let pickerOrigin = band.picker ?? .zero
+    check(near(pickerOrigin.x, width - 12 - 191) && near(pickerOrigin.y, 12),
+          "the pop-up never moves for the capsule at \(width) pt")
+    let capsuleFrame = CGRect(origin: band.narration, size: capsule)
+    let pickerFrame = CGRect(origin: pickerOrigin, size: popUp)
+    check(!capsuleFrame.intersects(pickerFrame.insetBy(dx: -7.9, dy: -7.9)),
+          "the capsule never comes within 8 pt of the pop-up at \(width) pt")
+    check(near(band.narration.x, (width - 163) / 2), "the capsule stays centered at \(width) pt")
+}
+// §S8: a pick that lands mid-fade hands over from where the fade stands.
+let settled = StageMath.crossFadeHandover(progress: 1, outgoingFrom: 1, fading: false)
+check(!settled.keepsOutgoing && settled.from == 1, "no fade running: the shape on stage goes out from full")
+let early = StageMath.crossFadeHandover(progress: 0.2, outgoingFrom: 1, fading: true)
+check(early.keepsOutgoing && near(early.from, 1 - StageMath.easeInOut(0.2), 1e-12),
+      "early in a fade the old shape still shows more and goes out from where it is")
+let late = StageMath.crossFadeHandover(progress: 0.8, outgoingFrom: 1, fading: true)
+check(!late.keepsOutgoing && near(late.from, StageMath.easeInOut(0.8), 1e-12),
+      "late in a fade the new shape shows more and goes out from where it is, never from full")
+let chained = StageMath.crossFadeHandover(progress: 0.5, outgoingFrom: 0.6, fading: true)
+check(near(chained.from, max(0.6 * (1 - StageMath.easeInOut(0.5)), StageMath.easeInOut(0.5)), 1e-12)
+      && chained.from < 1, "a second pick mid-fade never starts either shape at full")
+
+let narrowest = StageMath.topBand(width: 460, narration: capsule, picker: popUp)
+check(near(narrowest.narration.y, 12 + 26 + 8),
+      "at the narrowest stage the capsule sits just below the pop-up's row")
+check(near(StageMath.topBand(width: 460, narration: .zero, picker: popUp).narration.y, 14),
+      "no capsule up, nothing to move")
 
 if failures > 0 {
     FileHandle.standardError.write(Data("test_stage_math: \(failures) failed\n".utf8))

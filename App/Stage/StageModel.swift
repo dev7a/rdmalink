@@ -192,12 +192,13 @@ struct StagePreviewIntent: Equatable, Sendable {
 }
 
 /// UX_SPEC §S8's handoff: "the ghost second Mac". The camera pulls back and
-/// pans so this Mac occupies the leading third of the stage, a featureless
-/// rounded box at 40 % slides in from the trailing side with a single thin
-/// line from the near port to it, and when the far end answers a pulse
-/// travels back along the line and blooms at the near receptacle, once. The
-/// ghost never gains detail, ever — it is explicitly *a Mac the app can't
-/// see*; the legend names it (§4.8).
+/// pans so this Mac occupies the leading third of the stage, a ghost of the
+/// other Mac at 40 % — "a featureless rounded box, or the chassis the
+/// `Other Mac:` pop-up names" — slides in from the trailing side with a
+/// single thin line from the near port to it, and when the far end answers a
+/// pulse travels back along the line and blooms at the near receptacle, once.
+/// "The ghost stays featureless unless the user says which Mac it is, and
+/// even then it carries no port states"; the legend names it (§4.8).
 struct StageHandoff: Equatable, Sendable {
     /// The receptacle "this link" is on — the near port, which carries the
     /// line. The line is its cable, so no receptacle's thread is drawn and
@@ -209,6 +210,9 @@ struct StageHandoff: Equatable, Sendable {
     /// The face the handoff is staged on: the near port's, or the face in
     /// front when there is no near port.
     var face: PortFace
+    /// What the ghost is drawn as: the chassis family the user picked in
+    /// §S8's pop-up, or `nil` for **Any Mac**'s featureless box.
+    var ghost: Archetype?
 }
 
 /// What the stage has to draw for this Mac (UX_SPEC §3.4, §6.2 R31).
@@ -241,8 +245,9 @@ struct StageCameraRequest: Equatable, Sendable {
         /// a pose that shows something of every face these receptacles are on.
         case survey([PortFace])
         /// §S8: pull back and pan so this Mac takes the leading third and the
-        /// ghost beside it fits.
-        case handoff(PortFace)
+        /// ghost beside it fits — as whatever it is drawn as, which is why a
+        /// new pick in §S8's pop-up asks for the move again.
+        case handoff(PortFace, ghost: Archetype?)
         /// §S8 is over: the camera comes back to this Mac alone, where it is.
         case endHandoff
         case fit
@@ -578,26 +583,36 @@ final class StageModel {
     /// Calling it again with a different port re-aims the line without
     /// starting the handoff over.
     ///
+    /// `ghost` is what §S8's `Other Mac:` pop-up says the other Mac is — a
+    /// chassis family, or `nil` for **Any Mac**'s box. Calling it again with
+    /// another one "redraws the ghost in place" and frames the new pair "as
+    /// the handoff first did": the same camera move again, now fitted to the
+    /// new ghost, and nothing else — the selection is left where the user put
+    /// it.
+    ///
     /// The near port becomes the selection, so the handoff opens with one
     /// lit port and the list agrees with the stage about it (§2.4); a port
-    /// the user selects afterwards comes forward as a selection does. It is
-    /// set here rather than through ``select(_:)``, whose turn would be a
-    /// second camera move on top of the handoff's own.
-    func beginHandoff(for id: StagePort.ID?) {
+    /// the user selects afterwards comes forward as a selection does, and
+    /// stays selected through a new pick in the pop-up. It is set here rather
+    /// than through ``select(_:)``, whose turn would be a second camera move
+    /// on top of the handoff's own.
+    func beginHandoff(for id: StagePort.ID?, ghost: Archetype? = nil) {
         let face = ports.first { $0.id == id }?.face ?? handoff?.face ?? currentFace
-        let intent = StageHandoff(portID: id, face: face)
+        let intent = StageHandoff(portID: id, face: face, ghost: ghost)
         guard handoff != intent else { return }
-        let wasStaged = handoff?.face
+        let previous = handoff
         handoff = intent
         if face != currentFace {
             currentFace = face
             say("Turning the Mac around", showing: face)
         }
-        if let id, chassis != nil, !isSelectionFrozen,
+        if let id, previous?.portID != id, chassis != nil, !isSelectionFrozen,
            ports.contains(where: { $0.id == id && $0.isThunderbolt }) {
             for index in ports.indices { ports[index].selected = ports[index].id == id }
         }
-        if wasStaged != face { request(.handoff(face)) }
+        if previous?.face != face || previous?.ghost != ghost {
+            request(.handoff(face, ghost: ghost))
+        }
     }
 
     /// The screen is gone; so is the ghost, and the camera comes back to this
