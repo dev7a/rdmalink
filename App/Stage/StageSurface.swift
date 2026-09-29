@@ -69,6 +69,13 @@ final class StageSurfaceView: NSView {
     private var link: CADisplayLink?
     /// When the last frame was drawn, or `nil` while the loop is paused.
     private var lastFrame: CFTimeInterval?
+    /// Settled frames in a row that did not reach the screen.
+    private var undrawn = 0
+    /// How many refreshes a settled frame that did not reach the screen is
+    /// tried on before the loop gives up and waits to be asked again — by a
+    /// resize, input, or the model — rather than spin with nothing to draw
+    /// into.
+    private static let redrawAttempts = 10
     private var observing: Task<Void, Never>?
 
     init(scene: StageScene, model: StageModel) {
@@ -189,15 +196,21 @@ final class StageSurfaceView: NSView {
             ?? (link.targetTimestamp - link.timestamp)
         lastFrame = link.timestamp
         let moving = scene.update(deltaTime: deltaTime, model: model)
-        render(deltaTime: deltaTime)
-        guard !moving else { return }
-        // This frame drew the settled state; nothing more is owed until
-        // something asks.
+        let drawn = render(deltaTime: deltaTime)
+        undrawn = drawn ? 0 : undrawn + 1
+        // The loop pauses on the settled state only once it is on its way to
+        // the screen: a settled frame with no drawable, or one the renderer
+        // refused, is drawn again on the next refresh rather than left
+        // behind the one before it.
+        guard !moving, drawn || undrawn >= Self.redrawAttempts else { return }
         link.isPaused = true
         lastFrame = nil
+        undrawn = 0
     }
 
-    private func render(deltaTime: TimeInterval) {
+    /// - Returns: whether the frame was handed to the GPU, to be presented
+    ///   when it is scheduled.
+    private func render(deltaTime: TimeInterval) -> Bool {
         guard
             let renderer, let metalLayer,
             metalLayer.drawableSize.width >= 1, metalLayer.drawableSize.height >= 1,
@@ -205,12 +218,17 @@ final class StageSurfaceView: NSView {
             let output = try? RealityRenderer.CameraOutput(
                 .singleProjection(colorTexture: drawable.texture)
             )
-        else { return }
+        else { return false }
         let presentable = Presentable(drawable: drawable)
-        try? renderer.updateAndRender(
-            deltaTime: deltaTime, cameraOutput: output,
-            whenScheduled: { _ in presentable.drawable.present() }
-        )
+        do {
+            try renderer.updateAndRender(
+                deltaTime: deltaTime, cameraOutput: output,
+                whenScheduled: { _ in presentable.drawable.present() }
+            )
+            return true
+        } catch {
+            return false
+        }
     }
 }
 

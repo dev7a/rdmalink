@@ -129,12 +129,16 @@ final class InventoryModel {
     private func refreshPorts(storeEvent: Bool) async {
         guard let archetype = hardware?.archetype else { return }
         let gate = readGate
-        let (next, read) = await Task.detached(priority: .utility) {
+        let (next, read) = await Task.detached(
+            priority: .utility
+        ) { () -> (PortReadGate, Probe.PortRead?) in
             var gate = gate
-            let owed = gate.shouldRead(
+            guard gate.shouldRead(
                 signature: Probe.signature(), storeEvent: storeEvent, at: ContinuousClock().now
-            )
-            return (gate, owed ? Probe.ports(archetype: archetype) : nil)
+            ) else { return (gate, nil) }
+            let read = Probe.ports(archetype: archetype)
+            if read.ports == nil { gate.readFailed() }
+            return (gate, read)
         }.value
         readGate = next
         guard let read else { return }

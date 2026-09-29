@@ -145,7 +145,8 @@ public struct PortReadGate: Sendable {
     public init() {}
 
     /// Whether this wake-up owes the full read. A `true` is recorded as the
-    /// read having been made.
+    /// read having been made; one that then refuses is reported with
+    /// ``readFailed()``.
     ///
     /// - Parameters:
     ///   - signature: this wake-up's signature, `nil` when it could not be
@@ -164,5 +165,13 @@ public struct PortReadGate: Sendable {
             || lastRead.map { now - $0 >= Self.backstop } != false
         if owed { lastRead = now }
         return owed
+    }
+
+    /// The read ``shouldRead(signature:storeEvent:at:)`` owed refused. It is
+    /// not a read: the next wake-up owes another, as every tick did before
+    /// the diff was gated — the window keeps the last hub it observed and
+    /// looks again (`InventoryModel`).
+    public mutating func readFailed() {
+        lastRead = nil
     }
 }

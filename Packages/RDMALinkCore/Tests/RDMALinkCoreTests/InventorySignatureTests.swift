@@ -67,6 +67,21 @@ struct InventorySignatureTests {
         #expect(reads(still(0, 5) + unreadable + still(21, 22)) == [0, 1, 2, 3, 4, 6, 20, 21, 22])
     }
 
+    @Test("A read that refused is owed again on the next wake-up")
+    func refusedReadIsRetried() {
+        let start = ContinuousClock().now
+        var gate = PortReadGate()
+        var owed: [Int] = []
+        for second in 0...16 {
+            let now = start + .seconds(second)
+            guard gate.shouldRead(signature: sample(), storeEvent: false, at: now) else { continue }
+            owed.append(second)
+            // The backstop read at 14 s refuses; the one at 15 s answers.
+            if second == 14 { gate.readFailed() }
+        }
+        #expect(owed == [0, 1, 2, 3, 4, 14, 15])
+    }
+
     @Test("A file's mark moves when it is renamed over, and not when it is left alone")
     func fileMarkFollowsAtomicReplace() throws {
         let folder = FileManager.default.temporaryDirectory
