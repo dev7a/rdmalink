@@ -54,9 +54,9 @@ struct StageView: View {
     /// remembered."
     @AppStorage(AppSettings.showsLegend) private var showsLegend = true
     @AppStorage(AppSettings.showTechnicalNames) private var showsTechnicalNames = false
-    /// §S8's `Other Mac:` pop-up, which the window puts on the stage while
-    /// that screen is up and the stage is wider than §8.5's strip.
-    @Environment(\.otherMacPickerPlace) private var otherMacPickerPlace
+    /// §S8's `Other Mac:` pop-up, which the window offers while that screen
+    /// is up on a Mac the stage can draw.
+    @Environment(\.offersOtherMacPicker) private var offersOtherMacPicker
     /// What the pop-up measured last, so the callout can stand clear of it.
     @State private var otherMacPickerSize: CGSize?
 
@@ -318,10 +318,10 @@ struct StageView: View {
 
     // MARK: - Overlays
 
-    /// §S8's pop-up is on the stage while the window puts it here and the
-    /// ghost is up: "it comes and goes with the ghost".
+    /// §S8's pop-up is on the stage while the window offers it and the ghost
+    /// is up: "it comes and goes with the ghost".
     private var showsOtherMacPicker: Bool {
-        otherMacPickerPlace == .stage && model.handoff != nil
+        offersOtherMacPicker && model.handoff != nil
     }
 
     private var topBand: some View {

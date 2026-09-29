@@ -2,8 +2,7 @@
 //  RootView.swift
 //
 //  The one window: unified toolbar, stage on the left, assistant column on
-//  the right (UX_SPEC §2.1–§2.3), reflowing to a single column below 900 pt
-//  of width (§8.5).
+//  the right (UX_SPEC §2.1–§2.3).
 //
 
 import SwiftUI
@@ -42,35 +41,25 @@ struct RootView: View {
     @State private var isRechecking = false
     @AppStorage(AppSettings.showTechnicalNames) private var showsTechnicalNames = false
 
-    /// §2.3's split, and §8.5's reflow.
+    /// §2.3's split.
     private static let stageMinimumWidth: CGFloat = 460
     private static let columnMinimumWidth: CGFloat = 380
-    private static let singleColumnThreshold: CGFloat = 900
-    private static let stageStripHeight: CGFloat = 180
 
     var body: some View {
         GeometryReader { proxy in
-            let isStrip = proxy.size.width < Self.singleColumnThreshold
-            Group {
-                if isStrip {
-                    singleColumn
-                } else {
-                    splitColumns(availableWidth: proxy.size.width)
-                }
-            }
-            // §S8's `Other Mac:` pop-up floats on the stage, and stands in the
-            // working area only while the stage is §8.5's strip — decided
-            // here, where both halves of the question are known. §S8 holds
-            // the working area only with no assistant up (AssistantColumn).
-            .environment(
-                \.otherMacPickerPlace,
-                OtherMacPickerPlace.place(
-                    showsOtherMac: flow == nil && router.showsOtherMac,
-                    recognized: stage.chassis != nil, stageIsStrip: isStrip
+            splitColumns(availableWidth: proxy.size.width)
+                // §S8's `Other Mac:` pop-up floats on the stage while §S8
+                // holds the working area — only with no assistant up
+                // (AssistantColumn) — and never on an unrecognized Mac, which
+                // has no ghost for it to change (R31).
+                .environment(
+                    \.offersOtherMacPicker,
+                    flow == nil && router.showsOtherMac && stage.chassis != nil
                 )
-            )
         }
-        .frame(minWidth: 840, minHeight: 600)
+        // §2.1's minimum: the stage and the column side by side at every
+        // size the window can take.
+        .frame(minWidth: 900, minHeight: 600)
         // §S6, §S10: a write is never cut off. From the password dialog to
         // the last step, the window's dismiss functionality — its close
         // button and File › Close ⌘W — is turned off, rather than left
@@ -218,16 +207,6 @@ struct RootView: View {
             stageView
         } column: {
             column
-        }
-    }
-
-    /// §8.5: the same content, the same copy, the same order — the stage
-    /// collapses to a strip and the column takes the rest.
-    private var singleColumn: some View {
-        VStack(spacing: 0) {
-            stageView.frame(height: Self.stageStripHeight)
-            Divider()
-            column.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

@@ -99,13 +99,12 @@ let notebook = StageMath.Framing(
 
 // UX_SPEC 8.4: every receptacle's hit target is at least 24 x 24 pt, at the
 // pose the app opens in, in every stage the window can produce -- the default
-// split, the minimum window, and 8.5's 180 pt strip. This is the property
+// split and the minimum window. This is the property
 // StageScene.dollyRange and StageScene.restingRadius are built to hold; it
 // fails the moment the collider is narrowed back inside the 0.985 cm pitch.
 let stages = [
     CGSize(width: 580, height: 600),
     CGSize(width: 460, height: 500),
-    CGSize(width: 900, height: 180),
 ]
 for stage in stages {
     for (name, framing, scale) in [

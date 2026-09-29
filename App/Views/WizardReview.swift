@@ -207,7 +207,7 @@ struct WizardReviewRow: View {
 /// The pair is one line when the column has room for it and stacks when it
 /// does not — the after chip under the before chip, the arrow leading it —
 /// and either way every word is drawn. Row 4's pair is 60-odd characters,
-/// which no working area between §2.1's 840 pt minimum and its 1000 pt
+/// which no working area between §2.1's 900 pt minimum and its 1000 pt
 /// default can hold on one line; the old single `HStack` answered that by
 /// cutting both chips to an ellipsis, which §8.5 forbids ("nothing is
 /// truncated") and which turned the one row that names the real change

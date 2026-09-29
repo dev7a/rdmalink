@@ -58,11 +58,9 @@ struct HubSplit<Stage: View, Column: View>: View {
                     .contentShape(.rect)
                     // Pushed and popped exactly once each. AppKit's cursor
                     // stack is app-wide, and the `false` callback never arrives
-                    // for a view that is removed while the pointer is on it —
-                    // §8.5's reflow removes this one every time the window
-                    // crosses 900 pt — which would leave the resize cursor
-                    // outranking §4.5's `.operationNotAllowed` for the rest of
-                    // the session.
+                    // for a view that is removed while the pointer is on it,
+                    // which would leave the resize cursor outranking §4.5's
+                    // `.operationNotAllowed` for the rest of the session.
                     .onHover { isInside in
                         guard isInside != pushedCursor else { return }
                         pushedCursor = isInside

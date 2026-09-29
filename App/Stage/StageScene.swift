@@ -178,9 +178,8 @@ final class StageScene {
     ///
     /// `fitDistance` and `dollyRange` both read `viewport`, so a camera framed
     /// against the placeholder size is wrong in every window that is not that
-    /// size — badly so in §8.5's 180 pt strip. A camera still sitting at the
-    /// old fit distance is re-fitted; one the user has dollied is only
-    /// re-clamped, because their zoom is theirs.
+    /// size. A camera still sitting at the old fit distance is re-fitted; one
+    /// the user has dollied is only re-clamped, because their zoom is theirs.
     func reframe(previousViewport: CGSize) {
         guard graph != nil, viewport.width > 1, viewport.height > 1 else { return }
         let wasFramed = abs(radius - restingRadius(in: previousViewport)) < 1e-6
@@ -227,16 +226,14 @@ final class StageScene {
     /// |---|---|---|---|---|---|---|
     /// | Mac Studio | 580 × 600 | 0.446 | 0.321–0.583 | 0.446 | 31.4 | — |
     /// | Mac Studio | 460 × 500 | 0.468 | 0.337–0.486 | 0.468 | 24.9 | — |
-    /// | Mac Studio | 900 × 180 | 0.147 | 0.106–0.175 | 0.147 | 28.6 | — |
     /// | Mac mini | 580 × 600 | 0.287 | 0.207–0.402 | 0.287 | 48.7 | — |
     /// | MacBook | 580 × 600 | 0.612 | 0.441–0.583 | 0.583 | 24.0 | 1.05× |
     /// | MacBook | 460 × 500 | 0.643 | 0.463–0.486 | 0.486 | 24.0 | 1.32× |
-    /// | MacBook | 900 × 180 | 0.354 | 0.175–0.175 | 0.175 | 24.0 | 2.02× |
     ///
     /// **The one place the two rules still disagree is a notebook in a small
     /// stage.** A 38 cm machine with a 1.6 cm target cannot be shown whole and
-    /// leave 24 pt across a receptacle in a 460 pt window, and §8.5's 180 pt
-    /// strip is worse. §8.4 is an accessibility floor and §3.4's framing is a
+    /// leave 24 pt across a receptacle in a 460 pt stage. §8.4 is an
+    /// accessibility floor and §3.4's framing is a
     /// picture, so the floor wins and the resting pose crops; the port list is
     /// the complete path either way (§8.1). ``receptaclePointSize`` reports the
     /// number actually achieved, and `script/test_stage_math.sh` asserts this

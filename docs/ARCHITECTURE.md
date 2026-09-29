@@ -151,9 +151,7 @@ made up; they are not the rig's.
   yield into that corner while it is there, and the callout drops below its
   row rather than reach it. It keeps its widest item's width whichever Mac is
   picked (`StageOtherMacPicker`), so that corner, the capsule's drop and the
-  callout's keep-out never change with the pick. Below 900 pt the stage is a strip the ghost
-  fills, so the window stands the pop-up in §S8's working area instead
-  (`OtherMacPickerPlace`).
+  callout's keep-out never change with the pick.
 - **Bridge membership is two facts, not one** (measured 2026-09-20). The
   network preferences keep their own member list —
   `VirtualNetworkInterfaces` → `Bridge` → `bridgeN` → `Interfaces`, with

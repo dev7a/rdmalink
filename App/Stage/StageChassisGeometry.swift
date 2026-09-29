@@ -89,7 +89,7 @@ extension ChassisFeature {
 
     /// 1.6 cm is what holds §8.4's floor at the resting pose on every desktop
     /// chassis in the catalogue, in every stage the window can produce — the
-    /// 58 / 42 split, the 460 pt minimum window and §8.5's 180 pt strip —
+    /// 58 / 42 split and the 460 pt minimum stage —
     /// without pulling the camera in off the fit distance at all. The padded
     /// opening is used wherever it is already larger.
     static let minimumCollider = 1.6
