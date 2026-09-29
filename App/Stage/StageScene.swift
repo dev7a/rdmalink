@@ -3,7 +3,8 @@
 //
 //  The live half of the stage: the camera rig, the cross-fades, the breath,
 //  and the waking-ports beat. It owns no copy of the truth — every frame it
-//  reads `StageModel` and moves entities to match.
+//  draws, it reads `StageModel` and moves entities to match, and it says
+//  whether another frame is owed (`StageSurface` stops drawing when not).
 //
 
 import AppKit
@@ -18,8 +19,8 @@ import simd
 /// model by moving to the top-trailing corner when the chassis reaches under
 /// it", and the callout, which sits beside the receptacle it is about.
 ///
-/// Observable, and written by the scene once per frame with an equality
-/// check, so the overlays re-lay out when the camera moves and never
+/// Observable, and written by the scene on every frame it draws with an
+/// equality check, so the overlays re-lay out when the camera moves and never
 /// otherwise. The scene itself is not observable: its per-frame state would
 /// invalidate the whole stage sixty times a second.
 @MainActor
@@ -51,21 +52,25 @@ final class StageScene {
     private(set) var graph: StageSceneGraph?
     let camera = PerspectiveCamera()
 
-    /// Set by the view so hit tests and projections can be answered.
-    var content: RealityViewCameraContent?
+    /// The surface drawing this scene, asked for frames by everything that
+    /// moves the scene from outside a frame — a drag, the wheel, a camera
+    /// request, a resize, a new graph. What the scene reads from `StageModel`
+    /// wakes it on its own. Entities belong to one renderer, so this is the
+    /// one surface in a window: SwiftUI can make a second it never shows.
+    weak var surface: StageSurfaceView?
 
-    /// The per-frame subscription. It dies the moment nothing holds it.
-    var subscription: EventSubscription?
-
-    /// What the installed entities were built from. It lives here rather than
-    /// in `@State` so a rebuild decided inside `RealityView`'s update closure
-    /// never writes SwiftUI state while SwiftUI is updating.
+    /// What the installed entities were built from, for the pose: a rebuild
+    /// for the same machine keeps it. It lives here rather than in `@State`
+    /// so a rebuild decided while SwiftUI is updating the surface never
+    /// writes SwiftUI state.
     var installedKey: StageBuildKey?
 
     var viewport = CGSize(width: 580, height: 600)
     /// Where the stage sits in the window, for the review hook alone.
     var frameInWindow: CGRect = .zero
-    var appearance = StageAppearance()
+    var appearance = StageAppearance() {
+        didSet { if appearance != oldValue { surface?.setNeedsFrames() } }
+    }
     /// Told to the model when a drag or an arc brings a new face to the front.
     var onFaceChanged: ((PortFace) -> Void)?
 
@@ -79,6 +84,10 @@ final class StageScene {
     private var arc: Arc?
     private var elapsed = 0.0
     private var reportedFace: PortFace?
+    /// Whether the frame being drawn left anything still on its way — a
+    /// fade short of its target, a beat not yet over. ``update(deltaTime:model:)``
+    /// answers with it, and the surface stops drawing when it is false.
+    private var moving = false
 
     private var wakeStart: Double?
     private var handledWakeToken = -1
@@ -130,14 +139,13 @@ final class StageScene {
     ///   Increase Contrast on, must not take a user who has orbited to inspect
     ///   `Back, far right` and put the camera back where it started.
     func install(
-        _ graph: StageSceneGraph, into content: inout RealityViewCameraContent,
-        keepingPose: Bool
+        _ graph: StageSceneGraph, into renderer: RealityRenderer, keepingPose: Bool
     ) {
-        content.entities.removeAll()
+        renderer.entities.removeAll()
         let hadGraph = self.graph != nil
         self.graph = graph
-        content.entities.append(graph.root)
-        content.entities.append(camera)
+        renderer.entities.append(contentsOf: [graph.root, camera])
+        renderer.activeCamera = camera
         homeTarget = SIMD3(0, StageMesh.metres(graph.chassis.focus), 0)
         // The ghost in this graph has never been placed; the next frame places
         // it again for whatever handoff is up, without sliding it in again.
@@ -163,6 +171,7 @@ final class StageScene {
         // thing that runs it, and the window calls that when the probe
         // finishes.
         place()
+        surface?.setNeedsFrames()
     }
 
     /// Re-derives the framing after the stage has changed size.
@@ -177,6 +186,7 @@ final class StageScene {
         let wasFramed = abs(radius - restingRadius(in: previousViewport)) < 1e-6
         radius = StageMath.clamp(wasFramed ? restingRadius : radius, dollyRange)
         place()
+        surface?.setNeedsFrames()
     }
 
     // MARK: - Framing
@@ -300,6 +310,7 @@ final class StageScene {
     // MARK: - Camera intents
 
     func perform(_ request: StageCameraRequest) {
+        defer { surface?.setNeedsFrames() }
         switch request.kind {
         case .turn(let face): turn(to: face)
         case .squareOn(let face): turn(to: face, squareOn: true)
@@ -435,15 +446,20 @@ final class StageScene {
         pitch = StageMath.clampPitch(pitch + deltaY * 0.006)
         place()
         reportFaceIfChanged()
+        surface?.setNeedsFrames()
     }
 
     func dolly(by scroll: Double) {
         arc = nil
         radius = StageMath.clamp(radius * (1 + scroll * 0.0015), dollyRange)
         place()
+        surface?.setNeedsFrames()
     }
 
-    func setFocus(_ id: StagePort.ID?) { focusedID = id }
+    func setFocus(_ id: StagePort.ID?) {
+        focusedID = id
+        surface?.setNeedsFrames()
+    }
 
     // MARK: - Scroll-wheel dolly
 
@@ -482,41 +498,66 @@ final class StageScene {
     /// hit test can answer with several. The nearest projected centre is the
     /// one the pointer meant: the effective target becomes the cell around each
     /// receptacle, which has no dead band in it anywhere.
+    ///
+    /// The ray is the rig's own, through the pose on screen — the inverse of
+    /// the projection the overlays are laid out from — and each proxy's
+    /// collider box is tested in the proxy's frame. Every hit along the ray
+    /// counts, not only the nearest.
     func portID(at point: CGPoint) -> StagePort.ID? {
-        guard let content else { return nil }
+        guard let graph else { return nil }
+        let eye = StageMath.orbitPosition(target: target, yaw: yaw, pitch: pitch, radius: radius)
+        guard
+            let direction = StageMath.ray(
+                through: point, camera: eye, target: target,
+                verticalFieldOfView: Self.verticalFieldOfView, viewport: viewport
+            )
+        else { return nil }
         var best: (id: StagePort.ID, distance: Double)?
-        for entity in content.entities(at: point, in: .local) {
-            guard let id = identity(of: entity) else { continue }
-            let projected = content.project(point: entity.position(relativeTo: nil), to: .local)
+        for node in graph.receptacles {
+            guard
+                let box = node.proxy.components[CollisionComponent.self]?.shapes.first?.bounds
+            else { continue }
+            let toProxy = node.proxy.transformMatrix(relativeTo: nil).inverse
+            let origin = toProxy * SIMD4(eye, 1)
+            let heading = toProxy * SIMD4(direction, 0)
+            guard
+                StageMath.rayHit(
+                    origin: SIMD3(origin.x, origin.y, origin.z),
+                    direction: SIMD3(heading.x, heading.y, heading.z),
+                    boxMin: box.min, boxMax: box.max
+                ) != nil
+            else { continue }
+            let projected = StageMath.project(
+                node.proxy.position(relativeTo: nil), camera: eye, target: target,
+                verticalFieldOfView: Self.verticalFieldOfView, viewport: viewport
+            )
             let distance = projected.map {
                 Double(hypot($0.x - point.x, $0.y - point.y))
             } ?? Double.infinity
             if let current = best, current.distance <= distance { continue }
-            best = (id, distance)
+            best = (node.id, distance)
         }
         return best?.id
     }
 
-    func portID(of entity: Entity) -> StagePort.ID? { identity(of: entity) }
-
-    private func identity(of entity: Entity) -> StagePort.ID? {
-        var current: Entity? = entity
-        while let node = current {
-            if let identity = node.components[StagePortIdentity.self] { return identity.id }
-            current = node.parent
-        }
-        return nil
-    }
-
     // MARK: - Per-frame
 
-    func update(deltaTime: TimeInterval, model: StageModel) {
+    /// One frame: the camera, then everything the model says, then the
+    /// overlays' projection.
+    ///
+    /// - Returns: whether anything is still on its way, so the surface knows
+    ///   whether to draw another frame. False means this frame is the settled
+    ///   picture and nothing will change until something outside the scene
+    ///   does.
+    func update(deltaTime: TimeInterval, model: StageModel) -> Bool {
         elapsed += deltaTime
+        moving = false
         step(arc: deltaTime)
         apply(model: model, deltaTime: deltaTime)
         place()
         reportFaceIfChanged()
         project()
+        return moving
     }
 
     /// §4.8: the chassis box's eight corners and every receptacle's centre,
@@ -524,7 +565,7 @@ final class StageScene {
     /// and the visible height, lid included — in the chassis's own frame,
     /// which stands on the ground plane at the body's origin.
     private func project() {
-        guard let graph, content != nil else {
+        guard let graph else {
             if projection.chassisBounds != nil { projection.chassisBounds = nil }
             if !projection.receptacles.isEmpty { projection.receptacles = [:] }
             return
@@ -573,6 +614,7 @@ final class StageScene {
             + (current.bumps ? StageMath.dollyBump(t, radius: current.radius) : 0)
         target = current.target + current.deltaTarget * Float(eased)
         arc = t >= 1 ? nil : current
+        if arc != nil { moving = true }
     }
 
     private func place() {
@@ -603,6 +645,12 @@ final class StageScene {
         syncRibbons(moment: moment)
         syncLoop(moment: moment)
         noteTransitions(moment: moment)
+        // §9.2's stagger can leave a gap with nothing fading in it, before a
+        // later receptacle lights.
+        if wakeStart != nil, let last = moment.ports.map(\.physicalIndex).max(),
+           !isAwake(index: last) {
+            moving = true
+        }
 
         // One clock for the whole scene, which is what makes §S4b's shimmer
         // "in-phase" on every receptacle rather than six things loading.
@@ -629,6 +677,12 @@ final class StageScene {
             pulse(node)
 
             let awake = isAwake(index: port.physicalIndex)
+            // The one loop §3.5 allows: a link coming up breathes, and so does
+            // every receptacle while Identify listens (§S4b).
+            if awake, !appearance.reduceMotion,
+               port.link == .macLinkComingUp || moment.identify == .watching {
+                moving = true
+            }
             // §S8: the returning pulse "blooms at the near receptacle, once" —
             // a glow that lands and then goes, on the scene's clock.
             let handoffBloom = Float(
@@ -636,7 +690,7 @@ final class StageScene {
                     max(0, 1 - (elapsed - $0) / Self.handoffBloomDuration)
                 } ?? 0
             )
-            if handoffBloom <= 0 { node.handoffBloomStarted = nil }
+            if handoffBloom <= 0 { node.handoffBloomStarted = nil } else { moving = true }
             // §S3: the attention ring's single breath, measured from the beat
             // the check named this receptacle.
             let attention = Float(
@@ -645,6 +699,10 @@ final class StageScene {
                     reduceMotion: appearance.reduceMotion
                 )
             )
+            if let started = node.attentionStarted, !appearance.reduceMotion,
+               elapsed - started < StageMath.breathPeriod {
+                moving = true
+            }
             for role in StageRingRole.allCases {
                 let target = awake
                     ? Self.targetOpacity(
@@ -701,16 +759,17 @@ final class StageScene {
         }
 
         ghost.advanceCrossFade(by: deltaTime)
+        if ghost.isCrossFading { moving = true }
         let duration = appearance.reduceMotion ? Self.reducedArcDuration : Self.arcDuration
         let t = handoffStarted.map { min((elapsed - $0) / duration, 1) } ?? 1
         let arrived = appearance.reduceMotion ? t : StageMath.easeInOut(t)
         if handoff != nil {
+            if t < 1 { moving = true }
             ghost.show(slide: 1 - arrived, opacity: Float(arrived) * StageGhostNode.restingOpacity)
         } else {
-            ghost.show(
-                slide: 0,
-                opacity: step(ghost.opacity, to: 0, over: Self.crossFade, deltaTime: deltaTime)
-            )
+            let opacity = step(ghost.opacity, to: 0, over: Self.crossFade, deltaTime: deltaTime)
+            if opacity > 0 { moving = true }
+            ghost.show(slide: 0, opacity: opacity)
             return
         }
 
@@ -726,6 +785,7 @@ final class StageScene {
         guard let started = pulseStarted else { return }
         let along = appearance.reduceMotion ? 1 : (elapsed - started) / Self.pulseTravel
         if along < 1 {
+            moving = true
             ghost.showPulse(at: along)
         } else {
             ghost.showPulse(at: nil)
@@ -767,6 +827,7 @@ final class StageScene {
             if ring.scale != .one { ring.scale = .one }
             return
         }
+        moving = true
         ring.scale = SIMD3(repeating: Float(1 + 0.08 * sin(t * .pi)))
     }
 
@@ -968,6 +1029,7 @@ final class StageScene {
     private func dim(node: StageReceptacleNode, to target: Float, deltaTime: TimeInterval) {
         guard node.dim != target else { return }
         node.dim = step(node.dim, to: target, over: Self.crossFade, deltaTime: deltaTime)
+        if node.dim != target { moving = true }
         node.root.components.set(OpacityComponent(opacity: node.dim))
     }
 
@@ -988,6 +1050,7 @@ final class StageScene {
         // the entity in the transparency pass, and a still scene with six
         // `.outside` receptacles was writing a dozen of them a frame forever.
         let settled = fade.current == fade.target && fade.current == node.fades[role]?.current
+        if fade.current != fade.target { moving = true }
         node.fades[role] = fade
         let visible = fade.current > 0.001
         if entity.isEnabled != visible { entity.isEnabled = visible }
@@ -1028,10 +1091,9 @@ final class StageScene {
 
     private func updateLoop(moment: StageMoment, deltaTime: TimeInterval) {
         guard let loop = graph?.loop else { return }
-        let opacity = step(
-            loop.opacity, to: Self.loopStrength(moment: moment), over: Self.crossFade,
-            deltaTime: deltaTime
-        )
+        let strength = Self.loopStrength(moment: moment)
+        let opacity = step(loop.opacity, to: strength, over: Self.crossFade, deltaTime: deltaTime)
+        if opacity != strength { moving = true }
         guard opacity != loop.opacity else { return }
         loop.opacity = opacity
         loop.show()
@@ -1111,18 +1173,21 @@ final class StageScene {
     private func updateRibbons(moment: StageMoment, deltaTime: TimeInterval) {
         guard let graph else { return }
         for link in graph.ribbons {
+            let strength = Self.ribbonStrength(of: link, moment: moment)
+            let targetA = Self.retractionTarget(for: link.a, moment: moment)
+            let targetB = Self.retractionTarget(for: link.b, moment: moment)
             let opacity = step(
-                link.opacity, to: Self.ribbonStrength(of: link, moment: moment),
-                over: Self.crossFade, deltaTime: deltaTime
+                link.opacity, to: strength, over: Self.crossFade, deltaTime: deltaTime
             )
             let fromA = step(
-                link.retractionFromA, to: Self.retractionTarget(for: link.a, moment: moment),
-                over: Self.retractionDuration, deltaTime: deltaTime
+                link.retractionFromA, to: targetA, over: Self.retractionDuration,
+                deltaTime: deltaTime
             )
             let fromB = step(
-                link.retractionFromB, to: Self.retractionTarget(for: link.b, moment: moment),
-                over: Self.retractionDuration, deltaTime: deltaTime
+                link.retractionFromB, to: targetB, over: Self.retractionDuration,
+                deltaTime: deltaTime
             )
+            if opacity != strength || fromA != targetA || fromB != targetB { moving = true }
             guard opacity != link.opacity || fromA != link.retractionFromA
                 || fromB != link.retractionFromB
             else { continue }

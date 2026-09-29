@@ -134,8 +134,9 @@ made up; they are not the rig's.
   §4.8 overlays — the legend that yields to the chassis and the callout
   beside a receptacle — are laid out from `StageMath.project`, the rig's own
   look-at and perspective over the pose the scene is holding, which is also
-  the pose the review capture renders with. Hit testing keeps
-  `entities(at:in:)`, which was not affected. Two consequences of laying
+  the pose the review capture renders with. Hit testing runs the same
+  projection backwards: `StageMath.ray` through the pointer, tested against
+  each receptacle's collider box. Two consequences of laying
   out from the projection: the callout is shown only while its receptacle's
   face is the one in front (every other face's centres project too, onto
   the far side of the chassis), and it stands off the top of the whole row

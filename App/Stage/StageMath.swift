@@ -129,6 +129,56 @@ enum StageMath {
         )
     }
 
+    /// The direction from `camera` through a point of the viewport: the
+    /// inverse of ``project(_:camera:target:verticalFieldOfView:viewport:)``,
+    /// for the same rig. The stage hit-tests its receptacles along it, so a
+    /// click lands on what the pose on screen shows. Nil where `project`
+    /// would be.
+    static func ray(
+        through point: CGPoint, camera: SIMD3<Float>, target: SIMD3<Float>,
+        verticalFieldOfView: Double, viewport: CGSize
+    ) -> SIMD3<Float>? {
+        let forward = simd_normalize(target - camera)
+        guard simd_length(forward) > 0.5 else { return nil }
+        var right = simd_cross(forward, SIMD3<Float>(0, 1, 0))
+        guard simd_length(right) > 1e-6, viewport.width > 0, viewport.height > 0 else {
+            return nil
+        }
+        right = simd_normalize(right)
+        let up = simd_cross(right, forward)
+        let focal = 1 / tan(verticalFieldOfView / 2)
+        let aspect = viewport.width / viewport.height
+        let x = (point.x / (viewport.width / 2) - 1) * aspect / focal
+        let y = (1 - point.y / (viewport.height / 2)) / focal
+        return simd_normalize(forward + right * Float(x) + up * Float(y))
+    }
+
+    /// How far along a ray it enters an axis-aligned box, or nil when it
+    /// misses or the box is behind it — the slab test. A receptacle's
+    /// collider is a box in its own frame, so the ray is carried into that
+    /// frame before it gets here.
+    static func rayHit(
+        origin: SIMD3<Float>, direction: SIMD3<Float>,
+        boxMin: SIMD3<Float>, boxMax: SIMD3<Float>
+    ) -> Float? {
+        var near = -Float.infinity
+        var far = Float.infinity
+        for axis in 0..<3 {
+            if abs(direction[axis]) < 1e-9 {
+                guard origin[axis] >= boxMin[axis], origin[axis] <= boxMax[axis] else {
+                    return nil
+                }
+                continue
+            }
+            let a = (boxMin[axis] - origin[axis]) / direction[axis]
+            let b = (boxMax[axis] - origin[axis]) / direction[axis]
+            near = max(near, min(a, b))
+            far = min(far, max(a, b))
+        }
+        guard near <= far, far >= 0 else { return nil }
+        return max(near, 0)
+    }
+
     // MARK: - §2.3's top band
 
     /// How far §S8's `Other Mac:` pop-up stands in from the stage's top and

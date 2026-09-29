@@ -213,15 +213,10 @@ struct StageView: View {
                 restedID = id
             }
             .onDisappear {
-                // `EventSubscription` keeps the scene alive on its own, and
-                // `RealityViewCameraContent` keeps the whole entity graph
-                // alive. §8.5's reflow gives this view a new identity every
-                // time the window crosses 900 pt, so an abandoned stage that
-                // is never torn down is a full graph leaked per crossing.
+                // The stage goes when the picture does, or with the window;
+                // the surface releases its renderer and its graph as it goes,
+                // and this lets go of the rest.
                 scene.stopScrollMonitor()
-                scene.subscription?.cancel()
-                scene.subscription = nil
-                scene.content = nil
                 scene.onFaceChanged = nil
                 StageSnapshot.capture = nil
             }
@@ -267,34 +262,17 @@ struct StageView: View {
                 Rectangle().fill(.windowBackground)
             }
 
-            RealityView { content in
-                content.camera = .virtual
-                install(into: &content)
-                scene.content = content
-                // Weakly, and torn down in `onDisappear`: the subscription
-                // lives on the scene, so a strong capture here is a cycle that
-                // keeps the whole entity graph alive after the view is gone.
-                let live = scene
-                scene.subscription = content.subscribe(
-                    to: SceneEvents.Update.self
-                ) { [weak live, model] event in
-                    MainActor.assumeIsolated {
-                        live?.update(deltaTime: event.deltaTime, model: model)
-                    }
-                }
-            } update: { content in
-                scene.content = content
-                // Reduce Motion and Reduce Transparency change no geometry and
-                // no material, so they are read off the scene every frame
-                // rather than rebuilt for.
-                scene.appearance = appearance
-                if scene.installedKey != buildKey { install(into: &content) }
-            }
-            .realityViewCameraControls(.none)
-            .onContinuousHover(coordinateSpace: .local, perform: hover)
-            .gesture(orbit)
-            .simultaneousGesture(tap)
+            StageSurface(
+                scene: scene, model: model, appearance: appearance, buildKey: buildKey,
+                install: install(into:)
+            )
         }
+        // The surface draws and nothing more; the pointer is SwiftUI's, over
+        // the whole stage.
+        .contentShape(Rectangle())
+        .onContinuousHover(coordinateSpace: .local, perform: hover)
+        .gesture(orbit)
+        .simultaneousGesture(tap)
         .focusable()
         .focusEffectDisabled()
         .focused($isStageFocused)
@@ -305,17 +283,21 @@ struct StageView: View {
         .onKeyPress(.space) { activateFocused() }
     }
 
-    private func install(into content: inout RealityViewCameraContent) {
+    private func install(into renderer: RealityRenderer) {
         // Only ever reached from `chassisStage`, which exists for a chassis alone;
         // read fresh rather than captured, so a rebuild draws the Mac the
         // model holds now.
         guard let chassis = model.chassis else { return }
         let palette = StagePalette(appearance: appearance)
+        // The generated environment lights the machine; the background is its
+        // own flat colour, which is all of the environment the camera ever
+        // sees (StageMesh.environment).
         if let environment = try? StageMesh.environment(
             background: palette.background.cgColor, lift: palette.backgroundLift.cgColor
         ) {
-            content.environment = .skybox(environment)
+            renderer.lighting.resource = environment
         }
+        renderer.cameraSettings.colorBackground = .color(palette.background.cgColor)
         scene.appearance = appearance
         scene.onFaceChanged = { [model] face in model.currentFace = face }
         // Only a new machine earns the resting pose. An appearance change is
@@ -328,7 +310,7 @@ struct StageView: View {
                 ports: model.ports, chassis: chassis, palette: palette,
                 appearance: appearance
             ),
-            into: &content,
+            into: renderer,
             keepingPose: scene.installedKey?.geometry == key.geometry
         )
         scene.installedKey = key
@@ -474,11 +456,10 @@ struct StageView: View {
     }
 
     private var tap: some Gesture {
-        SpatialTapGesture().targetedToAnyEntity().onEnded { value in
+        SpatialTapGesture(coordinateSpace: .local).onEnded { value in
             // The pointer's own position resolves overlapping proxies the way
-            // hovering does; the hit entity is the fallback.
-            let hit = scene.portID(at: value.location) ?? scene.portID(of: value.entity)
-            guard dragDistance < 4, let id = hit,
+            // hovering does.
+            guard dragDistance < 4, let id = scene.portID(at: value.location),
                   let port = model.ports.first(where: { $0.id == id })
             else { return }
             // §S4: from S5 on no receptacle is a selection target, and a

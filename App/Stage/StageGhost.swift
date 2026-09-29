@@ -318,6 +318,9 @@ final class StageGhostNode {
         )
     }
 
+    /// Whether a new pick's cross-fade is still running.
+    var isCrossFading: Bool { crossFade < 1 }
+
     /// Runs a new pick's cross-fade on by `deltaTime`. Nothing to do once it
     /// has run, so a settled ghost costs nothing per frame.
     func advanceCrossFade(by deltaTime: TimeInterval) {
