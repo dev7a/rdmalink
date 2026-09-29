@@ -88,7 +88,13 @@ made up; they are not the rig's.
 - The only public live event is `SCDynamicStore`
   `State:/Network/Interface/<bsd>/Link` (and `/IPv6`), which fires on
   Thunderbolt-IP link transitions only. Dock plug/unplug may not fire
-  anything; a one-second state diff runs underneath.
+  anything; a one-second state diff runs underneath. The diff reads a cheap
+  `PortStateSignature` every second — the registry pass, `getifaddrs` for
+  the Thunderbolt ports and bridges, and a `stat` of the network preferences
+  and the notes folder — and the full port read (`ifconfig -a`, both
+  `SCPreferences` passes, the notes) runs only when that moves or the store
+  speaks, on every tick for five seconds after, and at least every ten
+  (`PortReadGate`).
 - **Thunderbolt domain identity** (measured 2026-09-20, `IOThunderboltFamily`
   9.3.3, unprivileged `ioreg`): the private key `Domain UUID` is published in
   two places. `IOThunderboltLocalNode`, the parent of the
