@@ -10,8 +10,9 @@
 //  has no public way to pause it. `RealityRenderer` renders when asked, so
 //  here the display link runs while `StageScene` reports something still
 //  moving — a camera arc, a cross-fade, a breath — and pauses on the frame it
-//  settles. Any input, a resize, or any change to what the scene reads from
-//  `StageModel` starts it again.
+//  settles, and while the window cannot be seen at all. Any input, a resize,
+//  the window coming back into view, or any change to what the scene reads
+//  from `StageModel` starts it again.
 //
 
 import AppKit
@@ -69,14 +70,17 @@ final class StageSurfaceView: NSView {
     private var link: CADisplayLink?
     /// When the last frame was drawn, or `nil` while the loop is paused.
     private var lastFrame: CFTimeInterval?
-    /// Settled frames in a row that did not reach the screen.
+    /// Frames in a row that did not reach the screen.
     private var undrawn = 0
-    /// How many refreshes a settled frame that did not reach the screen is
-    /// tried on before the loop gives up and waits to be asked again — by a
-    /// resize, input, or the model — rather than spin with nothing to draw
-    /// into.
+    /// How many refreshes in a row may fail to draw before the loop gives up
+    /// and waits to be asked again — by a resize, input, the model or the
+    /// window coming into view — rather than spin with nothing to draw into,
+    /// whether or not the scene is still moving.
     private static let redrawAttempts = 10
     private var observing: Task<Void, Never>?
+    /// The window's occlusion notifications, which start the loop again when
+    /// it comes back into view.
+    private var occlusion: (any NSObjectProtocol)?
 
     init(scene: StageScene, model: StageModel) {
         self.scene = scene
@@ -118,11 +122,18 @@ final class StageSurfaceView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard window != nil else {
+        if let occlusion { NotificationCenter.default.removeObserver(occlusion) }
+        occlusion = nil
+        guard let window else {
             link?.invalidate()
             link = nil
             lastFrame = nil
             return
+        }
+        occlusion = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.setNeedsFrames() }
         }
         if link == nil {
             let link = displayLink(target: self, selector: #selector(frame(_:)))
@@ -169,6 +180,8 @@ final class StageSurfaceView: NSView {
     func tearDown() {
         observing?.cancel()
         observing = nil
+        if let occlusion { NotificationCenter.default.removeObserver(occlusion) }
+        occlusion = nil
         link?.invalidate()
         link = nil
         if scene.surface === self { scene.surface = nil }
@@ -190,6 +203,13 @@ final class StageSurfaceView: NSView {
     }
 
     @objc private func frame(_ link: CADisplayLink) {
+        // A window nobody can see — hidden, minimised, covered — is not drawn
+        // into, breath or no breath; its occlusion notification starts the
+        // loop again, and the scene picks up where it stopped.
+        guard window?.occlusionState.contains(.visible) == true else {
+            pause()
+            return
+        }
         // The first frame after a pause steps one refresh, not the length of
         // the pause: the scene's clock only runs while something moves.
         let deltaTime = lastFrame.map { min(max(link.timestamp - $0, 0), 0.1) }
@@ -200,10 +220,15 @@ final class StageSurfaceView: NSView {
         undrawn = drawn ? 0 : undrawn + 1
         // The loop pauses on the settled state only once it is on its way to
         // the screen: a settled frame with no drawable, or one the renderer
-        // refused, is drawn again on the next refresh rather than left
-        // behind the one before it.
-        guard !moving, drawn || undrawn >= Self.redrawAttempts else { return }
-        link.isPaused = true
+        // refused, is drawn again on the next refresh rather than left behind
+        // the one before it. A surface that keeps failing to draw pauses
+        // anyway, moving or not, rather than spend every refresh on nothing.
+        guard (!moving && drawn) || undrawn >= Self.redrawAttempts else { return }
+        pause()
+    }
+
+    private func pause() {
+        link?.isPaused = true
         lastFrame = nil
         undrawn = 0
     }
