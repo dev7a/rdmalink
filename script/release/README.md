@@ -14,11 +14,13 @@ This file is the operator's side.
 | `trusted-signers.asc` | The approved public keys, read from `main` and never from the tag |
 | `receipt.sh` | Writes `SHA256SUMS` and `release.json` beside a stapled image |
 | `publish.sh` | Creates a draft release, uploads, verifies, then makes it visible |
+| `changelog.py` | Prints one version's section of `CHANGELOG.md`: the release's notes |
 | `test_release.py` | Drives `publish.sh` against a fake `gh`: what must never be published |
 | `test_release_tag.py` | Drives `verify-tag.sh` against generated keys and tags |
 | `test_receipt.py` | Drives `receipt.sh` against fixtures, with no Xcode and no Apple |
 
-All three tests run in `script/test.sh` and need no network.
+All three tests run in `script/test.sh` and need no network; `test_release.py`
+covers `changelog.py` too.
 
 `script/package_dmg.sh --notarize` run by hand needs a notarytool Keychain
 profile, created once with `xcrun notarytool store-credentials rdmalink
@@ -43,7 +45,12 @@ this file from `refs/remotes/origin/main`, so a tag cannot approve itself.
 ## Cutting a release
 
 1. Bump `CFBundleShortVersionString` (and `CFBundleVersion`) in
-   `App/Info.plist` on `main`, and land it.
+   `App/Info.plist` on `main`, and in the same change rename `CHANGELOG.md`'s
+   `## Unreleased` heading to `## X.Y.Z — YYYY-MM-DD (build N)`, with a new
+   empty `## Unreleased` above it. Land it. That section is the release's
+   notes: preflight refuses a tag whose commit has none, and `publish.sh`
+   publishes it above the paragraph on what the assets are. Check it with
+   `python3 script/release/changelog.py X.Y.Z < CHANGELOG.md`.
 2. Sign a tag on that commit: `git tag -s vX.Y.Z -m "RDMALink X.Y.Z"`. The tag
    must be annotated, signed by a key in `trusted-signers.asc`, and named
    exactly `v` plus the plist's version. (If the default `gpg` on your PATH

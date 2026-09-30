@@ -3,7 +3,8 @@
 #
 # Copied from dev7a/lnpctl tools/release/publish.sh and adapted to this repo's
 # asset names. The shape is that repo's: check the downloaded assets against
-# their own receipt first, then check that the tag on GitHub is still the tag
+# their own receipt first, read this version's notes from CHANGELOG.md, then
+# check that the tag on GitHub is still the tag
 # that was verified, create a DRAFT release, upload, verify every asset landed
 # with the size it has here, recheck the tag, and only then undraft. A release
 # is therefore never visible with missing or stale assets, and a rerun can
@@ -28,6 +29,12 @@ assert r['notarization']['app']['status'] == 'Accepted'
 assert r['notarization']['image']['status'] == 'Accepted'
 assert (p / 'SHA256SUMS').read_text() == hashlib.sha256((p / name).read_bytes()).hexdigest() + '  ' + name + '\n'
 PY
+# The notes are this version's section of CHANGELOG.md at the release commit,
+# which is the checkout this runs in, then what the assets are. Read before
+# any call to GitHub: a version with no notes is refused with nothing created.
+notes="$RUNNER_TEMP/release-notes.md"
+python3 "$(dirname "${BASH_SOURCE[0]}")/changelog.py" "${RELEASE_TAG#v}" < CHANGELOG.md > "$notes"
+printf '\n%s\n' "A signed and notarized app for Apple silicon Macs on macOS 27 or later. Download the DMG, open it and drag RDMALink to Applications. SHA256SUMS verifies the stapled image; release.json records the source commit and the notarization of both the app and the image." >> "$notes"
 # Require the same verified annotated tag object, not only the same peeled commit.
 [[ "$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq .object.sha)" == "$RELEASE_TAG_OBJECT" ]] || exit 1
 remote_sha="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)"
@@ -42,8 +49,7 @@ if [[ -n "$existing" ]]; then
   }
 else
   gh release create "$RELEASE_TAG" --verify-tag --target "$RELEASE_SHA" --draft \
-    --title "RDMALink ${RELEASE_TAG#v}" \
-    --notes "A signed and notarized app for Apple silicon Macs on macOS 27 or later. Download the DMG, open it and drag RDMALink to Applications. SHA256SUMS verifies the stapled image; release.json records the source commit and the notarization of both the app and the image."
+    --title "RDMALink ${RELEASE_TAG#v}" --notes-file "$notes"
 fi
 # A failed upload leaves a draft. Reruns may replace only this validated draft's assets.
 gh release upload "$RELEASE_TAG" "release-assets/$asset" release-assets/SHA256SUMS release-assets/release.json --clobber

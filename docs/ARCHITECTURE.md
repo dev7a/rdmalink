@@ -345,8 +345,9 @@ Debug, which is ad-hoc signed, so CI needs no identity and no secret.
    approved key, and match `^v[0-9]+\.[0-9]+\.[0-9]+$`; its commit must be an
    ancestor of `main`; on a push the commit must equal `github.sha`; and
    `CFBundleShortVersionString` in `App/Info.plist` *at that commit* must
-   equal the tag without its `v`. The job outputs the tag, the commit and the
-   tag object hash. Nothing moving is carried forward: later jobs check out
+   equal the tag without its `v`, and `CHANGELOG.md` at that commit must have
+   a non-empty section for that version (`script/release/changelog.py`). The
+   job outputs the tag, the commit and the tag object hash. Nothing moving is carried forward: later jobs check out
    the commit, not the tag or a branch.
 3. **notarize** (`xcode-27`, `contents: read`, environment `release`) checks
    out that commit, runs `script/test.sh` before any credential exists on the
@@ -369,9 +370,13 @@ Debug, which is ad-hoc signed, so CI needs no identity and no secret.
    and both key files whatever happened.
 4. **publish** (`ubuntu-24.04`, `contents: write` — the only writable token
    in either workflow) checks out the same commit, downloads *this* run and
-   attempt's artifact, and runs `script/release/publish.sh`.
+   attempt's artifact, and runs `script/release/publish.sh`, which reads the
+   version's section of `CHANGELOG.md` from that checkout before it asks
+   GitHub anything and publishes it as the release notes, followed by what
+   the assets are.
 5. **Result** — a published release at `v<version>` carrying the DMG,
-   `SHA256SUMS` and `release.json`.
+   `SHA256SUMS` and `release.json`, with that version's changelog as its
+   notes.
 
 What is pinned and what moves: the actions are pinned by commit hash, the
 tag's object hash and commit are pinned by preflight and rechecked on GitHub
@@ -384,7 +389,10 @@ Failure, rerun and partial failure:
 
 - **Unapproved, unsigned, lightweight or mismatched tag** — preflight fails
   and nothing is built. A tag that names a version the plist does not carry
-  fails there too.
+  fails there too, and so does one whose commit has no `CHANGELOG.md` notes
+  for that version — before the hour of notarization, not after it. publish
+  checks the notes again before creating anything, so they can never be
+  empty on a published release.
 - **A tag that was deleted and repointed after preflight** — publish compares
   the tag object hash *and* the peeled commit on GitHub before creating the
   draft and again after the upload, and refuses.
