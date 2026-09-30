@@ -61,6 +61,10 @@ jobs:
           version="$(git show "$sha:App/Info.plist" |
             python3 -c 'import plistlib, sys; print(plistlib.loads(sys.stdin.buffer.read())["CFBundleShortVersionString"])')"
           [[ "$TAG" == "v$version" ]] || exit 1
+          # The release's notes are this version's section of CHANGELOG.md at
+          # the tag's commit (script/release/changelog.py). A tag without them
+          # stops here, before the hour of notarization, not at publish.
+          git show "$sha:CHANGELOG.md" | python3 script/release/changelog.py "$version" > /dev/null
           tag_object="$(git rev-parse "refs/tags/$TAG")"
           {
             echo "tag=$TAG"

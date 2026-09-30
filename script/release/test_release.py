@@ -4,6 +4,7 @@ Adapted from dev7a/lnpctl tests/test_release.py: same fake `gh`, same cases,
 this repo's asset name and receipt (which records both notarizations).
 """
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -12,7 +13,22 @@ import tempfile
 import unittest
 
 SCRIPT = Path(__file__).resolve().parent / 'publish.sh'
+CHANGELOG_SCRIPT = Path(__file__).resolve().parent / 'changelog.py'
 ASSET = 'RDMALink-0.1.3.dmg'
+CHANGELOG = """# Changelog
+
+## Unreleased
+
+- Not released yet.
+
+## 0.1.3 — 2026-01-02 (build 3)
+
+- The fixture's note.
+
+## 0.1.2 — 2026-01-01 (build 2)
+
+- An older note.
+"""
 FAKE_GH = '''#!/usr/bin/env python3
 import json, os, pathlib, sys
 args = sys.argv[1:]
@@ -52,6 +68,8 @@ class ReleaseTests(unittest.TestCase):
                 },
             }))
             if case == 'bad_hash': (assets / ASSET).write_bytes(b'changed')
+            changelog = CHANGELOG.replace('## 0.1.3', '## 0.1.30') if case == 'no_notes' else CHANGELOG
+            (root / 'CHANGELOG.md').write_text(changelog)
             env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'],
                        GH_TOKEN='test', GH_REPO='test/test', RELEASE_TAG='v0.1.3',
                        RELEASE_SHA='a' * 40, RELEASE_TAG_OBJECT='c' * 40, RUNNER_TEMP=directory, CASE=case)
@@ -61,15 +79,65 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(result.returncode == 0, success, result.stderr + str(calls))
             self.assertEqual(published, success)
             if case in ('published', 'wrong_draft', 'moved_tag', 'replaced_tag_object', 'api_error',
-                        'app_rejected', 'image_rejected', 'wrong_version', 'bad_hash'):
+                        'app_rejected', 'image_rejected', 'wrong_version', 'bad_hash', 'no_notes'):
                 self.assertFalse(any(c[:2] == ['release', 'upload'] for c in calls))
+            if case == 'no_notes':
+                # Refused before GitHub is asked anything.
+                self.assertEqual(calls, [])
+            creates = [c for c in calls if c[:2] == ['release', 'create']]
+            if case == 'new':
+                self.assertEqual(len(creates), 1)
+                notes = Path(creates[0][creates[0].index('--notes-file') + 1]).read_text()
+                self.assertTrue(notes.startswith('- The fixture\'s note.\n'), notes)
+                self.assertIn('signed and notarized', notes)
+                self.assertNotIn('Not released yet', notes)
+                self.assertNotIn('An older note', notes)
 
     def test_new_release(self): self.run_case('new', True)
     def test_resume_draft(self): self.run_case('draft', True)
     def test_failures_never_publish(self):
         for case in ('published', 'wrong_draft', 'moved_tag', 'replaced_tag_object', 'api_error',
-                     'app_rejected', 'image_rejected', 'wrong_version', 'bad_hash', 'upload_error', 'extra_asset'):
+                     'app_rejected', 'image_rejected', 'wrong_version', 'bad_hash', 'upload_error', 'extra_asset',
+                     'no_notes'):
             with self.subTest(case=case): self.run_case(case, False)
+
+
+def load_changelog():
+    spec = importlib.util.spec_from_file_location('changelog', CHANGELOG_SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class ChangelogTests(unittest.TestCase):
+    """The release notes are one version's section of CHANGELOG.md, exactly."""
+
+    def test_the_section_under_the_version_heading(self):
+        section = load_changelog().section
+        self.assertEqual(section(CHANGELOG, '0.1.3'), "- The fixture's note.")
+        self.assertEqual(section(CHANGELOG, '0.1.2'), '- An older note.')
+
+    def test_a_version_is_matched_whole(self):
+        section = load_changelog().section
+        self.assertEqual(section(CHANGELOG.replace('## 0.1.3', '## 0.1.30'), '0.1.3'), '')
+        self.assertEqual(section('## 0.1.3\n\n- Bare heading.\n', '0.1.3'), '- Bare heading.')
+
+    def test_unreleased_and_empty_sections_are_no_notes(self):
+        section = load_changelog().section
+        self.assertEqual(section(CHANGELOG, 'Unreleased'), '- Not released yet.')
+        self.assertEqual(section('## 0.1.3 — 2026-01-02\n\n## 0.1.2\n\n- Older.\n', '0.1.3'), '')
+
+    def run_script(self, version, text):
+        return subprocess.run(['python3', str(CHANGELOG_SCRIPT), version], input=text,
+                              capture_output=True, text=True)
+
+    def test_the_script_fails_closed(self):
+        found = self.run_script('0.1.3', CHANGELOG)
+        self.assertEqual((found.returncode, found.stdout), (0, "- The fixture's note.\n"))
+        for version, text in (('0.1.4', CHANGELOG), ('Unreleased', CHANGELOG), ('0.1.3', '')):
+            with self.subTest(version=version):
+                missing = self.run_script(version, text)
+                self.assertEqual((missing.returncode, missing.stdout), (1, ''))
 
 
 if __name__ == '__main__':
