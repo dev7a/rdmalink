@@ -13,6 +13,8 @@ What changed in each RDMALink release, newest first.
   recognizes only by its shape and ports, such as one newer than this
   version, now opens read-only as well, and says it doesn't know the Mac's
   Thunderbolt yet. Before, it offered set-up there.
+- On a Mac where RDMALink sets nothing up, two connected Macs no longer
+  bring up "Unplug one of the two cables to set up a port."
 
 ## 0.3.8 — 2026-09-29 (build 11)
 

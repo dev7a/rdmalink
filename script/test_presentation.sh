@@ -633,12 +633,13 @@ check(text(HubAction.setUpAgain(portID: "en5").title) == "Set Up Again…"
       "L2: Set Up Again… opens the assistant, so it carries the ellipsis, on a row as anywhere")
 check(setUpActions.allSatisfy { hubFooter.offers($0) && hubFooter.allows($0) },
       "S1: on an ordinary hub every set-up button is there and live")
-let twoMacsFooter = HubPresentation.footer(hardware: studio, ports: [
+let twoMacPortsForFooter = [
     snapshot(port("en5", "Back, far left", link: .macLinked, bridges: [bridge0]),
              configuration: .unconfigured(bridges: ["bridge0"])),
     snapshot(port("en6", "Back, left middle", link: .macLinked, bridges: [bridge0]),
              configuration: .unconfigured(bridges: ["bridge0"])),
-])
+]
+let twoMacsFooter = HubPresentation.footer(hardware: studio, ports: twoMacPortsForFooter)
 check(twoMacsFooter.primary != nil && !twoMacsFooter.isPrimaryEnabled
       && twoMacsFooter.disabledReason.map(text) == "Unplug one of the two cables to set up a port.",
       "L3: the two-Macs fixture is R1's footer, and its reason says what waits on the cable")
@@ -647,6 +648,13 @@ check(setUpActions.allSatisfy { twoMacsFooter.offers($0) && !twoMacsFooter.allow
 for footer in [tb4Footer, r31Footer, r32Footer] {
     check(setUpActions.allSatisfy { !footer.offers($0) && !footer.allows($0) },
           "R23, R31 and R32: every set-up button is absent with the footer's primary")
+}
+// The two-Macs reason is the disabled primary's: where there is no primary,
+// "Unplug one of the two cables to set up a port" would promise a set-up
+// that unplugging never brings.
+for hardware in [tb4, unrecognized, unknownGeneration] {
+    check(HubPresentation.footer(hardware: hardware, ports: twoMacPortsForFooter).disabledReason == nil,
+          "R23, R31 and R32: two Macs connected print no set-up reason on a read-only hub")
 }
 for footer in [hubFooter, twoMacsFooter, tb4Footer, r31Footer, r32Footer] {
     check(otherActions.allSatisfy { footer.offers($0) && footer.allows($0) },

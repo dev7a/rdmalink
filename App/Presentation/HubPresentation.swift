@@ -312,8 +312,10 @@ enum HubPresentation {
             isPrimaryEnabled: !twoMacs,
             // §S1: the reason printed above the footer separator. The hub has
             // nothing under way to "continue", as S3's reason for the same
-            // condition does; what waits on the cable is setting up.
-            disabledReason: twoMacs ? "Unplug one of the two cables to set up a port." : nil,
+            // condition does; what waits on the cable is setting up. It is
+            // the disabled primary's reason, so a read-only hub, with no
+            // primary to disable, prints none: unplugging offers nothing there.
+            disabledReason: twoMacs && !readOnly ? "Unplug one of the two cables to set up a port." : nil,
             offersRestore: !unrecognized
         )
     }
