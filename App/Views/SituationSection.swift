@@ -46,8 +46,8 @@ struct SituationRow: View {
                 // `Set Up Again…`, `Stop Managing…` — is absent, because
                 // there is no model to show and nothing is written.
                 // §S1: the drift row's `Set Up Again…` is the port row's
-                // beside it, on the footer's terms — absent in R23's
-                // read-only mode, disabled while two Macs are connected.
+                // beside it, on the footer's terms — absent in R23's and
+                // R32's read-only modes, disabled while two Macs are connected.
                 if let hub, !hub.isUnrecognized {
                     ForEach(situation.actions.filter(hub.footer.offers)) { action in
                         Button(action.title) { hub.perform(action) }

@@ -45,7 +45,10 @@
 //  ports, as they are, on a 14-inch MacBook Pro (`Mac17,7`) in its three
 //  places, so §S8's handoff can be reviewed from a notebook — pair it with
 //  `other-mac-from-ready` and `RDMALINK_SNAPSHOT_OTHER_MAC`, below; one of
-//  the three has to be ready on this Mac for a line to be drawn. A fixture
+//  the three has to be ready on this Mac for a line to be drawn.
+//  `unknownGeneration` is the same three ports on a MacBook Pro the catalogue
+//  does not list, recognized by family and layout, so §6.2 R32's read-only
+//  hub can be reviewed with the model drawn. A fixture
 //  replaces every read of this Mac's identity and ports for the run and
 //  nothing else; the services, notes and stored bridges are still this Mac's.
 //
@@ -165,6 +168,10 @@ enum SnapshotHook {
         /// than any other Mac's face, beside each ghost the `Other Mac:`
         /// pop-up draws.
         case macBookPro
+        /// The same three places on a MacBook Pro the catalogue does not
+        /// list — `Mac99,98`, recognized by family and layout — so the
+        /// generation table has no row for it. R32's state.
+        case unknownGeneration
 
         /// The Mac the fixture stands for, without reading its ports.
         var model: HardwareModel {
@@ -180,6 +187,11 @@ enum SnapshotHook {
                 HardwareModel(
                     identifier: "Mac17,7", marketingName: "MacBook Pro", chip: "M5 Max",
                     archetype: .notebook, recognition: .identifier
+                )
+            case .unknownGeneration:
+                HardwareModel(
+                    identifier: "Mac99,98", marketingName: "MacBook Pro", chip: "M5 Max",
+                    archetype: .notebook, recognition: .familyAndLayout
                 )
             }
         }
@@ -211,7 +223,7 @@ enum SnapshotHook {
                         inventory.ports[index].link = .macLinked
                     }
                     return inventory
-                case .macBookPro:
+                case .macBookPro, .unknownGeneration:
                     // Each port keeps its BSD name, so its services, notes
                     // and bridges are still this Mac's; only where it sits
                     // changes.
@@ -225,7 +237,7 @@ enum SnapshotHook {
                         port.positionName = $1.1
                         return port
                     }
-                    inventory.model = Fixture.macBookPro.model
+                    inventory.model = model
                     return inventory
                 }
             }

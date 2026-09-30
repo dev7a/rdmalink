@@ -297,8 +297,9 @@ struct RootView: View {
             break
         case .choose, .review, .reviewFromPicker, .ready:
             // §S4: "An unrecognized Mac never reaches this screen: R31 offers
-            // no set-up." The hook stops at the hub, as a person would.
-            guard !actions.isUnrecognized else { return }
+            // no set-up", and nor do R23 and R32. The hook stops at the hub,
+            // as a person would.
+            guard actions.footer.primary != nil else { return }
             switch route {
             case .choose:
                 // The picker as the footer opens it, pre-selection and all.
@@ -380,8 +381,9 @@ struct RootView: View {
         // the hub's door already refuse it; this is the last guard.
         guard flow == nil else { return }
         // Reached from the hub alone, where this Mac is known and — on an
-        // unrecognized one — every way in is absent (§S4, R31).
-        guard let hardware = model.hardware, hardware.isRecognized else { return }
+        // unrecognized one, or one the generation table does not call
+        // Thunderbolt 5 — every way in is absent (§S4, R31, R23, R32).
+        guard let hardware = model.hardware, hardware.isRecognized, hardware.isThunderbolt5 else { return }
         let flow = SetUpFlow(
             planner: Self.planner(hardware: hardware),
             runner: Self.runner(hardware: hardware),

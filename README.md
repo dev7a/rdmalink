@@ -37,15 +37,17 @@ RDMALink is a network-configuration tool. Before you run it, know this much:
   check and no background agent. It is a tool you open, not a thing that lives
   on your Mac.
 
-If RDMALink cannot recognize your Mac, or the Mac has Thunderbolt 4 rather than
-5, it puts itself in read-only mode: you can look at everything, and it changes
-nothing.
+RDMALink sets up only a Mac it knows has Thunderbolt 5. On any other Mac — one
+it cannot recognize, one with Thunderbolt 4, or one newer than this version of
+RDMALink — it puts itself in read-only mode: you can look at everything, and it
+sets nothing up.
 
 ## Requirements
 
 - Apple silicon, macOS 27.
 - Thunderbolt 5 ports. Thunderbolt 4 Macs open read-only — RDMA over
-  Thunderbolt needs Thunderbolt 5.
+  Thunderbolt needs Thunderbolt 5. A Mac newer than your version of
+  RDMALink opens read-only too, until an update adds it.
 - **RDMA over Thunderbolt switched on**, in System Settings › Privacy &
   Security › Developer Tools, followed by a restart. This is not RDMALink's to
   flip: the switch lives in NVRAM and only System Settings sets it. The app

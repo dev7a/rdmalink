@@ -56,8 +56,8 @@ enum ThisMacPresentation {
     /// never states a status it has not observed (§1.3 rule 10), and the spec
     /// has no copy for "unknown".
     ///
-    /// - Parameter isReadOnly: R23's Thunderbolt 4 Mac or R31's unrecognized
-    ///   one, where RDMALink sets nothing up. "Turn it on to finish" would
+    /// - Parameter isReadOnly: R23's Thunderbolt 4 Mac, R31's unrecognized
+    ///   one or R32's of unknown Thunderbolt, where RDMALink sets nothing up. "Turn it on to finish" would
     ///   invite a step that finishes nothing there, so the row states the
     ///   switch and carries no button (§S1).
     static func rdmaRow(_ state: RDMASwitchState, isReadOnly: Bool = false) -> ThisMacRowModel? {

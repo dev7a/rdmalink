@@ -101,7 +101,7 @@ struct ChangeLogEntryRow: View {
             // way back for each entry writes, so on a Mac RDMALink does not
             // recognize the entries are read and the buttons are absent.
             // §S1: an entry's set-up button is the port row's own, on the
-            // footer's terms — absent where the footer offers no set-up (R23),
+            // footer's terms — absent where the footer offers no set-up (R23, R32),
             // disabled while two Macs are connected (R1) — and it reads as
             // the row's does.
             if let action = row.action, !hub.isUnrecognized, hub.footer.offers(action) {

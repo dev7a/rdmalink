@@ -340,7 +340,7 @@ final class HubActionsModel {
         // well as drawn unavailable, so no caller can go round the menu.
         if assistant != nil, !canPerform(action) { return }
         // §S1: one door for set-up. A set-up the footer would not take — two
-        // Macs connected (R1), or none offered at all (R23) — is refused
+        // Macs connected (R1), or none offered at all (R23, R32) — is refused
         // whoever raises it: a row, the drift row, the change log, R30.
         if action.opensSetUp, !footer.allows(action) { return }
         switch action {
