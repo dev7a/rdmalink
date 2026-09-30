@@ -42,7 +42,8 @@ fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
-DERIVED_DATA="$ROOT_DIR/build/DerivedData-package"
+# `.noindex` keeps the archived app out of Spotlight, as script/test.sh does.
+DERIVED_DATA="$ROOT_DIR/build/DerivedData-package.noindex"
 TEAM_ID=BV5XC39R5P
 BUNDLE_IDENTIFIER=com.dev7a.RDMALink
 # A notarytool Keychain profile created once with

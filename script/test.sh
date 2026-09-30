@@ -2,7 +2,9 @@
 # Builds and tests everything: the core package, the CLI, and the app.
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="$ROOT_DIR/build/DerivedData"
+# `.noindex`: Spotlight skips the folder, so the Debug build this makes never
+# turns up beside the installed app.
+BUILD_DIR="$ROOT_DIR/build/DerivedData.noindex"
 APP="$BUILD_DIR/Build/Products/Debug/RDMALink.app"
 
 for script in "$ROOT_DIR"/script/*.sh "$ROOT_DIR"/script/release/*.sh; do
