@@ -218,36 +218,37 @@ script/                   test.sh, build and packaging
 ## App icon
 
 The icon is an Icon Composer document, `App/AppIcon.icon`, drawn to UX_SPEC
-§3.3: one ready Thunderbolt receptacle on light aluminium silver. macOS
-renders it in Liquid Glass and makes the dark, tinted and clear appearances
-itself, so the document holds the light appearance only. It is a folder of
-two text files, and they are the whole source:
+§3.3: two lanes that merge, on deep navy. macOS renders it in Liquid Glass
+and makes the dark, tinted and clear appearances itself, so the document
+holds the default appearance only. It is a folder of two text files, and
+they are the whole source:
 
 - `icon.json`, the background and the glass. The background is a linear
-  gradient from Display P3 0.94/0.94/0.95 at the top to 0.76/0.77/0.79 at the
-  bottom. One group holds the one foreground layer, with Icon Composer's
-  neutral shadow at 50 % and translucency at 30 %; glass and the specular
-  highlight are left at their defaults, which are on. There are no
-  appearance specializations.
-- `Assets/Receptacle.svg`, the foreground on the 1024-point canvas: two
-  shapes and nothing painted. The ring is a stadium stroked 80 pt wide in
-  `#0088FF`, `NSColor.systemBlue` in Aqua on macOS 27, the default accent;
-  the icon never follows the user's accent. Inside it, 48 pt clear of the
-  ring, is the slot: 352 × 128 pt with a 62 pt corner radius, within 2 % of
-  the proportions of `FeatureKind.thunderbolt.opening`, filled near-black
-  (`#0C0C0E`) with an 8 pt rim of aluminium grey (`#8E8E93`). The ring's
-  outer edge is 608 pt wide in the SVG, and the layer is placed at 117 %
-  scale in `icon.json`, so it spans about 70 % of the canvas. There is no glow,
-  shadow or highlight in the SVG: the glass supplies the specular edge and
-  the shadow under the object. No cable, bolt, mark or text.
+  gradient from Display P3 0.12/0.17/0.29 at the top to 0.04/0.06/0.13 at
+  the bottom. One group holds the one foreground layer, at 100 % scale, with
+  Icon Composer's neutral shadow at 50 % and translucency at 10 %; glass and
+  the specular highlight are left at their defaults, which are on. There are
+  no appearance specializations.
+- `Assets/Lanes.svg`, the foreground on the 1024-point canvas: two stroked
+  paths, 98 pt wide with round caps. Each runs level from x = 150 to 250,
+  bends on one cubic curve to x = 576, and runs level again to x = 874, so
+  with its caps it spans 101 to 923 pt and stops short of both edges. The
+  upper lane goes from y = 258 down to 442, the lower from y = 740 up to
+  572, which leaves a 32 pt gap between them on the right. Each lane's
+  colour is a horizontal gradient across the canvas, x = 0 to 1024:
+  #8FA6CF at 45 % opacity at 0, #4E8FE8 at 85 % (upper) or #3A64D8 at 90 %
+  (lower) at 36 %, and from 60 % on the full colour, cyan #18B8FF to
+  #22C8FF above and blue #1F5BFF to #2A70FF below. There is no glow, shadow or highlight in the SVG: the glass
+  supplies the specular edge and the shadow under the lanes.
 
-The vertical numbers are set for 16 pt. At 16 px one pixel is 64 pt of the
-canvas, so the slot is two pixels tall and the ring's outer edge falls on a
-pixel boundary three pixels from the centre. ictool's 16 px rendering is six
-rows through the middle: ring, gap, slot, slot, gap, ring, measured as
-`#0AA2FF`, a blue-grey gap, `#1F1F21` and `#272729`. At 32 px, 16 pt on a
-Retina display, the slot is two rows of `#1C1C1E` and `#202022` inside its
-grey rim.
+The lanes end in round caps rather than fading out: the glass draws its
+specular edge round the whole stroked shape whatever its opacity, so a lane
+faded towards the edge keeps a thin bright outline all the way to it
+(measured with ictool on 2026-09-30). At 16 px the two lanes on the right
+cover four rows with no background row between them and read as one bar,
+cyan over blue, with the two dim lanes meeting it from the left; at 32 px
+the gap between them shows. In the dark appearance macOS replaces the navy
+with its own near-black, since the document has no dark specialization.
 
 To change it, edit the SVG or `icon.json` by hand, or open the document in
 Icon Composer, which ships inside Xcode at

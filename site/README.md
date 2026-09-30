@@ -56,7 +56,7 @@ site/
       shots/          screenshots of the app, 2000 × 1433, dark and light
       shots/1000/     the same at 1000 px wide, for srcset
       vendor/         three.js r128, with its MIT licence
-      icon-512.png    the app icon; icon-32.png and icon-64.png are made from it
+      icon-512.png    the app icon; icon-32.png and icon-64.png are the same, smaller
   dist/               the built site (not committed)
 ```
 
@@ -107,8 +107,19 @@ artboards' wording differed, the page uses the desktop artboard's.
   for f in *.jpg; do sips -s format jpeg -s formatOptions 85 --resampleWidth 1000 "$f" --out "1000/$f"; done
   ```
 
-- Icons: `sips -s format png -Z 32 icon-512.png --out icon-32.png`, and the same
-  with 64 for `icon-64.png` (the header and footer logo at 2×).
+- Icons: rendered from `App/AppIcon.icon` with Icon Composer's `ictool` (see
+  "App icon" in `docs/ARCHITECTURE.md`), then brought down from 16 to 8 bits a
+  channel, still in Display P3; `icon-64.png` is the header and footer logo at 2×.
+
+  ```sh
+  ICTOOL="/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool"
+  for n in 512 64 32; do
+    "$ICTOOL" App/AppIcon.icon --export-image --output-file site/src/assets/icon-$n.png \
+      --platform macOS --rendition Default --width $n --height $n --scale 1
+    sips -s format png --matchTo "/System/Library/ColorSync/Profiles/Display P3.icc" \
+      site/src/assets/icon-$n.png --out site/src/assets/icon-$n.png
+  done
+  ```
 - three.js: a new version needs its new SHA-384 in `check.py` (`THREE`,
   `THREE_SRI`) and a check that `mac-scene.js` still runs on it.
 
