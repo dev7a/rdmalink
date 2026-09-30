@@ -4,6 +4,8 @@ What changed in each RDMALink release, newest first.
 
 ## Unreleased
 
+## 0.3.8 — 2026-09-29 (build 11)
+
 - RDMALink uses about 1 % of one CPU core while it sits open, down from
   about 20–35 %. The 3D view of the Mac draws only while something on it
   moves, and not at all while the window is hidden or covered.
