@@ -111,7 +111,11 @@ function createMacScene(T, canvas, opts) {
   renderer.shadowMap.needsUpdate = true;
   // The editor remounts this view and a page can hold several; a context the
   // browser drops stays blank, so say so rather than leave an empty frame.
-  function contextLost() {
+  // Cancelling the event is what lets the browser restore the context later
+  // (viewer.js restarts on webglcontextrestored). three.js's own listener
+  // cancels it too, but only while the renderer is alive.
+  function contextLost(event) {
+    if (event) event.preventDefault();
     if (disposed) return;
     lost = true;
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
