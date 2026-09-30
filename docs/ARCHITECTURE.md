@@ -535,3 +535,50 @@ no stand-in chassis, and the stage draws R31's block in its place.
 5. Public IOKit and SystemConfiguration keys are load-bearing; undocumented
    keys and the bridge SPI degrade cleanly when absent.
 6. Swift 6 language mode, strict concurrency, warnings are errors.
+
+## Website
+
+`site/` is the website at <https://dev7a.github.io/rdmalink/>: one static
+page in plain HTML, CSS and JavaScript, with no dependencies. It was ported
+once from the Claude Design canvas, which is only a design reference now.
+`python3 site/build.py` copies `site/src` into a clean `site/dist`, puts in the
+two animated Why diagrams (`site/tools/why.py`) and stamps the version of the
+newest released section of `CHANGELOG.md`; `python3 site/check.py` then checks
+the result. Both use only the Python standard library, and the same input
+gives byte-identical output. `site/README.md` covers the page, the build and
+where each asset comes from.
+
+Nothing is fetched from another origin. The fonts, three.js r128 and the
+screenshots are served from the site, every URL on the page is relative (so
+it works under `/rdmalink/`, on `localhost` and from `file://`), and a
+Content-Security-Policy meta (`script-src 'self'`, `connect-src 'none'`)
+holds the browser to it. `check.py` fails on any absolute URL that would load
+something, on an `@import` or an inline script, on a changed CSP, and when
+three.js no longer matches its pinned SHA-384.
+
+`.github/workflows/pages.yml` builds and publishes it. `permissions: {}` at
+the top, job-level scopes, actions pinned by commit hash, and
+`concurrency: pages-<ref>` with `cancel-in-progress: false`: one run per ref
+at a time. A deploy in progress finishes; a newer run replaces one still
+waiting, so the latest commit is the one published. The event flow:
+
+1. **Event**: a pull request, or a push to `main`, that touches `site/**`,
+   the workflow or `CHANGELOG.md` (a release changes the page's version), or
+   a manual run. The version PR's merge deploys the new version at once, so
+   the page names it before the release is published (after the signed tag,
+   notarization and the `release` approval, about half an hour for 0.3.8);
+   until then the Download link and brew still give the previous release.
+2. **build** (`ubuntu-24.04`, `contents: read`) checks out the commit with
+   `persist-credentials: false` and runs `build.py` and `check.py` on the
+   runner's own `python3`: no setup action, no pip, no download. It names the
+   artifact `github-pages-<run id>-<attempt>`, as lnpctl does, so a re-run
+   never deploys another run's artifact. Only for a push or a manual run on
+   `main` does it upload `site/dist` with `actions/upload-pages-artifact`.
+3. **deploy** (same condition; `pages: write` and `id-token: write`;
+   environment `github-pages`) hands that artifact to `actions/deploy-pages`.
+   It checks nothing out and runs no repository code.
+
+A pull request, a fork's included, only builds and checks, with a read-only
+token. The `github-pages` environment allows only `main`; that rule, not the
+workflow's `if:`, keeps any other ref from deploying. The repository's Pages
+source must be set to GitHub Actions.
