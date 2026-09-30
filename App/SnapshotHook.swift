@@ -349,7 +349,7 @@ enum SnapshotHook {
     /// content view a superview.
     ///
     /// `cacheDisplay(in:to:)` draws the AppKit view tree, which leaves a hole
-    /// where the `RealityView` is — a Metal layer is not an AppKit drawing.
+    /// where the stage is — a Metal layer is not an AppKit drawing.
     /// The stage is therefore rendered off screen and composited into that
     /// hole; see App/Stage/StageSnapshot.swift for why that is the only way
     /// left on macOS 27.

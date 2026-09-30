@@ -99,13 +99,12 @@ let notebook = StageMath.Framing(
 
 // UX_SPEC 8.4: every receptacle's hit target is at least 24 x 24 pt, at the
 // pose the app opens in, in every stage the window can produce -- the default
-// split, the minimum window, and 8.5's 180 pt strip. This is the property
+// split and the minimum window. This is the property
 // StageScene.dollyRange and StageScene.restingRadius are built to hold; it
 // fails the moment the collider is narrowed back inside the 0.985 cm pitch.
 let stages = [
     CGSize(width: 580, height: 600),
     CGSize(width: 460, height: 500),
-    CGSize(width: 900, height: 180),
 ]
 for stage in stages {
     for (name, framing, scale) in [
@@ -627,6 +626,43 @@ check(aside.map { $0.x < 290 && near($0.y, 334, 1e-6) } == true,
 check(StageMath.project(
         SIMD3(0, 0, -2), camera: eye, target: .zero, verticalFieldOfView: fov, viewport: stage
       ) == nil, "a point behind the camera does not project")
+
+// The stage hit-tests along the ray through a point, so the ray must be the
+// projection run backwards: through any projected point, it passes the point.
+let tilted = StageMath.orbitPosition(
+    target: SIMD3(0, 0.03, 0), yaw: .pi - 0.55, pitch: 0.3, radius: 0.45
+)
+for point in [SIMD3<Float>(0, 0.03, 0), SIMD3(0.08, 0.01, -0.09), SIMD3(-0.06, 0.07, 0.02)] {
+    guard
+        let onScreen = StageMath.project(
+            point, camera: tilted, target: SIMD3(0, 0.03, 0),
+            verticalFieldOfView: fov, viewport: stage
+        ),
+        let direction = StageMath.ray(
+            through: onScreen, camera: tilted, target: SIMD3(0, 0.03, 0),
+            verticalFieldOfView: fov, viewport: stage
+        )
+    else {
+        check(false, "a point in front of the camera has a ray")
+        continue
+    }
+    let toPoint = simd_normalize(point - tilted)
+    check(simd_length(simd_cross(direction, toPoint)) < 1e-5 && simd_dot(direction, toPoint) > 0,
+          "the ray through \(onScreen) passes through \(point)")
+}
+let hit = StageMath.rayHit(
+    origin: SIMD3(0, 0, -1), direction: SIMD3(0, 0, 1),
+    boxMin: SIMD3(-0.1, -0.1, -0.1), boxMax: SIMD3(0.1, 0.1, 0.1)
+)
+check(hit.map { near(Double($0), 0.9, 1e-6) } == true, "a ray down the axis enters the box at its face")
+check(StageMath.rayHit(
+        origin: SIMD3(0.2, 0, -1), direction: SIMD3(0, 0, 1),
+        boxMin: SIMD3(-0.1, -0.1, -0.1), boxMax: SIMD3(0.1, 0.1, 0.1)
+      ) == nil, "a ray beside the box misses it")
+check(StageMath.rayHit(
+        origin: SIMD3(0, 0, 1), direction: SIMD3(0, 0, 1),
+        boxMin: SIMD3(-0.1, -0.1, -0.1), boxMax: SIMD3(0.1, 0.1, 0.1)
+      ) == nil, "a box behind the ray is not hit")
 
 // UX_SPEC §2.3's top band: the narration capsule top-center, §S8's pop-up
 // top-trailing, and "a label gives way to a control, never the reverse".

@@ -9,9 +9,19 @@ import SystemConfiguration
 /// runs underneath, so a caller that re-reads the inventory on every yield sees
 /// every change within `pollInterval` even when the store stays silent.
 ///
-/// The stream yields `Void`: it is a "look again" signal, not a diff. The
-/// caller re-reads ``PortInventory`` and decides what changed.
+/// The stream yields a ``Wake``: a "look again" signal, not a diff. The caller
+/// re-reads ``PortInventory`` and decides what changed.
 public struct LinkWatcher: Sendable {
+    /// One wake-up.
+    ///
+    /// `storeEvents` counts the store notifications this stream has seen so
+    /// far. The stream coalesces, so a tick that lands on top of an unread
+    /// notification replaces it; a caller that compares the count with the
+    /// last one it saw still knows the store spoke.
+    public struct Wake: Sendable, Equatable {
+        public var storeEvents: Int
+    }
+
     /// The BSD names to subscribe to, from ``PortInventory/read(archetype:)``.
     public var bsdNames: [String]
     /// The backstop tick. ARCHITECTURE.md specifies one second.
@@ -27,7 +37,7 @@ public struct LinkWatcher: Sendable {
     /// Cancelling the consuming task, or letting the stream go, unsubscribes
     /// the store and cancels the timer. Yields coalesce: a caller that is slow
     /// to re-read never accumulates a backlog of stale wake-ups.
-    public func changes() -> AsyncStream<Void> {
+    public func changes() -> AsyncStream<Wake> {
         let names = bsdNames
         let interval = pollInterval
         return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
@@ -44,7 +54,7 @@ public struct LinkWatcher: Sendable {
 /// not declare `Sendable`. Every access to it is under `lock`, and the store is
 /// only ever handed to SystemConfiguration itself.
 private final class WatchSession: @unchecked Sendable {
-    private let continuation: AsyncStream<Void>.Continuation
+    private let continuation: AsyncStream<LinkWatcher.Wake>.Continuation
     private let queue = DispatchQueue(label: "com.dev7a.RDMALink.LinkWatcher")
     private let lock = NSLock()
     private var store: SCDynamicStore?
@@ -52,8 +62,9 @@ private final class WatchSession: @unchecked Sendable {
     /// The `+1` handed to the store's callback context, released on stop.
     private var callbackReference: Unmanaged<WatchSession>?
     private var stopped = false
+    private var storeEvents = 0
 
-    init(continuation: AsyncStream<Void>.Continuation) {
+    init(continuation: AsyncStream<LinkWatcher.Wake>.Continuation) {
         self.continuation = continuation
     }
 
@@ -89,8 +100,12 @@ private final class WatchSession: @unchecked Sendable {
     }
 
     /// Called from the store's callback and from the timer.
-    fileprivate func fire() {
-        continuation.yield()
+    fileprivate func fire(fromStore: Bool) {
+        lock.lock()
+        if fromStore { storeEvents += 1 }
+        let wake = LinkWatcher.Wake(storeEvents: storeEvents)
+        lock.unlock()
+        continuation.yield(wake)
     }
 
     private func subscribe(to bsdNames: [String]) {
@@ -112,7 +127,7 @@ private final class WatchSession: @unchecked Sendable {
         )
         let callback: SCDynamicStoreCallBack = { _, _, info in
             guard let info else { return }
-            Unmanaged<WatchSession>.fromOpaque(info).takeUnretainedValue().fire()
+            Unmanaged<WatchSession>.fromOpaque(info).takeUnretainedValue().fire(fromStore: true)
         }
         guard let store = SCDynamicStoreCreate(
             nil, "com.dev7a.RDMALink.LinkWatcher" as CFString, callback, &context
@@ -135,7 +150,7 @@ private final class WatchSession: @unchecked Sendable {
         guard seconds > 0 else { return }
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + seconds, repeating: seconds, leeway: .milliseconds(100))
-        timer.setEventHandler { [weak self] in self?.fire() }
+        timer.setEventHandler { [weak self] in self?.fire(fromStore: false) }
         timer.resume()
         self.timer = timer
     }

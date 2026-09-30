@@ -215,7 +215,7 @@ struct StagePalette {
     }
 
     /// Dynamic system colours resolve against whatever appearance is current,
-    /// which in a `RealityView` build closure is not necessarily the window's.
+    /// which while the stage is being built is not necessarily the window's.
     private func resolve(_ color: NSColor) -> NSColor {
         let name: NSAppearance.Name = appearance.isDark ? .darkAqua : .aqua
         guard let target = NSAppearance(named: name) else {

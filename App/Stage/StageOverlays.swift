@@ -107,9 +107,9 @@ struct StageViewControls: View {
 /// UX_SPEC §S8 "The other Mac's picture": the `Other Mac:` pop-up "on the
 /// stage, in its top-trailing corner — above where the ghost settles, across
 /// from the legend", its label beside it, "the two in one Liquid Glass capsule
-/// like the stage's other controls". The pop-up is `OtherMacPicker`, the same
-/// one the working area stands in the strip (§8.5); here it is borderless,
-/// because the capsule is its bezel, as `Fit` and `Reset View` are.
+/// like the stage's other controls". The pop-up is `OtherMacPicker`,
+/// borderless because the capsule is its bezel, as `Fit` and `Reset View`
+/// are.
 ///
 /// It is a standard pop-up button, so VoiceOver reads its label and value
 /// and, with keyboard navigation on, Tab reaches it. Unlike the narration,

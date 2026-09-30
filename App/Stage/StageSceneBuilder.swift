@@ -38,11 +38,6 @@ enum StageRingRole: Hashable, CaseIterable, Sendable {
     case serviceNode, serviceRing
 }
 
-/// Marks a collider with the port it stands for, so a hit test answers an id.
-struct StagePortIdentity: Component {
-    let id: String
-}
-
 /// Everything the scene needs to drive one receptacle.
 @MainActor
 final class StageReceptacleNode {
@@ -136,8 +131,6 @@ enum StageSceneBuilder {
         ports: [StagePort], chassis: Chassis, palette: StagePalette,
         appearance: StageAppearance
     ) -> StageSceneGraph {
-        StagePortIdentity.registerComponent()
-
         let root = Entity()
         root.name = "stage.root"
 
@@ -289,8 +282,8 @@ enum StageSceneBuilder {
     /// the Mac Studio's is some 9,900 of them, and a `studioSix` rebuild is
     /// already a visible hitch at 130 entities.
     ///
-    /// It carries no collider, no input target and no `StagePortIdentity`, so
-    /// `StageScene.portID(at:)` never sees it, exactly like the shell under it.
+    /// It carries no collider, so `StageScene.portID(at:)` never sees it,
+    /// exactly like the shell under it.
     private static func makeGrille(
         _ grille: Grille, chassis: Chassis, palette: StagePalette
     ) -> Entity {
@@ -541,8 +534,6 @@ enum StageSceneBuilder {
                 mode: .trigger
             )
         )
-        proxy.components.set(InputTargetComponent())
-        proxy.components.set(StagePortIdentity(id: port.id))
         root.addChild(proxy)
 
         let node = StageReceptacleNode(

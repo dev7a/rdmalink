@@ -88,7 +88,13 @@ made up; they are not the rig's.
 - The only public live event is `SCDynamicStore`
   `State:/Network/Interface/<bsd>/Link` (and `/IPv6`), which fires on
   Thunderbolt-IP link transitions only. Dock plug/unplug may not fire
-  anything; a one-second state diff runs underneath.
+  anything; a one-second state diff runs underneath. The diff reads a cheap
+  `PortStateSignature` every second — the registry pass, `getifaddrs` for
+  the Thunderbolt ports and bridges, and a `stat` of the network preferences
+  and the notes folder — and the full port read (`ifconfig -a`, both
+  `SCPreferences` passes, the notes) runs only when that moves or the store
+  speaks, on every tick for five seconds after, and at least every ten
+  (`PortReadGate`).
 - **Thunderbolt domain identity** (measured 2026-09-20, `IOThunderboltFamily`
   9.3.3, unprivileged `ioreg`): the private key `Domain UUID` is published in
   two places. `IOThunderboltLocalNode`, the parent of the
@@ -128,8 +134,9 @@ made up; they are not the rig's.
   §4.8 overlays — the legend that yields to the chassis and the callout
   beside a receptacle — are laid out from `StageMath.project`, the rig's own
   look-at and perspective over the pose the scene is holding, which is also
-  the pose the review capture renders with. Hit testing keeps
-  `entities(at:in:)`, which was not affected. Two consequences of laying
+  the pose the review capture renders with. Hit testing runs the same
+  projection backwards: `StageMath.ray` through the pointer, tested against
+  each receptacle's collider box. Two consequences of laying
   out from the projection: the callout is shown only while its receptacle's
   face is the one in front (every other face's centres project too, onto
   the far side of the chassis), and it stands off the top of the whole row
@@ -144,9 +151,7 @@ made up; they are not the rig's.
   yield into that corner while it is there, and the callout drops below its
   row rather than reach it. It keeps its widest item's width whichever Mac is
   picked (`StageOtherMacPicker`), so that corner, the capsule's drop and the
-  callout's keep-out never change with the pick. Below 900 pt the stage is a strip the ghost
-  fills, so the window stands the pop-up in §S8's working area instead
-  (`OtherMacPickerPlace`).
+  callout's keep-out never change with the pick.
 - **Bridge membership is two facts, not one** (measured 2026-09-20). The
   network preferences keep their own member list —
   `VirtualNetworkInterfaces` → `Bridge` → `bridgeN` → `Interfaces`, with

@@ -3,7 +3,7 @@
 //
 //  The window's one source of truth about this Mac. It reads RDMALinkCore on
 //  a background task, never on the main actor, and re-reads on Check Again and
-//  on every wake-up the Core link watcher sends.
+//  whenever a wake-up from the Core link watcher finds something moved.
 //
 
 import Foundation
@@ -52,6 +52,9 @@ final class InventoryModel {
 
     private var slowProbeTimer: Task<Void, Never>?
 
+    /// Which of the one-second wake-ups pay for the port read.
+    private var readGate = PortReadGate()
+
     /// `Studio — Mac Studio (M3 Ultra)`, or empty until the model is known.
     var windowSubtitle: String {
         guard let hardware else { return "" }
@@ -64,8 +67,8 @@ final class InventoryModel {
     /// UX_SPEC §7 promises "a quiet one-second state diff runs underneath".
     private static let retryInterval = Duration.seconds(1)
 
-    /// One full read, then one port read per link change for as long as the
-    /// window lives. Cancelling the calling task unsubscribes the watcher.
+    /// One full read, then the one-second diff for as long as the window
+    /// lives. Cancelling the calling task unsubscribes the watcher.
     ///
     /// Nothing ends this loop but cancellation. An empty port list is a state
     /// to look again from, not a reason to stop: `.task` runs this once per
@@ -81,11 +84,13 @@ final class InventoryModel {
             let watched = watchableNames
             guard !watched.isEmpty else {
                 try? await Task.sleep(for: Self.retryInterval)
-                await refreshPorts()
+                await refreshPorts(storeEvent: false)
                 continue
             }
-            for await _ in LinkWatcher(bsdNames: watched).changes() {
-                await refreshPorts()
+            var storeEvents = 0
+            for await wake in LinkWatcher(bsdNames: watched).changes() {
+                await refreshPorts(storeEvent: wake.storeEvents != storeEvents)
+                storeEvents = wake.storeEvents
                 // A port appearing or leaving changes what there is to
                 // subscribe to, so the stream is rebuilt rather than patched.
                 if watchableNames != watched { break }
@@ -117,12 +122,26 @@ final class InventoryModel {
         apply(ports: snapshot.ports, failure: snapshot.failure, countsTowardR24: true)
     }
 
-    /// The cheap re-read a link event wants: ports, their services and their
-    /// notes. The RDMA switch needs a restart to change, so it is not worth an
+    /// One wake-up of the diff: the signature, and the re-read a change wants
+    /// — ports, their services and their notes — when the gate says one is
+    /// owed. The RDMA switch needs a restart to change, so it is not worth an
     /// `ibv_devices` every second.
-    private func refreshPorts() async {
+    private func refreshPorts(storeEvent: Bool) async {
         guard let archetype = hardware?.archetype else { return }
-        let read = await Task.detached(priority: .utility) { Probe.ports(archetype: archetype) }.value
+        let gate = readGate
+        let (next, read) = await Task.detached(
+            priority: .utility
+        ) { () -> (PortReadGate, Probe.PortRead?) in
+            var gate = gate
+            guard gate.shouldRead(
+                signature: Probe.signature(), storeEvent: storeEvent, at: ContinuousClock().now
+            ) else { return (gate, nil) }
+            let read = Probe.ports(archetype: archetype)
+            if read.ports == nil { gate.readFailed() }
+            return (gate, read)
+        }.value
+        readGate = next
+        guard let read else { return }
         apply(ports: read.ports, failure: read.failure, countsTowardR24: false)
     }
 
@@ -258,6 +277,11 @@ private enum Probe {
         } catch {
             return PortRead(ports: nil, failure: "\(error)")
         }
+    }
+
+    /// What the port read depends on, cheaply: see `PortStateSignature`.
+    static func signature() -> PortStateSignature? {
+        PortStateSignature.read(notesDirectory: NotesLocation.store.directory)
     }
 
     /// The sharing name from `Host`, which is what System Settings › General ›

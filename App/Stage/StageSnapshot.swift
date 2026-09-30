@@ -4,7 +4,7 @@
 //  How the review hook gets a picture of the 3D stage.
 //
 //  `NSView.cacheDisplay(in:to:)` draws the AppKit view tree and nothing else.
-//  A `RealityView` is a Metal layer, so a window bitmap taken that way has a
+//  The stage is a Metal layer, so a window bitmap taken that way has a
 //  hole where the stage is — verified on this Mac: the render loop ticks at
 //  60 fps with the whole chassis in frame and the captured PNG is empty there.
 //  ScreenCaptureKit would see the real pixels but wants Screen Recording,

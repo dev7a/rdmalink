@@ -934,18 +934,6 @@ check(OtherMacChoice.macMini.representative == "Mac17,16"
       && OtherMacChoice.macMini.archetype == .mini,
       "§S8: Mac mini is drawn as the Mac mini (M5 Pro), from the catalogue")
 
-// §S8 "The other Mac's picture" and §2.3: where the pop-up stands.
-check(OtherMacPickerPlace.place(showsOtherMac: true, recognized: true, stageIsStrip: false) == .stage,
-      "§S8: on the stage, in its top-trailing corner, while the screen is up")
-check(OtherMacPickerPlace.place(showsOtherMac: true, recognized: true, stageIsStrip: true) == .workingArea,
-      "§S8: below 900 pt the stage is §8.5's strip, so the pop-up stands in the working area")
-check([false, true].allSatisfy {
-          OtherMacPickerPlace.place(showsOtherMac: false, recognized: true, stageIsStrip: $0) == nil
-      }, "§2.3: never on the hub or in the set-up assistant, in either layout")
-check([false, true].allSatisfy {
-          OtherMacPickerPlace.place(showsOtherMac: true, recognized: false, stageIsStrip: $0) == nil
-      }, "§S8: on an unrecognized Mac (R31) it is not there, on the stage or in the working area")
-
 // §S8: the line ends on "that model's Thunderbolt port nearest this Mac on the
 // face a cable usually goes into — the back of a Mac Studio or a Mac mini, the
 // left side of a MacBook Pro".
