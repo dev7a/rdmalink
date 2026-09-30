@@ -52,6 +52,16 @@ enum ThisMacPresentation {
         }
     }
 
+    /// R22's body on the hub, behind the RDMA row's `Tell Me More`. Its second
+    /// sentence is about setting up a port, so a read-only hub — R23, R31,
+    /// R32, where a Mac with no RDMA devices is likeliest — leaves it off
+    /// rather than point at a set-up that isn't there (§6.2 R22).
+    static func noDevicesBody(isReadOnly: Bool) -> LocalizedStringResource {
+        isReadOnly
+            ? "That usually means this Mac, or this version of macOS, doesn't actually offer RDMA over Thunderbolt."
+            : "That usually means this Mac, or this version of macOS, doesn't actually offer RDMA over Thunderbolt. Setting up a port is still harmless and still undoable — it just won't have anything to carry yet."
+    }
+
     /// The RDMA row, or `nil` while the switch has not been read. The app
     /// never states a status it has not observed (§1.3 rule 10), and the spec
     /// has no copy for "unknown".

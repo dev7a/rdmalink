@@ -79,7 +79,7 @@ extension Situation {
 
     static let twoMacsTip = Situation(
         id: "twoMacsTip",
-        text: "Two Macs are connected. Leave just one cable in place while you set up — two can send Ethernet traffic around in a loop."
+        text: "Two Macs are connected. Leave just one cable in place — two can send Ethernet traffic around in a loop."
     )
 }
 

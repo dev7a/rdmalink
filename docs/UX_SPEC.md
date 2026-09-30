@@ -398,7 +398,7 @@ The rings say what the words say; two small aids make sure nobody has to guess w
 - Drift: **Back, far left isn't set up any more.** · detail: **The network service RDMALink made is gone — it may have been removed in System Settings.** *[Set Up Again…]* *[Stop Managing…]* — the first button is the port row's own, so a drifted port with a service of its own offers `Restore…` or `Adopt…` here as its row does, or nothing when its row offers nothing, never `Set Up Again…`; the second opens S10's stop-managing form, which forgets the note, changes nothing, and — when the note records the bridges the port came from — says RDMALink won't be able to put the port back afterwards (§S10); and the detail line is left off while the service RDMALink made is still there, edited.
 - Restart owed: **RDMA is switched on and waiting for a restart. Restart whenever it suits you.**
 - USB tip: **There's a cable in a front port. Those carry USB, not Thunderbolt. Move it to one of the four ports on the back and RDMALink will follow along.**
-- Two Macs tip: **Two Macs are connected. Leave just one cable in place while you set up — two can send Ethernet traffic around in a loop.** Shown only when R1 would fire — two ports with a Mac on the end share a bridge — and never for cables on standalone ports.
+- Two Macs tip: **Two Macs are connected. Leave just one cable in place — two can send Ethernet traffic around in a loop.** Shown only when R1 would fire — two ports with a Mac on the end share a bridge — and never for cables on standalone ports. It names no set-up, so it reads the same on a read-only hub; on the others the footer's reason says what waits on the cable.
 
 **Copy — port list section and rows**
 - Section headers: **Thunderbolt ports** · **Back** · **Front** · **Left side** · **Right side**
@@ -1043,7 +1043,8 @@ Documented once so they all read the same.
 **R22 — RDMA is on, but no RDMA devices appeared.** *Not a block.*
 - Headline: **RDMA is on, but no RDMA devices appeared**
 - Body: **That usually means this Mac, or this version of macOS, doesn't actually offer RDMA over Thunderbolt. Setting up a port is still harmless and still undoable — it just won't have anything to carry yet.**
-- Buttons, on S2: **Continue** (default) · **Check Again** · **Copy Details**. On the hub, behind the This Mac row's `Tell Me More`: **Check Again** · **Copy Details** — the footer's `Set Up Port…` is the way on, and the window keeps its one default.
+- On a read-only hub (R23, R31, R32) the body is its first sentence alone: there is no set-up there for the second to be about.
+- Buttons, on S2: **Continue** (default) · **Check Again** · **Copy Details**. On the hub, behind the This Mac row's `Tell Me More`: **Check Again** · **Copy Details** — the footer's `Set Up Port…`, where there is one, is the way on, and the window keeps its one default.
 - **Recovery:** proceeds, and the hub keeps an honest status row rather than pretending.
 
 ---

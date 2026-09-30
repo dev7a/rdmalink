@@ -197,8 +197,8 @@ struct USBPortTipCard: View {
 /// R22 — RDMA is on, but no RDMA devices appeared. Not a block.
 ///
 /// On the hub, behind the This Mac row's `Tell Me More`, its row is `Check
-/// Again` · `Copy Details` (§6.2 R22): the footer's `Set Up Port…` is the way
-/// on and the window's one default, so a `Continue` here would be a second
+/// Again` · `Copy Details` (§6.2 R22): the footer's `Set Up Port…`, where
+/// there is one, is the way on and the window's one default, so a `Continue` here would be a second
 /// name for opening the assistant and a second default. `Continue` is S2's.
 ///
 /// `.secondary`, not orange: orange means the user needs to act (§3.1), and
@@ -211,7 +211,7 @@ struct NoRDMADevicesRefusal: View {
             symbol: "exclamationmark.circle",
             tint: .secondary,
             headline: "RDMA is on, but no RDMA devices appeared",
-            message: "That usually means this Mac, or this version of macOS, doesn't actually offer RDMA over Thunderbolt. Setting up a port is still harmless and still undoable — it just won't have anything to carry yet.",
+            message: ThisMacPresentation.noDevicesBody(isReadOnly: model.isReadOnlyHub),
             // §6.1 rule 3: under the hub's own headline.
             isNested: true
         ) {

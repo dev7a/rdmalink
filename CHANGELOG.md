@@ -13,8 +13,11 @@ What changed in each RDMALink release, newest first.
   recognizes only by its shape and ports, such as one newer than this
   version, now opens read-only as well, and says it doesn't know the Mac's
   Thunderbolt yet. Before, it offered set-up there.
-- On a Mac where RDMALink sets nothing up, two connected Macs no longer
-  bring up "Unplug one of the two cables to set up a port."
+- On a Mac where RDMALink sets nothing up, the window no longer talks
+  about setting up: two connected Macs don't bring up "Unplug one of the two
+  cables to set up a port.", and the note behind Tell Me More, when RDMA is
+  on but no RDMA devices appeared, stops after its first sentence. The
+  two-Macs tip no longer says "while you set up" anywhere.
 
 ## 0.3.8 — 2026-09-29 (build 11)
 

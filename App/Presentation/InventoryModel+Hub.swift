@@ -20,6 +20,12 @@ extension InventoryModel {
         HubPresentation.copy(hardware: hardware, ports: ports)
     }
 
+    /// R23's, R31's and R32's read-only hubs: the ones whose footer offers no
+    /// set-up.
+    var isReadOnlyHub: Bool {
+        HubPresentation.footer(hardware: hardware, ports: ports).primary == nil
+    }
+
     /// The situation rows, in §S1's order.
     var situations: [Situation] {
         HubPresentation.situations(switchState: switchState, ports: ports)
@@ -32,8 +38,7 @@ extension InventoryModel {
     /// (§S1).
     var thisMacRows: [ThisMacRowModel] {
         var rows: [ThisMacRowModel] = []
-        let isReadOnly = HubPresentation.footer(hardware: hardware, ports: ports).primary == nil
-        if let rdmaRow = ThisMacPresentation.rdmaRow(switchState, isReadOnly: isReadOnly) {
+        if let rdmaRow = ThisMacPresentation.rdmaRow(switchState, isReadOnly: isReadOnlyHub) {
             rows.append(rdmaRow)
         }
         rows.append(ThisMacPresentation.bridgeRow(ports))

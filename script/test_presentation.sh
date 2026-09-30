@@ -1863,6 +1863,18 @@ check(planPort.warnings == [
 check(ChooseInformationalLine(farLeftPort).map { text($0.text) } == planPort.informationalLines.first,
       "T4: the picker and Review say the same sentence for the same fact")
 
+// R22 behind Tell Me More: a read-only hub drops the sentence about setting up.
+check(text(ThisMacPresentation.noDevicesBody(isReadOnly: false))
+      == "That usually means this Mac, or this version of macOS, doesn't actually offer RDMA over Thunderbolt. Setting up a port is still harmless and still undoable — it just won't have anything to carry yet.",
+      "R22: the hub's body is §6.2's, verbatim, where set-up is offered")
+check(text(ThisMacPresentation.noDevicesBody(isReadOnly: true))
+      == "That usually means this Mac, or this version of macOS, doesn't actually offer RDMA over Thunderbolt.",
+      "R22: on a read-only hub the body stops before the set-up it can't offer")
+// §S1's two-Macs tip names no set-up, so it is true on every hub.
+check(text(Situation.twoMacsTip.text)
+      == "Two Macs are connected. Leave just one cable in place — two can send Ethernet traffic around in a loop.",
+      "S1: the two-Macs tip is §S1's, verbatim, with nothing about setting up")
+
 // T5: R23's, R31's and R32's read-only hubs state the switch and offer no button.
 check(ThisMacPresentation.rdmaRow(.off, isReadOnly: true)
         == ThisMacRowModel(id: "rdma", text: "RDMA over Thunderbolt — Off"),
