@@ -159,8 +159,8 @@ public struct StandalonePortSetup: Sendable {
 
     /// Every refusal that blocks an apply, in the order the spec raises them.
     ///
-    /// R1, R2 and R5 are marked "blocks preflight and any apply" / "hard
-    /// refusal at preflight and at review" (UX_SPEC §6.2), so they belong here
+    /// R1 and R2 block set-up's preflight and apply, and R5 is a "hard refusal
+    /// at preflight and at review" (UX_SPEC §6.2), so they belong here
     /// and not only in S5's Checked group — a cable that arrives while the
     /// review is on screen has to be caught by the last gate. R31 is about
     /// the Mac itself and goes ahead of all of them.

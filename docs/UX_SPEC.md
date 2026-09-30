@@ -830,7 +830,7 @@ The headline, the illustration, the sections and the closing line scroll inside 
 - **RDMA over Thunderbolt** — **RDMA lets two Macs move data between them without troubling either one's processor very much. Over a Thunderbolt 5 cable that's quick enough to feel like a local disk. Tools like exo and MLX clusters use it.**
 - **Why take the port out of Thunderbolt Bridge?** — **The bridge joins your Thunderbolt ports into one ordinary network, which is lovely for file sharing and wrong for this. RDMA wants a cable that belongs to it alone, so RDMALink gives the port its own service and leaves the bridge otherwise untouched. A port has to be out of every bridge, even one that isn't switched on.**
 - **Why only one cable between two Macs?** — **The bridge works like a hub: whatever arrives on one Thunderbolt port is sent out of all the others. So a second Thunderbolt connection between the same two Macs — or a ring of Macs — with those ports still in the bridge gives traffic a way to go round and round for ever, eating processor time and dragging the network down. Apple says so in its technote on RDMA over Thunderbolt. One cable, no loop.**
-- Under that section, a `.caption` link: **Apple's technote on RDMA over Thunderbolt** → `https://developer.apple.com/documentation/technotes/tn3205-low-latency-communication-with-rdma-over-thunderbolt` (TN3205, which says a bridge forwards like a hub, that a loop lets frames travel indefinitely, and to keep looped ports out of the bridge). Opens in the default browser; the only link on the sheet.
+- Under that section, a `.caption` link: **Apple's technote on RDMA over Thunderbolt** → `https://developer.apple.com/documentation/technotes/tn3205-low-latency-communication-with-rdma-over-thunderbolt` (TN3205, which says a bridge forwards like a hub, that a loop lets frames travel indefinitely, and to disable the Thunderbolt Bridge — Make Inactive in Network settings — when Macs are connected in loops. It says nothing about taking ports out of the bridge: that remedy, and one cable, are RDMALink's, so the section cites Apple for the loop and not for the fix). Opens in the default browser; the only link on the sheet.
 - **That fe80:: address** — **It's a link-local IPv6 address. It only means anything down that one cable, which is exactly the point — the port is now its own small private network. That's also why IPv4 can be off entirely.**
 - Closing line: **You don't need to know any of this to use RDMALink.**
 - Button: **Done**
@@ -860,7 +860,7 @@ Documented once so they all read the same.
 
 ---
 
-**R1 — Two Macs are connected (loop risk).** *Blocks preflight and any apply.* Fires when two or more receptacles with a Mac on the end are members of the same bridge, in the kernel or in the saved network settings. A port that is already standalone forwards nothing, so two cables on two standalone ports — a finished set-up — never trip it.
+**R1 — Two Macs are connected (loop risk).** *Blocks set-up — its preflight and its apply. Restore, Return to Bridge and Adopt don't check it.* Fires when two or more receptacles with a Mac on the end are members of the same bridge, in the kernel or in the saved network settings. A port that is already standalone forwards nothing, so two cables on two standalone ports — a finished set-up — never trip it.
 - Headline: **Two Macs are connected**
 - Body: **Thunderbolt Bridge forwards Ethernet between Macs, and two cables between the same pair can send traffic around in a loop. Unplug one cable and RDMALink will pick this back up — the other one can go back in when you're done.**
 - Detail: **Back, far left and Back, far right each have a Mac on the end.**
@@ -869,7 +869,7 @@ Documented once so they all read the same.
 
 ---
 
-**R2 — Both ends of one cable are in this Mac.** *Blocks preflight and any apply.*
+**R2 — Both ends of one cable are in this Mac.** *Blocks set-up — its preflight and its apply, as R1 does.*
 - Headline: **Both ends of that cable are in this Mac**
 - Body: **Back, far left and Back, far right are talking to each other — the cable goes out of this Mac and straight back in. It's harmless, but it isn't a link to anywhere. Unplug one end and put it in the other Mac.**
 - Buttons: none; self-clearing.

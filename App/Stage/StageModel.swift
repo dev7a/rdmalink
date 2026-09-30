@@ -46,9 +46,10 @@ struct StagePort: Identifiable, Equatable, Sendable {
     /// The physical position name from §4.7, for the accessibility element.
     /// Never drawn on the model — no text ever is (§4.7).
     var positionName: String
-    /// Every kernel bridge this receptacle belongs to, switched on or not.
-    /// §4.4's ribbon is drawn between the members of the same bridge, and an
-    /// inactive one is drawn at 40 % — so both facts have to reach the stage.
+    /// Every kernel bridge this receptacle belongs to, carrying traffic or
+    /// not. §4.4's ribbon is drawn between the members of the same bridge, and
+    /// one carrying no traffic (§4.4's inactive bridge) is drawn at 40 % — so
+    /// both facts have to reach the stage.
     var bridges: [StageBridge] = []
     var selected = false
     var hovered = false

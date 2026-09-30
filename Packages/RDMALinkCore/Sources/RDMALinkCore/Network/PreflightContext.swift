@@ -4,10 +4,10 @@ import Foundation
 ///
 /// ``StandalonePortSetup`` carries a single ``ObservedPort``, but R1 is about
 /// *every* receptacle, R5 is about every route and R31 is about the Mac
-/// itself — so the refusals the spec marks "blocks preflight and any apply"
-/// (UX_SPEC §6.2) are unreachable from a single port. This value carries
-/// them, and is re-read inside the authorized burst so a cable that arrives
-/// between the review screen and the password cannot slip through.
+/// itself — so those refusals (UX_SPEC §6.2) are unreachable from a single
+/// port. This value carries them, and is re-read inside the authorized burst
+/// so a cable that arrives between the review screen and the password cannot
+/// slip through.
 public struct PreflightContext: Sendable, Equatable {
     /// What this Mac is, and whether either rule in UX_SPEC §4.7 recognized
     /// it — R31, which every operation asks first. ``Inventory`` already reads

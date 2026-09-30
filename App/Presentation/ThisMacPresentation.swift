@@ -88,9 +88,10 @@ enum ThisMacPresentation {
     /// Bridge membership across every receptacle on this Mac.
     ///
     /// §S1 gives three sentences and this row prints one of those three. "Two
-    /// bridges, one of them unused" needs to know a bridge is switched off,
-    /// which `BridgeMembership.isUp` says, so it is printed exactly when it is
-    /// true. Every other shape — three bridges, or two that are both up —
+    /// bridges, one of them unused" needs to know a bridge carries no traffic,
+    /// which `BridgeMembership.isUp` says — the kernel's answer, not the Make
+    /// Inactive switch in Network settings — so it is printed exactly when it
+    /// is true. Every other shape — three bridges, or two that are both up —
     /// falls back to the member count, which is true whatever the bridges are
     /// doing, rather than to a "\(n) bridges" sentence the spec never wrote.
     ///

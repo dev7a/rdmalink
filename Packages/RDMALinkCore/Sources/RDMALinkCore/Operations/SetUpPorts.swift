@@ -257,8 +257,8 @@ public struct SetUpPorts: Sendable {
         // recognizes, RDMALink writes nothing at all, so no other refusal —
         // or plan — is worth stating.
         if let refusal = Refusals.macRecognized(world.context.hardware) { return refusal }
-        // UX_SPEC §6.2 R2 "blocks preflight and any apply", the same scope as
-        // R1, and it comes first: a cable looped back into two bridged ports
+        // UX_SPEC §6.2 R2 blocks set-up's preflight and apply, the same scope
+        // as R1, and it comes first: a cable looped back into two bridged ports
         // would read as two Macs otherwise, and the sentence for it is R2's.
         if let refusal = Refusals.loopedBackIntoThisMac(world.context.observedPorts) {
             return refusal

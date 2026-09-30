@@ -51,7 +51,8 @@ public enum Refusals {
 
     // MARK: - R1
 
-    /// **R1 — Two Macs are connected (loop risk).** Blocks preflight and any apply.
+    /// **R1 — Two Macs are connected (loop risk).** Blocks set-up — its preflight
+    /// and its apply.
     ///
     /// Thunderbolt Bridge forwards Ethernet between Macs, so two cables between
     /// the same pair can put traffic in a loop. Self-clearing: it has no button.
@@ -87,7 +88,8 @@ public enum Refusals {
 
     // MARK: - R2
 
-    /// **R2 — Both ends of one cable are in this Mac.** Blocks preflight.
+    /// **R2 — Both ends of one cable are in this Mac.** Blocks set-up — its
+    /// preflight and its apply, as R1 does.
     ///
     /// Fires when a receptacle's cable comes back into another receptacle of
     /// this Mac: ``ObservedPort/loopedBackTo`` names the partner and the
