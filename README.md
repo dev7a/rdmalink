@@ -56,9 +56,9 @@ nothing.
   way. Add cables one at a time. While two Macs' ports are still in
   Thunderbolt Bridge, a second cable between them makes a loop, because a
   bridge forwards like a hub; once both ends of a cable are set up, those two
-  ports are out of the bridge and the next cable can go in. RDMALink changes
-  nothing while two ports with a Mac on the end share a bridge, and carries on
-  once one of those cables is out.
+  ports are out of the bridge and the next cable can go in. RDMALink won't set
+  up a port while two ports with a Mac on the end share a bridge, and carries
+  on once one of those cables is out.
 
 ## Install
 
