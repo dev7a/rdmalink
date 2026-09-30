@@ -85,9 +85,13 @@
     if (changed) announceEl.textContent = changed.title + ' — ' + changed.sub;
   }
 
+  // Whatever the old scene was showing goes with it: a new one starts with nothing hovered and every
+  // port back in the bridge, so a label or an announcement left over would describe a Mac that isn't there.
   function stop() {
     if (viewer) viewer.dispose();
     viewer = null;
+    showHover(null);
+    announceEl.textContent = '';
   }
 
   // No WebGL, or the context was lost for good: the hub screenshot and one line instead.
