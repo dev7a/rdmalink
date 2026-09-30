@@ -72,7 +72,7 @@ enum PortReadiness: Sendable, Equatable {
 /// One receptacle, joined with everything read about it.
 struct PortSnapshot: Sendable, Equatable, Identifiable {
     var port: ThunderboltPort
-    /// Every kernel bridge this port is a member of, switched on or not.
+    /// Every kernel bridge this port is a member of, carrying traffic or not.
     var bridges: [ThunderboltPort.BridgeMembership]
     /// What the stored network configuration says, or nil when this read could
     /// not open it. Nil is not "unconfigured"; it is "not observed".

@@ -75,9 +75,10 @@ struct WhatThisAllMeansSheet: View {
                     title: "Why only one cable between two Macs?",
                     detail: "The bridge works like a hub: whatever arrives on one Thunderbolt port is sent out of all the others. So a second Thunderbolt connection between the same two Macs — or a ring of Macs — with those ports still in the bridge gives traffic a way to go round and round for ever, eating processor time and dragging the network down. Apple says so in its technote on RDMA over Thunderbolt. One cable, no loop."
                 )
-                // §S13: the one link on the sheet — the claim above is Apple's
-                // (TN3205), so the sheet points at it rather than asking to
-                // be believed.
+                // §S13: the one link on the sheet — the hub and the loop above
+                // are Apple's (TN3205), so the sheet points at it rather than
+                // asking to be believed. The fix is RDMALink's: TN3205's own is
+                // to make the whole bridge inactive.
                 Link(
                     "Apple's technote on RDMA over Thunderbolt",
                     destination: URL(string: "https://developer.apple.com/documentation/technotes/tn3205-low-latency-communication-with-rdma-over-thunderbolt")!
