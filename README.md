@@ -52,9 +52,13 @@ nothing.
   detects it, deep-links you to the right pane, and notices the moment it is on
   (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) under Decisions, "RDMA
   switch").
-- A second Mac at the other end of one Thunderbolt cable, set up the same way.
-  Keep it to one cable between any pair: a bridge forwards like a hub, and a
-  second cable between the same two Macs makes a loop.
+- A second Mac at the other end of each Thunderbolt cable, set up the same
+  way. Add cables one at a time. While two Macs' ports are still in
+  Thunderbolt Bridge, a second cable between them makes a loop, because a
+  bridge forwards like a hub; once both ends of a cable are set up, those two
+  ports are out of the bridge and the next cable can go in. RDMALink changes
+  nothing while two ports with a Mac on the end share a bridge, and carries on
+  once one of those cables is out.
 
 ## Install
 
