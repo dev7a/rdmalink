@@ -18,6 +18,9 @@ What changed in each RDMALink release, newest first.
   cables to set up a port.", and the note behind Tell Me More, when RDMA is
   on but no RDMA devices appeared, stops after its first sentence. The
   two-Macs tip no longer says "while you set up" anywhere.
+- RDMALink reads the Mac's network interfaces itself instead of starting
+  `ifconfig` each time. It still falls back to `ifconfig` when a bridge made
+  by Internet Sharing or a virtual machine is present.
 
 ## 0.3.8 — 2026-09-29 (build 11)
 

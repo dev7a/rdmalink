@@ -485,8 +485,8 @@ struct RootView: View {
     private static func planner(hardware: HardwareModel) -> SetUpFlow.Planner {
         let notesDirectory = NotesLocation.store.directory
         return { ports in
-            // Off the main actor, because the read spawns `ifconfig` and
-            // `/sbin/mount` — but wired to the calling task's cancellation, so
+            // Off the main actor, because the read spawns `/sbin/mount` (and
+            // `ifconfig` when the in-process read falls back) — but wired to the calling task's cancellation, so
             // a `Back` pressed mid-read is not answered afterwards by a
             // refusal about a screen nobody is on any more.
             let task = Task.detached(priority: .userInitiated) {

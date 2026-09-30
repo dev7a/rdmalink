@@ -94,8 +94,8 @@ made up; they are not the rig's.
   anything; a one-second state diff runs underneath. The diff reads a cheap
   `PortStateSignature` every second — the registry pass, `getifaddrs` for
   the Thunderbolt ports and bridges, and a `stat` of the network preferences
-  and the notes folder — and the full port read (`ifconfig -a`, both
-  `SCPreferences` passes, the notes) runs only when that moves or the store
+  and the notes folder — and the full port read (the kernel's interfaces,
+  both `SCPreferences` passes, the notes) runs only when that moves or the store
   speaks, on every tick for five seconds after, and at least every ten
   (`PortReadGate`).
 - **Thunderbolt domain identity** (measured 2026-09-20, `IOThunderboltFamily`
@@ -119,7 +119,16 @@ made up; they are not the rig's.
   between two of its own controllers is untested.
 - Kernel bridge membership is visible in `ifconfig` output (`member:` lines
   under `bridgeN`; `ifconfig -a` and `ifconfig bridge0` both print them). A
-  port must be out of every bridge, even an inactive one. The kernel list can
+  port must be out of every bridge, even an inactive one. The app reads the
+  same facts in-process (`KernelInterfaces`): `getifaddrs`, `SIOCGIFXMEDIA`
+  for `status: active` and `SIOCGIFAFLAG_IN6` for tentative addresses, as
+  `ifconfig` does, and membership through `_SCBridgeInterfaceCopyActive`,
+  which makes `ifconfig`'s own `SIOCGDRVSPEC`/`BRDGGIFS` call. configd's
+  function skips bridges numbered 100 and up (Internet Sharing, virtual
+  machines) and any that answer `EBUSY`, so when `getifaddrs` shows a bridge
+  it did not report, or the SPI is missing, the read runs `ifconfig -a`
+  instead. Verified field for field against `ifconfig -a` on Mac15,14, all 39
+  interfaces (2026-09-30), and on every run of `NetworkKernelInterfacesTests`. The kernel list can
   change without RDMALink writing anything: when the first real write failed
   on 2026-09-20 the app's own read showed `bridge0` with no members at all,
   and twenty minutes later `ifconfig` listed `en5` in it again — no membership
