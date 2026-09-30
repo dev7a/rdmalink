@@ -4,14 +4,16 @@ import Foundation
 /// Everything a port read depends on, reduced to what is cheap to look at:
 /// the cheap half of the one-second state diff (UX_SPEC §7.4).
 ///
-/// The full port read runs `ifconfig -a`, opens the stored network
+/// The full port read reads the kernel's interfaces, opens the stored network
 /// preferences twice and reads the notes. Measured on Mac15,14 (macOS 27.2, a
-/// release build), that is about 15 ms of CPU, most of it the `ifconfig`
-/// spawn and the registry lookup and localized name `NetworkServices` pays
-/// for every service — and the utility task it runs on lands on the
-/// efficiency cores, where it costs two to three times that. Once a second
-/// for as long as the window was open, it was the largest cost after the
-/// stage, and it was paid to learn that nothing had changed.
+/// release build), that was about 15 ms of CPU when the kernel read spawned
+/// `ifconfig -a` — most of it that spawn, and the registry lookup and
+/// localized name `NetworkServices` pays for every service — and the utility
+/// task it runs on lands on the efficiency cores, where it costs two to three
+/// times that. Once a second for as long as the window was open, it was the
+/// largest cost after the stage, and it was paid to learn that nothing had
+/// changed. The kernel read is in-process now (``KernelInterfaces``), and the
+/// gate still saves the rest.
 ///
 /// This is the registry pass the full read makes anyway, one `getifaddrs` and
 /// two `stat`s: about 1.5 ms on the same Mac, nearly all of it the registry.

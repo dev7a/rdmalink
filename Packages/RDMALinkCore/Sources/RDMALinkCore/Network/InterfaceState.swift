@@ -1,8 +1,10 @@
 import Foundation
 
-/// One kernel network interface as `ifconfig -a` reports it.
+/// One kernel network interface as `ifconfig -a` reports it — read in-process
+/// by ``KernelInterfaces`` wherever it can answer for every bridge, and out of
+/// `ifconfig -a` itself wherever it cannot.
 ///
-/// This is the only place kernel bridge membership can be read: a port must be
+/// This is the only place kernel bridge membership is read: a port must be
 /// out of *every* bridge, including a bridge that is down, before it can carry
 /// RDMA. A "Disabled" service label in System Settings is not enough.
 public struct InterfaceState: Sendable, Equatable, Codable {
@@ -75,8 +77,14 @@ public struct InterfaceSnapshot: Sendable, Equatable, Codable {
     /// Every interface that has members of its own.
     public var bridgeNames: [String] { interfaces.filter(\.isBridge).map(\.name) }
 
-    /// Reads the live kernel state. Read-only: it runs `/sbin/ifconfig -a`.
+    /// Reads the live kernel state. Read-only either way: in-process through
+    /// ``KernelInterfaces``, which is what `ifconfig -a` would print without
+    /// the process, and through `/sbin/ifconfig -a` itself when that cannot
+    /// answer for every bridge.
     public static func read(using runner: CommandRunner = CommandRunner()) throws -> InterfaceSnapshot {
+        if let interfaces = KernelInterfaces.read() {
+            return InterfaceSnapshot(interfaces: interfaces)
+        }
         let output = try runner.run("/sbin/ifconfig", ["-a"])
         guard output.succeeded else {
             throw InterfaceReadFailure.ifconfigFailed(exitStatus: output.exitStatus,

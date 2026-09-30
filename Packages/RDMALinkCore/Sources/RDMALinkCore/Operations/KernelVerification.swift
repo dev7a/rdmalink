@@ -10,9 +10,10 @@ public struct KernelWaitPolicy: Sendable {
     /// How long to wait before the membership is rewritten, and again after
     /// it; also how long a port is given to go quiet before it rejoins.
     ///
-    /// Measured on the wall clock across the whole loop, **including** the
-    /// `ifconfig` spawn each read costs — a window counted in sleeps alone is a
-    /// floor, not a budget, and the credential does not care which.
+    /// Measured on the wall clock across the whole loop, **including** what
+    /// each read costs — the in-process read, or the `ifconfig` spawn it falls
+    /// back to — because a window counted in sleeps alone is a floor, not a
+    /// budget, and the credential does not care which.
     public var window: Duration
     /// How long between reads of `ifconfig`.
     public var interval: Duration
@@ -173,8 +174,8 @@ enum KernelVerification {
 
         /// Reads both sources until they agree, the window closes, or the wall
         /// clock runs out — and the reads themselves are inside the
-        /// measurement, because a `posix_spawn` of `ifconfig` costs real
-        /// credential time.
+        /// measurement, because a read that falls back to a `posix_spawn` of
+        /// `ifconfig` costs real credential time.
         func poll() throws -> Bool {
             var waited = Duration.zero
             while true {

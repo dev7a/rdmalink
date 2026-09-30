@@ -174,13 +174,13 @@ public struct Inventory: Sendable, Equatable {
         // This runs whenever the app's one-second state diff sees something
         // move (`PortReadGate`), so the cost was measured on this Mac rather
         // than guessed: `SCPreferencesCreate` plus `SCBridgeInterfaceCopyAll`
-        // is 0.83 ms, and the `ifconfig -a` spawn three lines up — which this
-        // function has always made — is 75 ms. The read is 1% of what the
-        // enclosing call already spends, and caching it would buy that back
-        // by letting the port rows keep saying a port is in a bridge after
-        // System Settings took it out. So it is read every time, and
-        // `storedBridges` exists only so one burst measures everything
-        // against one snapshot.
+        // is 0.83 ms, against 1.7 ms of CPU for the kernel read three lines
+        // up (in-process; the `ifconfig -a` spawn it replaced was 12 ms of
+        // wall clock). The read is cheap next to the rest, and caching it
+        // would buy that back by letting the port rows keep saying a port is
+        // in a bridge after System Settings took it out. So it is read every
+        // time, and `storedBridges` exists only so one burst measures
+        // everything against one snapshot.
         let stored = storedBridges ?? StoredBridges.read()
         for index in ports.indices {
             let name = ports[index].bsdName
