@@ -9,6 +9,15 @@ What changed in each RDMALink release, newest first.
   read-only on it, as it already does on the 14-inch MacBook Pro with M4 or
   M5 and on the M6 Mac mini. Before, it offered set-up there. The M4 Pro
   Mac mini has Thunderbolt 5 and is unchanged.
+- RDMALink sets up only a Mac it knows has Thunderbolt 5. A Mac it
+  recognizes only by its shape and ports, such as one newer than this
+  version, now opens read-only as well, and says it doesn't know the Mac's
+  Thunderbolt yet. Before, it offered set-up there.
+- On a Mac where RDMALink sets nothing up, the window no longer talks
+  about setting up: two connected Macs don't bring up "Unplug one of the two
+  cables to set up a port.", and the note behind Tell Me More, when RDMA is
+  on but no RDMA devices appeared, stops after its first sentence. The
+  two-Macs tip no longer says "while you set up" anywhere.
 
 ## 0.3.8 — 2026-09-29 (build 11)
 

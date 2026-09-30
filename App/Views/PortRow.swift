@@ -108,8 +108,8 @@ struct PortRowActions: View {
 
     /// §S1: the row's set-up button — `Set Up…` or `Set Up Again…` — is the
     /// footer's `Set Up Port…` for that one port, on the same terms: absent
-    /// where the footer's primary is absent (R23; R31 has no row buttons at
-    /// all), disabled where it is disabled (R1, the reason printed above the
+    /// where the footer's primary is absent (R23, R32; R31 has no row buttons
+    /// at all), disabled where it is disabled (R1, the reason printed above the
     /// footer separator). Every other row button is the presentation's
     /// answer alone (`HubFooterModel.offers(_:)`).
     var body: some View {

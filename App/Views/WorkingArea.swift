@@ -61,12 +61,12 @@ struct ProbingWorkingArea: View {
     }
 }
 
-/// S1 — Overview. Also R23's read-only mode, which changes the headline and
-/// the body and nothing else: the model, the port list and the change log all
-/// still work, so the app stays a useful map. And R31's, which changes the
-/// headline and the body the same way and takes every button with it — the
-/// stage shows its block in place of a model, and the port list and the
-/// change log are what is left working (§6.2 R31).
+/// S1 — Overview. Also R23's and R32's read-only modes, which change the
+/// headline and the body and nothing else: the model, the port list and the
+/// change log all still work, so the app stays a useful map. And R31's,
+/// which changes the headline and the body the same way and takes every
+/// button with it — the stage shows its block in place of a model, and the
+/// port list and the change log are what is left working (§6.2 R31).
 struct HubWorkingArea: View {
     let model: InventoryModel
     let stage: StageModel
@@ -197,8 +197,8 @@ struct USBPortTipCard: View {
 /// R22 — RDMA is on, but no RDMA devices appeared. Not a block.
 ///
 /// On the hub, behind the This Mac row's `Tell Me More`, its row is `Check
-/// Again` · `Copy Details` (§6.2 R22): the footer's `Set Up Port…` is the way
-/// on and the window's one default, so a `Continue` here would be a second
+/// Again` · `Copy Details` (§6.2 R22): the footer's `Set Up Port…`, where
+/// there is one, is the way on and the window's one default, so a `Continue` here would be a second
 /// name for opening the assistant and a second default. `Continue` is S2's.
 ///
 /// `.secondary`, not orange: orange means the user needs to act (§3.1), and
@@ -211,7 +211,7 @@ struct NoRDMADevicesRefusal: View {
             symbol: "exclamationmark.circle",
             tint: .secondary,
             headline: "RDMA is on, but no RDMA devices appeared",
-            message: "That usually means this Mac, or this version of macOS, doesn't actually offer RDMA over Thunderbolt. Setting up a port is still harmless and still undoable — it just won't have anything to carry yet.",
+            message: ThisMacPresentation.noDevicesBody(isReadOnly: model.isReadOnlyHub),
             // §6.1 rule 3: under the hub's own headline.
             isNested: true
         ) {

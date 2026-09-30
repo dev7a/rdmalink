@@ -3,7 +3,7 @@
 //
 //  S1's headline and body, the situation rows that sit between the
 //  `This Mac` section and the port list, and what the footer offers. Verbatim
-//  from docs/UX_SPEC.md §S1, §2.8, §6.2 R23 and §6.2 R31.
+//  from docs/UX_SPEC.md §S1, §2.8 and §6.2 R23, R31 and R32.
 //
 
 import Foundation
@@ -79,17 +79,17 @@ extension Situation {
 
     static let twoMacsTip = Situation(
         id: "twoMacsTip",
-        text: "Two Macs are connected. Leave just one cable in place while you set up — two can send Ethernet traffic around in a loop."
+        text: "Two Macs are connected. Leave just one cable in place — two can send Ethernet traffic around in a loop."
     )
 }
 
 /// What the hub's footer offers (§S1's primary action, §2.8's persistent
 /// `Restore…`).
 struct HubFooterModel: Sendable, Equatable {
-    /// Absent, not disabled, in R23's and R31's read-only modes (§S1: "The
-    /// footer's primary button is **absent**, not disabled"). The footer draws
-    /// its title, `Set Up Port…` — the Port menu's ⌘N's words — however many
-    /// ports are ready (§S1's primary action).
+    /// Absent, not disabled, in R23's, R31's and R32's read-only modes (§S1:
+    /// "The footer's primary button is **absent**, not disabled"). The footer
+    /// draws its title, `Set Up Port…` — the Port menu's ⌘N's words — however
+    /// many ports are ready (§S1's primary action).
     var primary: HubAction?
     var isPrimaryEnabled: Bool
     /// §S1: with two Macs connected the primary is disabled "with the reason
@@ -107,9 +107,9 @@ extension HubFooterModel {
     /// §S1: a row's set-up button — `Set Up…` or `Set Up Again…`, and the
     /// drift situation row's `Set Up Again…` — is this footer's `Set Up
     /// Port…` for one port, on the same terms. Where the primary is absent —
-    /// R23's Thunderbolt 4 Mac and R31's unrecognized one — so is every one of
-    /// them. Every other action is not the footer's to answer, and is offered
-    /// as its row says.
+    /// R23's Thunderbolt 4 Mac, R31's unrecognized one and R32's Mac of
+    /// unknown Thunderbolt — so is every one of them. Every other action is
+    /// not the footer's to answer, and is offered as its row says.
     func offers(_ action: HubAction) -> Bool {
         !action.opensSetUp || primary != nil
     }
@@ -156,13 +156,14 @@ enum USBPortTip {
 enum HubPresentation {
     /// S1's headline and body; R31's on a Mac neither rule in §4.7
     /// recognizes; R23's when the catalogue says this Mac's ports are
-    /// Thunderbolt 4.
+    /// Thunderbolt 4; R32's when it says nothing about them.
     ///
     /// R31 wins over R23 when both apply: R23 says "there's nothing for
     /// RDMALink to set up" about a Mac it knows, and on one it does not know
     /// the honest sentence is that it does not know it — the generation table
     /// is keyed on the identifier, and an identifier can be listed there
-    /// without the chassis being recognized.
+    /// without the chassis being recognized. R32 never meets R23: the table
+    /// says one thing or nothing.
     static func copy(
         hardware: HardwareModel?,
         ports: [PortSnapshot]
@@ -177,6 +178,12 @@ enum HubPresentation {
             return HubCopy(
                 headline: "Nothing to configure here",
                 body: "This Mac has Thunderbolt 4 ports. RDMA over Thunderbolt needs Thunderbolt 5, so there's nothing for RDMALink to set up. You're welcome to look around — everything you see is real."
+            )
+        }
+        if hardware?.thunderboltGeneration == .unknown {
+            return HubCopy(
+                headline: "RDMALink doesn't know this Mac's Thunderbolt",
+                body: "RDMALink recognizes this Mac but doesn't know whether its ports are Thunderbolt 5, which RDMA over Thunderbolt needs, so it won't set anything up here. A newer RDMALink may know. You're welcome to look around — everything you see is real."
             )
         }
         let ready = ports.ready
@@ -294,18 +301,21 @@ enum HubPresentation {
     ) -> HubFooterModel {
         let twoMacs = ports.inALoop.count >= 2
         // R31: §6.2 "Buttons: **Quit** only" — and `Quit` is the view's, not
-        // the model's, so there is nothing here for it to offer. R23: no
-        // primary button at all, and `Identify Port…` stays in the Port
-        // menu.
+        // the model's, so there is nothing here for it to offer. R23 and R32:
+        // no primary button at all, and `Identify Port…` stays in the Port
+        // menu. RDMALink sets up only a Mac the generation table says is
+        // Thunderbolt 5, so every other known Mac is one of the two.
         let unrecognized = hardware?.isRecognized == false
-        let readOnly = unrecognized || hardware?.isThunderbolt4 == true
+        let readOnly = unrecognized || (hardware.map { !$0.isThunderbolt5 } ?? false)
         return HubFooterModel(
             primary: readOnly ? nil : .setUpPort(portID: nil),
             isPrimaryEnabled: !twoMacs,
             // §S1: the reason printed above the footer separator. The hub has
             // nothing under way to "continue", as S3's reason for the same
-            // condition does; what waits on the cable is setting up.
-            disabledReason: twoMacs ? "Unplug one of the two cables to set up a port." : nil,
+            // condition does; what waits on the cable is setting up. It is
+            // the disabled primary's reason, so a read-only hub, with no
+            // primary to disable, prints none: unplugging offers nothing there.
+            disabledReason: twoMacs && !readOnly ? "Unplug one of the two cables to set up a port." : nil,
             offersRestore: !unrecognized
         )
     }

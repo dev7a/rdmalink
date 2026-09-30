@@ -80,7 +80,10 @@ made up; they are not the rig's.
   table. Undocumented, so enrichment under rule 5: absent, the Mac is
   called `Mac` and the app is in UX_SPEC §6.2 R31's read-only mode — no
   chassis is drawn (there is no stand-in), the ports are numbered, and
-  every operation refuses. Verified on the rig's MacBook Pro
+  every operation refuses. A Mac recognized by family and layout is drawn
+  but not set up: it has no row in the Thunderbolt generation table, so the
+  app is in UX_SPEC §6.2 R32's read-only mode until a release catalogues
+  it. Verified on the rig's MacBook Pro
   (Mac17,7, 2026-09-20): `product-name` is `MacBook Pro (14-inch, M5 Max)`
   and the `port-location` spellings are `right`, `left-back` and
   `left-front`; the read-only tool built before that identifier was in the
@@ -523,6 +526,12 @@ which `ObservedWorld` carries and re-reads inside the burst, and in
 `OperationEnvironment.hardware` for the one operation that reads no world.
 `ReceptacleCatalogue.chassis(for:)` is `nil` for `Archetype.unknown`: there is
 no stand-in chassis, and the stage draws R31's block in its place.
+
+R23 and R32 are the app's, not Core's: the Thunderbolt generation table is
+`App/Presentation/ThunderboltGeneration.swift`, and set-up is offered only on
+a Mac it calls Thunderbolt 5. The hub's footer leaves the button out, its one
+door (`HubActionsModel.perform`) refuses, and `RootView.startSetUp` refuses
+again before the assistant opens. The command-line tool writes nothing.
 
 ## Rules the code must keep
 

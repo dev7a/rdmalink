@@ -19,11 +19,11 @@
 # the legend's rows from the stage's own ring decision (App/Stage/StageLegend,
 # with App/Stage/StageModel and StageMath under it) and the callout's words
 # from the row's presentation — and §6.2 R31's read-only hub: its headline
-# and body over R23's, a footer with no button the model decides (§S1's `Quit`
-# is the view's, on every hub state alike), and a stage with nothing to
-# turn or select (App/Presentation/HubPresentation, with
-# App/Presentation/ThunderboltGeneration under it for R23) — and the hub's one
-# door (App/Model/HubActionsModel, with the Adopt and change-log presentation
+# and body over R23's and R32's, a footer with no button the model decides
+# (§S1's `Quit` is the view's, on every hub state alike), and a stage with
+# nothing to turn or select (App/Presentation/HubPresentation, with
+# App/Presentation/ThunderboltGeneration under it for R23 and R32) — and the
+# hub's one door (App/Model/HubActionsModel, with the Adopt and change-log presentation
 # it reads): nothing re-enters a run while the assistant is up (§2.7), and
 # every set-up goes through the footer's terms (§S1) — and §S6's quit that
 # waits for a burst to land (App/Model/BurstGate), exercised with a reply the
@@ -539,6 +539,11 @@ let tb4Unrecognized = HardwareModel(identifier: "Mac16,1", marketingName: "MacBo
 check(tb4Unrecognized.isThunderbolt4, "the fixture is Thunderbolt 4 by the table")
 check(text(HubPresentation.copy(hardware: tb4Unrecognized, ports: []).headline) == "RDMALink doesn't recognize this Mac",
       "R31 wins over R23")
+// …and the footer asks R31 on its own: an identifier the table calls
+// Thunderbolt 5 on a chassis nobody recognized still offers no set-up.
+check(HubPresentation.footer(hardware: HardwareModel(identifier: "Mac17,7", marketingName: "MacBook Pro", chip: "M5 Max",
+                                                     archetype: .unknown), ports: []).primary == nil,
+      "R31: an unrecognized Mac is read-only whatever the generation table says of its identifier")
 let tb4 = HardwareModel(identifier: "Mac16,1", marketingName: "MacBook Pro", chip: "M4", archetype: .notebook)
 check(text(HubPresentation.copy(hardware: tb4, ports: []).headline) == "Nothing to configure here",
       "R23 stands on a recognized Thunderbolt 4 Mac")
@@ -576,6 +581,27 @@ check(m4ProMini?.archetype == .mini && m4ProMini?.thunderboltGeneration == .five
       && m4ProMini.map { text(HubPresentation.copy(hardware: $0, ports: [managed]).headline) } == "One port is ready for RDMA"
       && m4ProMini.map { HubPresentation.footer(hardware: $0, ports: [managed]).primary == .setUpPort(portID: nil) } == true,
       "the Mac mini (M4 Pro, 2024) has Thunderbolt 5 ports and keeps S1's hub, Set Up Port… included")
+// R32: a Mac recognized by family and layout is never in the generation
+// table, so RDMALink doesn't know its Thunderbolt and sets nothing up there.
+// The model is still drawn, so the copy claims neither Thunderbolt 4 (R23)
+// nor a Mac it can't recognize (R31).
+let unknownGeneration = HardwareModel(identifier: "Mac99,98", marketingName: "MacBook Pro", chip: "M9 Max",
+                                      archetype: .notebook, recognition: .familyAndLayout)
+check(unknownGeneration.isRecognized && unknownGeneration.thunderboltGeneration == .unknown,
+      "the R32 fixture is recognized, by family and layout, and has no row in the table")
+let r32 = HubPresentation.copy(hardware: unknownGeneration, ports: [managed])
+check(text(r32.headline) == "RDMALink doesn't know this Mac's Thunderbolt"
+      && text(r32.body)
+      == "RDMALink recognizes this Mac but doesn't know whether its ports are Thunderbolt 5, which RDMA over Thunderbolt needs, so it won't set anything up here. A newer RDMALink may know. You're welcome to look around — everything you see is real.",
+      "R32's headline and body are §6.2's, verbatim")
+// No row means no set-up whatever recognized the Mac: a catalogued Mac the
+// table has missed fails safe, as the 2024 Mac mini once did not.
+let missedRow = HardwareModel(identifier: "Mac99,97", marketingName: "Mac Studio", chip: "M9 Ultra",
+                              archetype: .studioSix)
+check(missedRow.recognition == .identifier
+      && text(HubPresentation.copy(hardware: missedRow, ports: []).headline) == "RDMALink doesn't know this Mac's Thunderbolt"
+      && HubPresentation.footer(hardware: missedRow, ports: []).primary == nil,
+      "R32: a Mac recognized by identifier with no row in the table is read-only too")
 let r31Footer = HubPresentation.footer(hardware: unrecognized, ports: [managed])
 // §S1: R31's footer holds `Quit` and nothing else. `Quit` is neither the
 // primary nor Restore — it is the same button on every hub state, so the view
@@ -585,6 +611,8 @@ check(r31Footer.primary == nil && !r31Footer.offersRestore,
       "R31: the footer offers neither the primary nor Restore…")
 let tb4Footer = HubPresentation.footer(hardware: tb4, ports: [managed])
 check(tb4Footer.primary == nil && tb4Footer.offersRestore, "R23: no primary, and Restore… stays")
+let r32Footer = HubPresentation.footer(hardware: unknownGeneration, ports: [managed])
+check(r32Footer.primary == nil && r32Footer.offersRestore, "R32: no primary, and Restore… stays, as in R23")
 let hubFooter = HubPresentation.footer(hardware: studio, ports: [managed])
 check(hubFooter.primary == .setUpPort(portID: nil) && hubFooter.offersRestore
       && text(hubFooter.primary!.title) == "Set Up Port…",
@@ -605,22 +633,30 @@ check(text(HubAction.setUpAgain(portID: "en5").title) == "Set Up Again…"
       "L2: Set Up Again… opens the assistant, so it carries the ellipsis, on a row as anywhere")
 check(setUpActions.allSatisfy { hubFooter.offers($0) && hubFooter.allows($0) },
       "S1: on an ordinary hub every set-up button is there and live")
-let twoMacsFooter = HubPresentation.footer(hardware: studio, ports: [
+let twoMacPortsForFooter = [
     snapshot(port("en5", "Back, far left", link: .macLinked, bridges: [bridge0]),
              configuration: .unconfigured(bridges: ["bridge0"])),
     snapshot(port("en6", "Back, left middle", link: .macLinked, bridges: [bridge0]),
              configuration: .unconfigured(bridges: ["bridge0"])),
-])
+]
+let twoMacsFooter = HubPresentation.footer(hardware: studio, ports: twoMacPortsForFooter)
 check(twoMacsFooter.primary != nil && !twoMacsFooter.isPrimaryEnabled
       && twoMacsFooter.disabledReason.map(text) == "Unplug one of the two cables to set up a port.",
       "L3: the two-Macs fixture is R1's footer, and its reason says what waits on the cable")
 check(setUpActions.allSatisfy { twoMacsFooter.offers($0) && !twoMacsFooter.allows($0) },
       "R1: Set Up… and Set Up Again… are disabled with the footer's primary, never one without the other")
-for footer in [tb4Footer, r31Footer] {
+for footer in [tb4Footer, r31Footer, r32Footer] {
     check(setUpActions.allSatisfy { !footer.offers($0) && !footer.allows($0) },
-          "R23 and R31: every set-up button is absent with the footer's primary")
+          "R23, R31 and R32: every set-up button is absent with the footer's primary")
 }
-for footer in [hubFooter, twoMacsFooter, tb4Footer, r31Footer] {
+// The two-Macs reason is the disabled primary's: where there is no primary,
+// "Unplug one of the two cables to set up a port" would promise a set-up
+// that unplugging never brings.
+for hardware in [tb4, unrecognized, unknownGeneration] {
+    check(HubPresentation.footer(hardware: hardware, ports: twoMacPortsForFooter).disabledReason == nil,
+          "R23, R31 and R32: two Macs connected print no set-up reason on a read-only hub")
+}
+for footer in [hubFooter, twoMacsFooter, tb4Footer, r31Footer, r32Footer] {
     check(otherActions.allSatisfy { footer.offers($0) && footer.allows($0) },
           "every other row button is its row's answer alone, whatever the footer says")
 }
@@ -1318,6 +1354,22 @@ tb4Hub.perform(.setUpPort(portID: nil))
 tb4Hub.perform(.setUpAgain(portID: "en5"))
 check(tb4Hub.pendingSetUp == nil && tb4Hub.setUpAction(forRowOf: "en5") == nil,
       "S5: on a Thunderbolt 4 Mac there is no set-up to open, and none to draw")
+// R32: the one door refuses set-up on a Mac of unknown Thunderbolt, and every
+// other action answers exactly as on a Mac RDMALink sets up — so a port an
+// earlier RDMALink set up can still be put back.
+let r32Hub = hubModel([farLeftPort, managed, adopted], hardware: unknownGeneration)
+let r32Twin = hubModel([farLeftPort, managed, adopted])
+r32Hub.perform(.setUpPort(portID: nil))
+r32Hub.perform(.setUpPort(portID: "en5"))
+r32Hub.perform(.setUpAgain(portID: "en5"))
+check(r32Hub.pendingSetUp == nil && r32Hub.setUpAction(forRowOf: "en5") == nil
+      && !r32Hub.canPerform(.setUpPort(portID: nil)),
+      "R32: no set-up to open, none to draw, and ⌘N unavailable")
+let unwritten: [HubAction] = [.restore(portID: "en6"), .stopManaging(portID: "en7"), .returnToBridge(portID: "en7"),
+                              .identifyPort(portID: "en6"), .changeLog, .restoreAll]
+check(r32Hub.canPerform(.restore(portID: "en6")) && r32Hub.canPerform(.identifyPort(portID: "en6"))
+      && unwritten.allSatisfy { r32Hub.canPerform($0) == r32Twin.canPerform($0) },
+      "R32: Restore…, Identify and every other action answer as on a Thunderbolt 5 Mac")
 let doorHub = hubModel([farLeftPort, managed])
 doorHub.perform(.setUpPort(portID: nil))
 check(doorHub.pendingSetUp == .choose(suggested: nil), "N1: the footer and ⌘N open the picker")
@@ -1811,7 +1863,19 @@ check(planPort.warnings == [
 check(ChooseInformationalLine(farLeftPort).map { text($0.text) } == planPort.informationalLines.first,
       "T4: the picker and Review say the same sentence for the same fact")
 
-// T5: R23's and R31's read-only hubs state the switch and offer no button.
+// R22 behind Tell Me More: a read-only hub drops the sentence about setting up.
+check(text(ThisMacPresentation.noDevicesBody(isReadOnly: false))
+      == "That usually means this Mac, or this version of macOS, doesn't actually offer RDMA over Thunderbolt. Setting up a port is still harmless and still undoable — it just won't have anything to carry yet.",
+      "R22: the hub's body is §6.2's, verbatim, where set-up is offered")
+check(text(ThisMacPresentation.noDevicesBody(isReadOnly: true))
+      == "That usually means this Mac, or this version of macOS, doesn't actually offer RDMA over Thunderbolt.",
+      "R22: on a read-only hub the body stops before the set-up it can't offer")
+// §S1's two-Macs tip names no set-up, so it is true on every hub.
+check(text(Situation.twoMacsTip.text)
+      == "Two Macs are connected. Leave just one cable in place — two can send Ethernet traffic around in a loop.",
+      "S1: the two-Macs tip is §S1's, verbatim, with nothing about setting up")
+
+// T5: R23's, R31's and R32's read-only hubs state the switch and offer no button.
 check(ThisMacPresentation.rdmaRow(.off, isReadOnly: true)
         == ThisMacRowModel(id: "rdma", text: "RDMA over Thunderbolt — Off"),
       "T5: read-only hubs — RDMA over Thunderbolt — Off, with no Turn It On…")
@@ -1819,8 +1883,9 @@ check(ThisMacPresentation.rdmaRow(.off)?.action == .turnItOn
       && ThisMacPresentation.rdmaRow(.off).map { text($0.text) } == "RDMA over Thunderbolt — Off. Turn it on to finish.",
       "T5: …while a Mac RDMALink sets up keeps Turn it on to finish")
 check(HubPresentation.footer(hardware: unrecognized, ports: []).primary == nil
-      && HubPresentation.footer(hardware: tb4, ports: []).primary == nil,
-      "T5: read-only is the hub that offers no set-up, R23 and R31 alike")
+      && HubPresentation.footer(hardware: tb4, ports: []).primary == nil
+      && HubPresentation.footer(hardware: unknownGeneration, ports: []).primary == nil,
+      "T5: read-only is the hub that offers no set-up, R23, R31 and R32 alike")
 
 // T6: the hub body names every ready port and says which are linked, and
 // "Nothing else on this Mac was changed" only while it is true.

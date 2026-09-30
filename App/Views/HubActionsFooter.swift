@@ -34,9 +34,9 @@ struct HubActionsFooter: View {
             // footer holds `Quit` and nothing else, note or no note.
             let offersRestore = footer.offersRestore && hub.hasRestorableNote
             // The separator always rules off a row that always has `Quit` in
-            // it — §S1 keeps it "present in every hub state, R23 and R31
-            // included", so even the two read-only modes have a button under
-            // the rule.
+            // it — §S1 keeps it "present in every hub state, R23, R31 and R32
+            // included", so even the read-only modes have a button under the
+            // rule.
             Divider()
                 .padding(.top, 10)
             HStack(spacing: 10) {
@@ -51,7 +51,7 @@ struct HubActionsFooter: View {
                 if offersRestore {
                     Button("Restore…") { hub.perform(hub.restoreAction) }
                 }
-                // R23 and R31 remove the primary rather than disabling it
+                // R23, R31 and R32 remove the primary rather than disabling it
                 // (§1.3 rule 5: a disabled button is still an invitation).
                 // §S1: `Set Up Port…`, the Port menu's ⌘N's own title, so the
                 // two can never name one command two ways.

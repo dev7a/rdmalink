@@ -254,7 +254,7 @@ struct PortRowPresentation: Sendable, Equatable, Identifiable {
     /// address, or a near match Core would route to Adopt and never plan —
     /// are routes, never set-ups.
     ///
-    /// Whether the hub is taking set-ups at all right now — R1, R23, R31 — is
+    /// Whether the hub is taking set-ups at all right now — R1, R23, R31, R32 — is
     /// the footer's answer, and the row asks it where it draws the button
     /// (`HubFooterModel.offers(_:)`).
     static func offersSetUp(_ snapshot: PortSnapshot) -> Bool {

@@ -1,7 +1,8 @@
 //
 //  ThunderboltGeneration.swift
 //
-//  Which Thunderbolt this Mac's ports are, which is the one fact R23 turns on.
+//  Which Thunderbolt this Mac's ports are, which is the one fact R23 and R32
+//  turn on: RDMALink sets up only a Mac this table says is Thunderbolt 5.
 //
 //  CONTRACT NOTE — this belongs in Core. `HardwareModel` already carries the
 //  chassis catalogue and is the only place in the app that knows what a
@@ -12,10 +13,12 @@
 //      extension HardwareModel { public var thunderboltGeneration: ThunderboltGeneration }
 //
 //  Until that lands, this is the app's one table and it is deliberately short:
-//  an identifier that is not listed reads `unknown`, and `unknown` never shows
-//  R23. Telling somebody their Thunderbolt 5 Mac has nothing to configure would
-//  be the worst wrong answer the app could give, so the table only ever speaks
-//  where it is certain (UX_SPEC §1.3 rule 10).
+//  an identifier that is not listed reads `unknown`. `unknown` never shows
+//  R23 — telling somebody their Thunderbolt 5 Mac has nothing to configure
+//  would be a wrong answer stated as fact, so the table only ever speaks where
+//  it is certain (UX_SPEC §1.3 rule 10). It shows R32 instead: RDMALink does
+//  not change a Mac it cannot vouch for, so without a row nothing is set up,
+//  and a new Mac is set up once a release gives it one.
 //
 
 import Foundation
@@ -24,8 +27,8 @@ import RDMALinkCore
 enum ThunderboltGeneration: Sendable, Equatable {
     case four
     case five
-    /// Not in the table. The app says nothing about the generation and the hub
-    /// behaves normally.
+    /// Not in the table. The app says nothing about the generation, and sets
+    /// nothing up: the hub is R32's read-only one.
     case unknown
 }
 
@@ -40,6 +43,11 @@ extension HardwareModel {
     /// a guess.
     var isThunderbolt4: Bool { thunderboltGeneration == .four }
 
+    /// True only when the catalogue has said so, and the one Mac RDMALink sets
+    /// up. Anything else is read-only: R23 where the table says Thunderbolt 4,
+    /// R32 where it says nothing.
+    var isThunderbolt5: Bool { thunderboltGeneration == .five }
+
     /// Keyed on identifiers `HardwareModel.catalog` lists, and on no others.
     /// Every row is transcribed from the port sentence of Apple's "Identify
     /// your … model" page for that identifier (the URLs are on the catalogue),
@@ -49,7 +57,8 @@ extension HardwareModel {
     /// that chip (<https://www.apple.com/mac-studio/specs/>,
     /// <https://www.apple.com/mac-mini/specs/>, read 2026-09-25), so it is
     /// still one identifier, one chip, one generation. A machine whose pages
-    /// do not say is left out rather than guessed at. The Mac mini (2024) is
+    /// do not say is left out rather than guessed at, and opens read-only
+    /// (R32). The Mac mini (2024) is
     /// the one machine whose chips come from elsewhere, and still from Apple:
     /// its Identify page lists `Mac16,10` and `Mac16,11` together, so which
     /// chip is which is read from the macOS software update's own
