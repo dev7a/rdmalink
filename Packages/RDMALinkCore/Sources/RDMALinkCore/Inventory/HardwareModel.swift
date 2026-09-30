@@ -145,7 +145,11 @@ extension HardwareModel {
         // M5 Ultra, as on `Mac15,14`.
         "Mac17,14": KnownMac(marketingName: "Mac Studio", archetype: .studioFour),  // M5 Max
         "Mac17,15": KnownMac(marketingName: "Mac Studio", archetype: .studioSix),   // M5 Ultra
-        // Mac mini (2024) — both share one chassis and one port layout.
+        // Mac mini (2024) — both share one chassis and one port layout. The
+        // Identify page lists the two identifiers together; which is which
+        // chip is read from the macOS software update's own manifest, as R23's
+        // generation table (App/Presentation/ThunderboltGeneration.swift)
+        // cites it.
         "Mac16,10": KnownMac(marketingName: "Mac mini", archetype: .mini),          // M4
         "Mac16,11": KnownMac(marketingName: "Mac mini", archetype: .mini),          // M4 Pro
         // Mac mini (M5 Pro) and (M6), 2026: the same chassis — three
@@ -158,9 +162,8 @@ extension HardwareModel {
         // (App/Presentation/ThunderboltGeneration.swift), keyed on the
         // identifier. `Mac18,5` is in it as Thunderbolt 4, because Apple names
         // one chip per identifier for it, so this Mac opens read-only.
-        // `Mac16,10` is not: Apple's 2024 page lists it together with
-        // `Mac16,11`, so the M4 mini's generation reads unknown and R23 never
-        // shows there.
+        // `Mac16,10` is in it as Thunderbolt 4 too, from the software update's
+        // manifest (the 2024 rows above), and `Mac16,11` as Thunderbolt 5.
         "Mac18,5": KnownMac(marketingName: "Mac mini", archetype: .mini),           // M6
         // MacBook Pro (14-inch, 2024) M4; (14-inch, 2024) M4 Pro / M4 Max;
         // (16-inch, 2024) M4 Pro / M4 Max.

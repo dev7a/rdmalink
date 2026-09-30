@@ -49,10 +49,20 @@ extension HardwareModel {
     /// that chip (<https://www.apple.com/mac-studio/specs/>,
     /// <https://www.apple.com/mac-mini/specs/>, read 2026-09-25), so it is
     /// still one identifier, one chip, one generation. A machine whose pages
-    /// do not say is left out rather than guessed at: the Mac mini (2024) page
-    /// lists `Mac16,10` and `Mac16,11` together and never says which is the
-    /// Thunderbolt 4 M4 and which the Thunderbolt 5 M4 Pro, so neither is here
-    /// until one is read on hardware.
+    /// do not say is left out rather than guessed at. The Mac mini (2024) is
+    /// the one machine whose chips come from elsewhere, and still from Apple:
+    /// its Identify page lists `Mac16,10` and `Mac16,11` together, so which
+    /// chip is which is read from the macOS software update's own
+    /// `BuildManifest.plist` (macOS 27.2, read 2026-09-30), where each
+    /// identifier names its chip ID (`Ap,ProductType` → `ApChipID`).
+    /// `Mac16,10` carries `0x8132`, as `Mac16,1` does — the MacBook Pro
+    /// Identify page's "M4 chip", alone on its identifier. `Mac16,11` carries
+    /// `0x6040`, which is neither that nor `Mac16,9`'s `0x6041` — the Mac
+    /// Studio page's "M4 Max", alone too — so it is the M4 Pro, the mini's
+    /// only other chip. The generation is then the specs page's
+    /// (<https://support.apple.com/en-us/121555>, read 2026-09-30): "On back
+    /// (M4)" is "Three Thunderbolt 4 (USB-C) ports", "On back (M4 Pro)" is
+    /// "Three Thunderbolt 5 (USB-C) ports".
     private static let thunderboltGenerations: [String: ThunderboltGeneration] = [
         // Mac Studio (2025) — "Front ports: Two Thunderbolt 5 ports" on the
         // M3 Ultra, and the M4 Max carries the same back four.
@@ -66,6 +76,11 @@ extension HardwareModel {
         // Mac mini (M6), 2026 — "Three Thunderbolt 4 (USB-C) ports", so R23.
         "Mac17,16": .five,   // M5 Pro
         "Mac18,5": .four,    // M6
+        // Mac mini (2024) — three Thunderbolt 4 on the back of the M4, three
+        // Thunderbolt 5 on the M4 Pro; which identifier is which chip is in
+        // the comment above.
+        "Mac16,10": .four,   // M4, so R23
+        "Mac16,11": .five,   // M4 Pro
         // MacBook Pro (14-inch, 2024) M4 — "three Thunderbolt 4 ports".
         "Mac16,1": .four,
         // MacBook Pro (14-inch and 16-inch, 2024) M4 Pro / M4 Max — "three
