@@ -4,6 +4,8 @@ What changed in each RDMALink release, newest first.
 
 ## Unreleased
 
+- A new app icon: two lanes that come together, on deep navy.
+
 ## 0.3.8 — 2026-09-29 (build 11)
 
 - RDMALink uses about 1 % of one CPU core while it sits open, down from
