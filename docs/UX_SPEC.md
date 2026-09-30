@@ -1043,11 +1043,12 @@ Documented once so they all read the same.
 
 ---
 
-**R23 — This Mac's Thunderbolt is version 4.** *Read-only mode, not an error.*
+**R23 — This Mac's Thunderbolt is version 4.** *Read-only mode, not an error. Fires on a recognized Mac whose model identifier the Thunderbolt generation table lists as Thunderbolt 4 — today the MacBook Pro (14-inch, 2024) with M4, the MacBook Pro (14-inch, M5), the Mac mini (2024) with M4 and the Mac mini (M6) — and never on a guess.*
 - Headline: **Nothing to configure here**
 - Body: **This Mac has Thunderbolt 4 ports. RDMA over Thunderbolt needs Thunderbolt 5, so there's nothing for RDMALink to set up. You're welcome to look around — everything you see is real.**
 - Buttons: **Quit** only. The set-up buttons — the footer's **Set Up Port…** and every row's **Set Up…** and **Set Up Again…** — are **absent**, not disabled.
 - **Recovery:** the model, the port list, Identify and the change log all still work, so the app remains useful as a map.
+- **The table.** One row per identifier, each read from Apple's own pages for that Mac: its Identify page, and its specs page where the Identify page gives no port sentence. The Mac mini (2024)'s Identify page lists `Mac16,10` and `Mac16,11` together, so which is the M4 and which the M4 Pro is read from the macOS software update's own manifest, which names each identifier's chip. An identifier the table doesn't list reads as unknown, and R23 doesn't fire. That includes every Mac §4.7's family-and-layout rule recognizes: it is never in the table, so it gets the ordinary hub whatever its generation. Telling someone their Thunderbolt 5 Mac has nothing to configure would be the worst wrong answer the app could give (§1.3 rule 10).
 
 ---
 

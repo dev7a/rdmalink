@@ -563,9 +563,19 @@ let tb5Rows = [
 check(tb5Rows.map { $0?.archetype } == [.studioFour, .studioSix, .mini]
       && tb5Rows.allSatisfy { $0?.thunderboltGeneration == .five },
       "the Mac Studio (M5 Max), (M5 Ultra) and the Mac mini (M5 Pro) are Thunderbolt 5")
-check(HardwareModel(identifier: "Mac16,10", marketingName: "Mac mini", chip: "M4", archetype: .mini)
-          .thunderboltGeneration == .unknown,
-      "the Mac mini (2024) page lists its two identifiers together, so the table still says nothing for the M4")
+// The Mac mini (2024): one Identify entry for two identifiers, told apart by
+// the software update's manifest (the table's comment cites it), and one
+// chassis for both — so the generation alone decides between R23 and set-up.
+let m4Mini = catalogued("Mac16,10", "Mac mini", "M4")
+check(m4Mini?.archetype == .mini && m4Mini?.thunderboltGeneration == .four
+      && m4Mini.map { text(HubPresentation.copy(hardware: $0, ports: [managed]).headline) } == "Nothing to configure here"
+      && m4Mini.map { HubPresentation.footer(hardware: $0, ports: [managed]).primary == nil } == true,
+      "R23: the Mac mini (M4, 2024) has Thunderbolt 4 ports and opens read-only, with no set-up in the footer")
+let m4ProMini = catalogued("Mac16,11", "Mac mini", "M4 Pro")
+check(m4ProMini?.archetype == .mini && m4ProMini?.thunderboltGeneration == .five
+      && m4ProMini.map { text(HubPresentation.copy(hardware: $0, ports: [managed]).headline) } == "One port is ready for RDMA"
+      && m4ProMini.map { HubPresentation.footer(hardware: $0, ports: [managed]).primary == .setUpPort(portID: nil) } == true,
+      "the Mac mini (M4 Pro, 2024) has Thunderbolt 5 ports and keeps S1's hub, Set Up Port… included")
 let r31Footer = HubPresentation.footer(hardware: unrecognized, ports: [managed])
 // §S1: R31's footer holds `Quit` and nothing else. `Quit` is neither the
 // primary nor Restore — it is the same button on every hub state, so the view
