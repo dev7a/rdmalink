@@ -330,6 +330,11 @@ notarize() {
     /usr/bin/xcrun notarytool log "$submission_id" \
       "${NOTARY_CREDENTIALS[@]}" "$notary_log" ||
       echo "could not fetch the notary log for $submission_id" >&2
+    # On a release runner dist/ is never uploaded after a failure, so the
+    # log goes to the job's output too: Apple's reasons, file by file.
+    if [[ -s "$notary_log" ]]; then
+      /bin/cat "$notary_log" >&2
+    fi
     fail "Notarization of $artefact_name ended as $submission_status (submission $submission_id); see $notary_log"
   fi
   NOTARY_RESULT_JSON="$WORK_DIR/notary-$artefact_name.json"

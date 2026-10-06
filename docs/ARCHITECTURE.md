@@ -332,11 +332,12 @@ identifier, both notarization results and the Xcode version.
 
 ## Continuous integration and releases
 
-Two workflows, both with `permissions: {}` at the top and job-level scopes
-only. Every third-party action is pinned to a commit hash with its tag in a
-comment, and every checkout uses `persist-credentials: false`, so no job
-keeps a usable token in `.git/config`. Both macOS jobs run on GitHub's
-`xcode-27` preview image (macOS 27.0, Xcode 27.0 build 27A266a): the Core
+Three workflows, all with `permissions: {}` at the top and job-level scopes
+only; the third, `pages.yml`, publishes the website (see "Website"). Every
+third-party action is pinned to a commit hash with its tag in a comment, and
+every checkout uses `persist-credentials: false`, so no job keeps a usable
+token in `.git/config`. Every macOS job runs on GitHub's `xcode-27` preview
+image (macOS 27.0, Xcode 27.0 build 27A266a at the time of writing): the Core
 package declares `.macOS("27.0")` and the app's deployment target is 27.0, so
 nothing here builds on an older image. The label is a preview one and is
 listed in `.github/actionlint.yaml` so `actionlint` recognizes it.
@@ -347,7 +348,10 @@ developer runs), then `bash -n` and `shellcheck` over `script/*.sh` and
 `script/release/*.sh` (shellcheck is installed from Homebrew on the runner —
 the one network fetch in CI, a linter in a job that holds no credential),
 then the three release-script tests. The app builds
-Debug, which is ad-hoc signed, so CI needs no identity and no secret.
+Debug, which is ad-hoc signed, so CI needs no identity and no secret. A
+pull request's newer push cancels its older run; a push to `main` is grouped
+by its commit, so two merges in quick succession never cancel or replace
+each other and every push to `main` keeps its own CI run.
 
 `.github/workflows/release.yml` is the tag-driven release. The event flow:
 
@@ -367,10 +371,16 @@ Debug, which is ad-hoc signed, so CI needs no identity and no secret.
    a non-empty section for that version (`script/release/changelog.py`). The
    job outputs the tag, the commit and the tag object hash. Nothing moving is carried forward: later jobs check out
    the commit, not the tag or a branch.
-3. **notarize** (`xcode-27`, `contents: read`, environment `release`) checks
-   out that commit, runs `script/test.sh` before any credential exists on the
-   runner (the workflow never consults CI's verdict on `main`, so the gate is
-   its own step, as lnpctl's `make test` is), imports the Developer ID certificate into a temporary
+3. **test** (`xcode-27`, `contents: read`, no environment) checks out that
+   commit, records the runner's Xcode build, and runs `script/test.sh`. The
+   workflow never consults CI's verdict on `main`, so the gate is a job of
+   its own, as lnpctl's `make test` is; it holds no secret, so test code never
+   runs where the signing credentials are, and the approval request for
+   notarize comes only once the commit has passed.
+4. **notarize** (`xcode-27`, `contents: read`, environment `release`) first
+   checks that its runner has the Xcode build the test job recorded, so the
+   release is built with the toolchain its tests ran on. It checks
+   out that commit, imports the Developer ID certificate into a temporary
    keychain whose password is random and masked, decodes the App Store
    Connect key to `$RUNNER_TEMP/notary-key.p8`, and asserts that the imported
    keychain really holds a Developer ID Application identity for
@@ -386,22 +396,24 @@ Debug, which is ad-hoc signed, so CI needs no identity and no secret.
    (`script/release/receipt.sh`). The directory is uploaded as an artifact
    named for the run and the attempt. An `always()` step deletes the keychain
    and both key files whatever happened.
-4. **publish** (`ubuntu-24.04`, `contents: write` — the only writable token
-   in either workflow) checks out the same commit, downloads *this* run and
+5. **publish** (`ubuntu-24.04`, `contents: write` — the only writable token
+   in this workflow) checks out the same commit, downloads *this* run and
    attempt's artifact, and runs `script/release/publish.sh`, which reads the
    version's section of `CHANGELOG.md` from that checkout before it asks
    GitHub anything and publishes it as the release notes, followed by what
    the assets are.
-5. **Result** — a published release at `v<version>` carrying the DMG,
+6. **Result** — a published release at `v<version>` carrying the DMG,
    `SHA256SUMS` and `release.json`, with that version's changelog as its
    notes.
 
 What is pinned and what moves: the actions are pinned by commit hash, the
 tag's object hash and commit are pinned by preflight and rechecked on GitHub
 before and after the upload, and the artifact name carries the run and
-attempt. What moves — `main`, the tag ref on GitHub, the `xcode-27` image —
-is either checked against the pinned value or, in the image's case, the one
-deliberate exception.
+attempt. What moves — `main` and the tag ref on GitHub — is checked against
+the pinned value. The `xcode-27` image is not pinned to a build: what is held
+fixed is that test and notarize report the same Xcode build,
+and `release.json` records which one it was. When GitHub updates the image,
+releases carry on with the new toolchain for both jobs.
 
 Failure, rerun and partial failure:
 
@@ -421,15 +433,25 @@ Failure, rerun and partial failure:
   notarizes (Apple dedupes submissions by content), and `gh release upload
   --clobber` replaces the assets of that validated draft only.
 - **A stale artifact** — impossible to publish by accident: the artifact name
-  contains the run id and the attempt number, so a rerun never downloads the
-  previous attempt's assets. Before uploading, publish checks that the three
+  contains the run id and the attempt number, so a rerun of all jobs never
+  downloads an earlier attempt's assets. Re-running only a failed publish
+  reuses notarize's output and downloads the artifact that attempt made,
+  which publish validates like any other. Before uploading, publish checks that the three
   files are exactly the expected three, that `release.json` names this tag,
   commit and tag object, that both notarizations were accepted, and that
   `SHA256SUMS` matches the bytes on disk; after uploading, that every asset
   on GitHub has the size it has locally.
-- **Concurrency** — release runs for one tag are serialized and never
-  cancelled, because a cancelled run can leave a draft that the next attempt
-  has to see whole.
+- **The `xcode-27` image changes between test and notarize** — the jobs get
+  separate runners and notarize's is assigned only after approval, so an
+  image update in between, or a rollout in progress, can give them different
+  Xcode builds. notarize then stops before it checks out anything or touches
+  a secret. Re-running all jobs tests again on the current image (during a
+  rollout it may take more than one attempt); re-running only notarize keeps
+  the recorded build and passes only if its new runner has that build.
+- **Concurrency** — release runs for one tag are serialized, and a run in
+  progress is never cancelled, because a cancelled run can leave a draft that
+  the next attempt has to see whole. (A run still waiting is replaced if a
+  third one queues for the same tag.)
 
 Where the trust actually sits: for a tag push GitHub runs the workflow file
 *from the tagged commit*, and the release scripts are checked out from it too.
@@ -441,7 +463,8 @@ holds is who may create a `v*` tag — a repository ruleset restricts creating,
 moving and deleting `refs/tags/v*` to the repository's administrators, so a
 collaborator or a fork cannot cut a release — and the `release` environment,
 which holds the signing secrets and requires the owner's approval before the
-notarize job runs. A pull request from a fork reaches neither: it gets no
+notarize job runs — the approval is asked for only after the test job has
+passed. A pull request from a fork reaches neither: it gets no
 environment secrets and cannot create tags. This is the same boundary as in
 the model repository; it is written down here so it is a decision and not an
 oversight, and it does not depend on the repository being private.

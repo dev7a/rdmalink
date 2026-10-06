@@ -11,9 +11,14 @@ on:
 
 permissions: {}
 
+# A pull request's newer push cancels its older run. A push to main gets a
+# group of its own (its commit), so two merges in quick succession never
+# cancel or replace each other and every push to main keeps its run: with
+# one group per ref, GitHub drops a pending run when a newer one queues even
+# with cancel-in-progress off.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:

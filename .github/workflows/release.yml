@@ -1,9 +1,10 @@
 name: Release
 
 # A signed tag is the only thing that can produce a release. preflight proves
-# the tag on Ubuntu, notarize builds and notarizes on macOS from the commit
-# that tag names, publish uploads to a draft release and only then makes it
-# visible. Modelled on dev7a/lnpctl .github/workflows/release.yml.
+# the tag on Ubuntu, test runs the gate on macOS with no secrets, notarize
+# builds and notarizes on macOS from the commit that tag names with the Xcode
+# the tests passed on, and publish uploads to a draft release and only then
+# makes it visible. Modelled on dev7a/lnpctl .github/workflows/release.yml.
 on:
   push:
     tags: ['v*']
@@ -72,10 +73,47 @@ jobs:
             echo "tag_object=$tag_object"
           } >> "$GITHUB_OUTPUT"
 
-  notarize:
+  test:
     needs: preflight
-    # macOS 27 with Xcode 27.0 (27A266a); see .github/actionlint.yaml for the
-    # preview label. The Release archive needs this toolchain.
+    # The test gate, in a job of its own with no environment: it holds no
+    # secret, so test code never runs where the signing credentials are, and
+    # the approval request for notarize comes only once the commit has
+    # passed. This workflow does not consult CI's verdict on main, so a
+    # release is never cut from a commit that fails here (dev7a/lnpctl's
+    # package.sh runs `make test` before it packages).
+    # macOS 27 with Xcode 27; see .github/actionlint.yaml for the label.
+    runs-on: xcode-27
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    outputs:
+      xcode_build: ${{ steps.toolchain.outputs.build }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit the verified tag names, not the branch head.
+          ref: ${{ needs.preflight.outputs.sha }}
+          persist-credentials: false
+      - id: toolchain
+        name: Record the Xcode build
+        # notarize checks it gets the same one: the image is not pinned, so
+        # what is held fixed is that the release is built with the toolchain
+        # its tests ran on.
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          build="$(xcodebuild -version | sed -n 's/^Build version //p')"
+          [[ -n "$build" ]] || exit 1
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+      - name: Run the test gate
+        run: |
+          set -euo pipefail
+          script/test.sh
+
+  notarize:
+    needs: [preflight, test]
+    # macOS 27 with Xcode 27, the same build the test job ran on (checked
+    # below). The Release archive needs this toolchain.
     runs-on: xcode-27
     timeout-minutes: 60
     # The environment holds the signing secrets, so approval and secret access
@@ -97,19 +135,24 @@ jobs:
           set -euo pipefail
           [[ -z "$APPLE_API_KEY_ID" ]] || echo "::add-mask::$APPLE_API_KEY_ID"
           [[ -z "$APPLE_API_ISSUER_ID" ]] || echo "::add-mask::$APPLE_API_ISSUER_ID"
+      - name: Check the Xcode build is the one the tests ran on
+        env:
+          TESTED_XCODE_BUILD: ${{ needs.test.outputs.xcode_build }}
+        run: |
+          set -euo pipefail
+          build="$(xcodebuild -version | sed -n 's/^Build version //p')"
+          if [[ -z "$TESTED_XCODE_BUILD" || "$build" != "$TESTED_XCODE_BUILD" ]]; then
+            # The image can change between the jobs: a rollout in progress,
+            # or an update while notarize waits for approval. Re-running all
+            # jobs tests again on the current image.
+            echo "::error::This runner has Xcode build ${build:-unknown}, but the tests ran on ${TESTED_XCODE_BUILD:-unknown}. Re-run all jobs."
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The commit the verified tag names, not the branch head.
           ref: ${{ needs.preflight.outputs.sha }}
           persist-credentials: false
-      - name: Run the test gate
-        # dev7a/lnpctl's package.sh runs `make test` before it packages. Here
-        # the gate is its own step, before any credential exists on the
-        # runner, so a release is never cut from a commit that fails it: this
-        # workflow does not consult CI's verdict on main.
-        run: |
-          set -euo pipefail
-          script/test.sh
       - name: Import signing credentials into a temporary keychain
         env:
           CERTIFICATE_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}

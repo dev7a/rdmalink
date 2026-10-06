@@ -57,11 +57,14 @@ this file from `refs/remotes/origin/main`, so a tag cannot approve itself.
    cannot sign with that key, pass the one that can for this command only:
    `git -c gpg.program=/path/to/gpg tag -s …`.)
 3. Push the tag: `git push origin v<version>`.
-4. Watch the run. `preflight` proves the tag, `notarize` builds and submits to
-   Apple (the long job), `publish` uploads to a draft and undrafts it.
+4. Watch the run. `preflight` proves the tag, `test` runs `script/test.sh` on
+   the tag's commit, then `notarize` waits for your approval of the `release`
+   environment and builds and submits to Apple (the long job), and `publish`
+   uploads to a draft and undrafts it.
 
-If `publish` fails, the release stays a draft and nothing is public. Rerun the
-workflow: it rebuilds, and replaces only that draft's assets. Never edit the
+If `publish` fails, the release stays a draft and nothing is public. Re-run all
+jobs: it tests and rebuilds, and replaces only that draft's assets. (Re-running
+only `publish` reuses the image the failed attempt built.) Never edit the
 assets of a draft by hand — the checks that make the receipt meaningful all
 run in `publish.sh`.
 
