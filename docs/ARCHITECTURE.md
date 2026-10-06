@@ -469,7 +469,7 @@ environment secrets and cannot create tags. This is the same boundary as in
 the model repository; it is written down here so it is a decision and not an
 oversight, and it does not depend on the repository being private.
 
-What the repository owner must configure once. First, the two settings the
+What the repository owner must configure once. First, the settings the
 paragraph above leans on:
 
 - **Settings → Rules → Rulesets**, a ruleset over `refs/tags/v*` that
@@ -480,6 +480,23 @@ paragraph above leans on:
   repository owner, so the notarize job — and with it every signing secret —
   waits for a human. GitHub allows this protection rule on public repositories
   on every plan, and on private ones only on paid plans.
+- **Settings → Environments → `release` → Deployment branches and tags**,
+  "Selected branches and tags": the tag pattern `v*` and the branch `main`.
+  A tag push and a manual run from `main` reach the environment; a manual run
+  from any other branch is refused by GitHub before the approval, not only by
+  preflight's `if:`, which a branch's own copy of the workflow could drop.
+
+Three more that keep the workflows honest (set 2026-10-06):
+
+- **Settings → Actions → General**: only actions created by GitHub are
+  allowed, and actions must be pinned to a full-length commit SHA. Every
+  workflow already uses only `actions/*` pinned by hash; these make it a rule
+  rather than a habit.
+- **Settings → Rules → Rulesets**, "main: CI must pass" (ruleset id
+  24578869): a change reaches `main` only once CI's "Build and test" (from
+  GitHub Actions) has passed on it. Branches need not be up to date first.
+  Repository administrators may bypass it, but must say so (`gh pr merge
+  --admin`); nothing merges a failing pull request by accident.
 
 Then, under **Settings → Environments → `release`** (create the environment
 first; its protection rules are what gate the signing secrets):
