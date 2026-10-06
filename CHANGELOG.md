@@ -4,6 +4,8 @@ What changed in each RDMALink release, newest first.
 
 ## Unreleased
 
+## 0.3.9 — 2026-10-05 (build 12)
+
 - A new app icon: two lanes that come together, on deep navy.
 - The M4 Mac mini (2024) has Thunderbolt 4, so RDMALink now opens
   read-only on it, as it already does on the 14-inch MacBook Pro with M4 or
