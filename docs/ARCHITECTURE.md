@@ -351,7 +351,7 @@ then the three release-script tests. The app builds
 Debug, which is ad-hoc signed, so CI needs no identity and no secret. A
 pull request's newer push cancels its older run; a push to `main` is grouped
 by its commit, so two merges in quick succession never cancel or replace
-each other and every merged commit keeps a CI result.
+each other and every push to `main` keeps its own CI run.
 
 `.github/workflows/release.yml` is the tag-driven release. The event flow:
 
@@ -409,9 +409,9 @@ each other and every merged commit keeps a CI result.
 What is pinned and what moves: the actions are pinned by commit hash, the
 tag's object hash and commit are pinned by preflight and rechecked on GitHub
 before and after the upload, and the artifact name carries the run and
-attempt. What moves — `main`, the tag ref on GitHub, the `xcode-27` image —
-is checked against the pinned value. The image is not pinned to a build:
-what is held fixed is that test and notarize report the same Xcode build,
+attempt. What moves — `main` and the tag ref on GitHub — is checked against
+the pinned value. The `xcode-27` image is not pinned to a build: what is held
+fixed is that test and notarize report the same Xcode build,
 and `release.json` records which one it was. When GitHub updates the image,
 releases carry on with the new toolchain for both jobs.
 
@@ -433,20 +433,25 @@ Failure, rerun and partial failure:
   notarizes (Apple dedupes submissions by content), and `gh release upload
   --clobber` replaces the assets of that validated draft only.
 - **A stale artifact** — impossible to publish by accident: the artifact name
-  contains the run id and the attempt number, so a rerun never downloads the
-  previous attempt's assets. Before uploading, publish checks that the three
+  contains the run id and the attempt number, so a rerun of all jobs never
+  downloads an earlier attempt's assets. Re-running only a failed publish
+  reuses notarize's output and downloads the artifact that attempt made,
+  which publish validates like any other. Before uploading, publish checks that the three
   files are exactly the expected three, that `release.json` names this tag,
   commit and tag object, that both notarizations were accepted, and that
   `SHA256SUMS` matches the bytes on disk; after uploading, that every asset
   on GitHub has the size it has locally.
-- **The `xcode-27` image changes between test and notarize** — only while
-  GitHub rolls out a new image can the two jobs land on different Xcode
-  builds. notarize stops before it checks out anything or touches a secret;
-  re-running all jobs puts both on the new image. Re-running only the failed
-  job reuses the test job's recorded build.
-- **Concurrency** — release runs for one tag are serialized and never
-  cancelled, because a cancelled run can leave a draft that the next attempt
-  has to see whole.
+- **The `xcode-27` image changes between test and notarize** — the jobs get
+  separate runners and notarize's is assigned only after approval, so an
+  image update in between, or a rollout in progress, can give them different
+  Xcode builds. notarize then stops before it checks out anything or touches
+  a secret. Re-running all jobs tests again on the current image (during a
+  rollout it may take more than one attempt); re-running only notarize keeps
+  the recorded build and passes only if its new runner has that build.
+- **Concurrency** — release runs for one tag are serialized, and a run in
+  progress is never cancelled, because a cancelled run can leave a draft that
+  the next attempt has to see whole. (A run still waiting is replaced if a
+  third one queues for the same tag.)
 
 Where the trust actually sits: for a tag push GitHub runs the workflow file
 *from the tagged commit*, and the release scripts are checked out from it too.

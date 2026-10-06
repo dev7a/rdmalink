@@ -142,9 +142,9 @@ jobs:
           set -euo pipefail
           build="$(xcodebuild -version | sed -n 's/^Build version //p')"
           if [[ -z "$TESTED_XCODE_BUILD" || "$build" != "$TESTED_XCODE_BUILD" ]]; then
-            # Only while GitHub rolls out a new xcode-27 image can the two
-            # jobs land on different builds; re-running all jobs puts both on
-            # the new one.
+            # The image can change between the jobs: a rollout in progress,
+            # or an update while notarize waits for approval. Re-running all
+            # jobs tests again on the current image.
             echo "::error::This runner has Xcode build ${build:-unknown}, but the tests ran on ${TESTED_XCODE_BUILD:-unknown}. Re-run all jobs."
             exit 1
           fi
