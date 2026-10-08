@@ -40,7 +40,8 @@ function createMacScene(T, canvas, opts) {
         ['sd', 'front', 0.38, 0.20], ['led', 'front', 0.85, 0.20]
       ]
     },
-    // .notebook: MacBook Pro 14-inch with M5 Pro or M5 Max.
+    // .notebook: MacBook Pro 14-inch with M4 Pro, M4 Max, M5 Pro or M5 Max (the
+    // 16-inch has the same three ports).
     mbp: {
       w: 31.26, h: 1.55, d: 22.12, r: 1.0, bevel: 0.22, band: 0, vertical: false,
       lid: { depth: 22.0, thickness: 0.42, open: 104 },
@@ -55,7 +56,8 @@ function createMacScene(T, canvas, opts) {
         ['hdmi', 'right', 0.869, 0.5]
       ]
     },
-    // .mini: Mac mini with M5 Pro. The front two are USB-C that carries USB only.
+    // .mini: Mac mini with M4 Pro or M5 Pro. The front two are USB-C that carries
+    // USB only.
     mini: {
       w: 12.7, h: 5.0, d: 12.7, r: 1.4, bevel: 0.16, band: 0.7, vertical: true,
       rest: { th: PI - 0.55, ph: 0.34 },
