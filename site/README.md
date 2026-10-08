@@ -145,7 +145,8 @@ site/
   Shift+Tab from below, skips to the end. Without WebGL
   (three.js is then not fetched at all), after a lost context, or without
   JavaScript, the frame shows the hub screenshot and one line of text; a
-  context the browser restores brings the 3D view back. Turning reduced motion
+  context the browser restores brings the 3D view back, and with it the sequence
+  (a reader in the section goes to its end). Turning reduced motion
   on or off restarts the scene.
 - **three.js and WebGL.** `mac-scene.js` is the design canvas's
   `src/mac-scene.js`, changed only where a comment says "Site:". It is split

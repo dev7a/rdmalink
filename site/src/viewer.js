@@ -133,6 +133,16 @@
       else if (r.top < 0) landed();
     }
   }
+  // The sequence comes back with a restored context, and the section its length. If it is all above the
+  // viewport, what is on screen stays, as in fail(). If the reader is in it, they go to its end, where the
+  // frame is in view and the viewer is theirs.
+  function resume() {
+    var r = see.getBoundingClientRect(), next = see.nextElementSibling, at = next.getBoundingClientRect().top;
+    setUp();
+    if (!active) return;
+    if (r.bottom < 0) window.scrollBy({ top: next.getBoundingClientRect().top - at, behavior: 'instant' });
+    else if (r.top < 0) { y = from + span; window.scrollTo({ top: y, behavior: 'instant' }); }
+  }
   // The section has just lost the sequence's length (about 2.8 viewports) with the reader in it: the
   // frame, or the fallback over it, is put in the middle of the screen, rather than wherever the page's
   // scroll position now falls.
@@ -204,7 +214,7 @@
   // The sequence starts or stops with it.
   onChange(still, function () { setUp(); if (viewer) { stop(); start(); } });
   // three.js keeps a lost context restorable; when the browser gives it back (after a GPU reset, or
-  // when iOS Safari brings a tab back), start again on the same canvas.
+  // when iOS Safari brings a tab back), start again on the same canvas, and the sequence comes back.
   canvas.addEventListener('webglcontextrestored', function () {
     if (failed !== 'lost' || viewer) return;
     failed = false;
@@ -212,6 +222,7 @@
     block.classList.remove('is-failed');
     canvas.tabIndex = 0;
     canvas.removeAttribute('aria-hidden');
+    resume();
     start();
   });
   onChange(wide, paintLabel);
