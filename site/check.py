@@ -44,9 +44,9 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
        "font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'")
 H1 = "Cable your Macs together without a loop."
 H2 = [
+    "Three steps for each cable.",
     "With Thunderbolt Bridge, a second cable makes a loop.",
     "The Macs it knows, port by port.",
-    "Three steps for each cable.",
     "RDMALink only changes the Mac it runs on.",
     "It changes only the ports you choose, and it can undo that.",
     "Works on Macs with Thunderbolt 5.",

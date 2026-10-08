@@ -1,22 +1,16 @@
 // The 3D stage behind the page's viewer: the design canvas's src/mac-scene.js, unchanged
 // except where a comment says "Site:". viewer.js calls createMacScene once three.js is in.
-function createMacScene(T, canvas, opts) {
+//
+// Site: the file is in two parts. createMacKit holds what makes a Mac: the catalogue, the
+// materials, the studio light and build(); createMacScene is a stage, drawn with one kit: the
+// viewer's (viewer.js, which also steers it through the See it sequence) and the hero's (hero.js,
+// which turns it, sets its ports and asks where they are on screen). why3d.js draws the Why
+// diagrams' pairs of Macs with a kit of its own. pixelRatio and loadThree, at the end, are shared
+// by hero.js, why3d.js and viewer.js: how finely a canvas draws, and the one request for three.js.
+// (The one WebGL check, hasWebGL, is in motion.js.)
+function createMacKit(T, renderer) {
   'use strict';
-  // The RDMALink stage, for the web. Geometry is RDMALinkCore's ReceptacleCatalogue
-  // (centimetres), the look is App/Stage. Returns null when WebGL is unavailable.
-  opts = opts || {};
   var PI = Math.PI;
-  var noop = function () {};
-  var onHover = opts.onHover || noop;
-  var onCursor = opts.onCursor || noop;
-  // onPorts(ports, changed): the Thunderbolt ports of the Mac on show, as
-  // [{ id, name, ready }], after every load and toggle; `changed` is the toggled
-  // port's hover info, or null. onFail(): the WebGL context was lost for good.
-  var onPorts = opts.onPorts || noop;
-  var onFail = opts.onFail || noop;
-  var reduced = !!opts.reducedMotion;
-  // opts.theme: 'dark' (the default) or 'light'; setTheme() switches it in place.
-
   // ---------- catalogue ----------
   // Faces: back -z, front +z, left -x, right +x. u runs 0..1 across a face from the
   // viewer's left as they look at it; v runs 0..1 up it, above the base band.
@@ -89,47 +83,6 @@ function createMacScene(T, canvas, opts) {
   };
   var YAW = { front: 0, right: PI / 2, back: PI, left: -PI / 2 };
 
-  // ---------- renderer ----------
-  var renderer;
-  try {
-    renderer = new T.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
-  } catch (err) {
-    return null;
-  }
-  if (!renderer || !renderer.getContext()) return null;
-  // The canvas keeps its WebGL context when the editor re-mounts this view on the
-  // same element; three.js assumes a fresh context, so without this the old
-  // renderer's leftover GL state blows every lit surface out to white.
-  renderer.resetState();
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.outputEncoding = T.sRGBEncoding;
-  renderer.toneMapping = T.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = T.PCFSoftShadowMap;
-  // The key light is fixed to the model and only the camera turns, so the shadow
-  // is the same every frame: it is redrawn when a Mac loads or the frame is refit.
-  renderer.shadowMap.autoUpdate = false;
-  renderer.shadowMap.needsUpdate = true;
-  // The editor remounts this view and a page can hold several; a context the
-  // browser drops stays blank, so say so rather than leave an empty frame.
-  // Cancelling the event is what lets the browser restore the context later
-  // (viewer.js restarts on webglcontextrestored). three.js's own listener
-  // cancels it too, but only while the renderer is alive.
-  function contextLost(event) {
-    if (event) event.preventDefault();
-    if (disposed) return;
-    lost = true;
-    if (raf) { cancelAnimationFrame(raf); raf = 0; }
-    onFail('lost');
-  }
-  var lost = false;
-  canvas.addEventListener('webglcontextlost', contextLost, false);
-
-  var scene = new T.Scene();
-  var camera = new T.PerspectiveCamera(30, 16 / 9, 4, 600);
-  var owned = []; // textures and render targets to dispose
-
   function srgb(hex) { return new T.Color(hex).convertSRGBToLinear(); }
 
   // ---------- appearance ----------
@@ -142,52 +95,28 @@ function createMacScene(T, canvas, opts) {
   //   edge, lift  the backdrop: the page colour at the rim, the lift behind the Mac
   //   room        the environment: [floor, zenith gain, nadir gain, softbox gain]
   //   key, rim    directional light
-  //   shadow      the contact shadow's opacity, and its map size: a coarser map in
-  //               light mode blurs the edge, which a light ground shows up
+  //   shadow      the contact shadow's opacity, and its map size (Site: 512 in both, where
+  //               the canvas had 2048 in the dark and 256 in light): a coarse map blurs the
+  //               edge, which a fine one draws as a hard black slab in the See it close-up,
+  //               but at 256 the close-up shows its texels as steps
   //   bloom       the Ready glow's peak opacity, added in the dark, laid over in light
   var THEMES = {
     dark: {
       edge: 0x16171a, lift: 0x24262b, room: [0.10, 0.22, 0.08, 1],
-      key: 1.1, rim: 0.55, shadow: 0.55, shadowMap: 2048,
+      key: 1.1, rim: 0.55, shadow: 0.42, shadowMap: 512,
       ink: 0xf5f5f5, recess: 0x0b0b0c, usbRecess: 0x141416, band: 0x232428, scenery: 0x19191b,
       brighten: true, bloom: 0.55, additive: true
     },
     light: {
       edge: 0xefefec, lift: 0xfbfbf9, room: [0.62, 0.3, 0.22, 1.3],
-      key: 1.5, rim: 0.18, shadow: 0.16, shadowMap: 256,
+      key: 1.5, rim: 0.18, shadow: 0.16, shadowMap: 512,
       ink: 0x1c1c1c, recess: 0x141414, usbRecess: 0x1c1c1c, band: 0x6b6b6b, scenery: 0x2b2b2b,
       brighten: false, bloom: 0.32, additive: false
     }
   };
   function themeOf(name) { return name === 'light' ? THEMES.light : THEMES.dark; }
-  var look = themeOf(opts.theme);
-
-  // The backdrop and the veil a model swap dips through: one radial lift, drawn
-  // straight into the framebuffer so it matches the page's colour exactly.
-  var backVert = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
-  var backFrag = [
-    'uniform vec3 uEdge; uniform vec3 uLift; uniform float uAspect; uniform float uOpacity; varying vec2 vUv;',
-    'void main() {',
-    '  vec2 p = vUv - vec2(0.5, 0.44); p.x *= uAspect;',
-    '  float k = smoothstep(0.62, 0.0, length(p));',
-    '  gl_FragColor = vec4(mix(uEdge, uLift, k * k), uOpacity);',
-    '}'
-  ].join('\n');
-  function backdropMaterial(opacity) {
-    return new T.ShaderMaterial({
-      uniforms: {
-        uEdge: { value: new T.Color(look.edge) }, uLift: { value: new T.Color(look.lift) },
-        uAspect: { value: 16 / 9 }, uOpacity: { value: opacity }
-      },
-      vertexShader: backVert, fragmentShader: backFrag,
-      depthTest: false, depthWrite: false, transparent: opacity < 1
-    });
-  }
-  var quad = new T.PlaneGeometry(2, 2);
-  var backdrop = new T.Mesh(quad, backdropMaterial(1));
-  backdrop.frustumCulled = false; backdrop.renderOrder = -1000; scene.add(backdrop);
-  var veil = new T.Mesh(quad, backdropMaterial(0));
-  veil.frustumCulled = false; veil.renderOrder = 1000; veil.visible = false; scene.add(veil);
+  var look = THEMES.dark;
+  var owned = []; // textures and render targets to dispose
 
   // Studio lighting as an environment: a room with three softboxes, so the
   // aluminium reads as metal rather than grey plastic. Dim in the dark; in light
@@ -227,19 +156,9 @@ function createMacScene(T, canvas, opts) {
     return rt.texture;
   }
 
-  var key = new T.DirectionalLight(0xffffff, look.key);
-  key.castShadow = true;
-  key.shadow.mapSize.set(look.shadowMap, look.shadowMap);
-  key.shadow.bias = -0.0004;
-  key.shadow.normalBias = 0.02;
-  scene.add(key); scene.add(key.target);
-  var rim = new T.DirectionalLight(0xdfe6ff, look.rim); scene.add(rim); scene.add(rim.target);
-  var ground = new T.Mesh(new T.PlaneGeometry(600, 600), new T.ShadowMaterial({ opacity: look.shadow }));
-  ground.rotation.x = -PI / 2; ground.receiveShadow = true; scene.add(ground);
-
   // ---------- materials ----------
   // What follows the appearance (band, recesses, scenery, ink) is coloured by
-  // applyTheme(), so a switch recolours these shared materials in place.
+  // paint() (Site: was applyTheme()), so a switch recolours these shared materials in place.
   var M = {
     metal: new T.MeshStandardMaterial({ color: srgb(0xc9cacd), metalness: 0.9, roughness: 0.34 }),
     pad: new T.MeshStandardMaterial({ color: srgb(0xc3c4c7), metalness: 0.85, roughness: 0.5 }),
@@ -337,23 +256,13 @@ function createMacScene(T, canvas, opts) {
     M.hoverTb.color.copy(ring).convertSRGBToLinear();
     M.ready.color.copy(ring).convertSRGBToLinear();
     M.bloom.color.copy(base).convertSRGBToLinear();
-    // Each port's bloom is its own copy (its opacity animates), so recolour those too.
-    if (mac) mac.features.forEach(function (f) { if (f.bloom) f.bloom.material.color.copy(M.bloom.color); });
-    requestFrame();
+    // Site: each port's bloom is its own copy; whoever holds the Mac recolours those (createMacScene's setAccent).
   }
 
-  // Recolours the scene for 'dark' or 'light' in place: nothing is rebuilt.
-  function applyTheme(name) {
+  // Site: the material half of applyTheme: recolours the shared materials for 'dark' or 'light' in
+  // place, and returns the appearance (THEMES) for the stage's own half.
+  function paint(name) {
     look = themeOf(name);
-    [backdrop, veil].forEach(function (b) { b.material.uniforms.uEdge.value.set(look.edge); b.material.uniforms.uLift.value.set(look.lift); });
-    scene.environment = environment();
-    key.intensity = look.key; rim.intensity = look.rim;
-    ground.material.opacity = look.shadow;
-    if (key.shadow.mapSize.x !== look.shadowMap) {
-      key.shadow.mapSize.set(look.shadowMap, look.shadowMap);
-      if (key.shadow.map) { key.shadow.map.dispose(); key.shadow.map = null; }
-      renderer.shadowMap.needsUpdate = true;
-    }
     M.band.color.copy(srgb(look.band));
     M.recess.color.copy(srgb(look.recess));
     M.grille.color.copy(srgb(look.recess)); // a grille hole is a recess
@@ -361,18 +270,9 @@ function createMacScene(T, canvas, opts) {
     M.scenery.color.copy(srgb(look.scenery));
     [M.bridge, M.inner, M.thread].forEach(function (mm) { mm.color.copy(srgb(look.ink)); });
     // Light added to a light ground washes out, so there the glow is laid over.
-    var blending = look.additive ? T.AdditiveBlending : T.NormalBlending;
-    M.bloom.blending = blending;
-    if (mac) mac.features.forEach(function (f) {
-      if (!f.bloom) return;
-      f.bloom.material.blending = blending;
-      if (f.closed === 4 && !ringAnims.some(function (a) { return a.f === f; })) f.bloom.material.opacity = look.bloom;
-    });
+    M.bloom.blending = look.additive ? T.AdditiveBlending : T.NormalBlending;
     setAccent(accent);
-  }
-  function setTheme(name) {
-    if (disposed || lost || themeOf(name) === look) return;
-    applyTheme(name);
+    return look;
   }
 
   // ---------- geometry ----------
@@ -520,10 +420,14 @@ function createMacScene(T, canvas, opts) {
     return g;
   }
 
-  // ---------- building a Mac ----------
-  var mac = null;
-  function build(keyName) {
+  // Site: `plan` sets a Mac up other than the catalogue does, for why3d.js and the hero (createMacScene's
+  // opts.plan); the viewer passes none. Each list holds the position names of Thunderbolt ports:
+  // plan.ready, those Ready for RDMA (instead of the catalogue's); plan.ringed, the only ones that take a
+  // ring; plan.plugged, the ones with the plug, the inner ring and the thread (instead of the catalogue's).
+  function build(keyName, plan) {
     var m = MODELS[keyName];
+    plan = plan || {};
+    function listed(list, name, otherwise) { return list ? list.indexOf(name) >= 0 : !!otherwise; }
     var group = new T.Group(), solids = [], proxies = [], features = [];
     function solid(mesh) { mesh.castShadow = true; mesh.userData.solid = true; solids.push(mesh); return mesh; }
     if (!m.lid) {
@@ -573,7 +477,7 @@ function createMacScene(T, canvas, opts) {
       var pw = d[0], ph = d[1], pr = d[2];
       var at = placeOnFace(m, face, row[2], row[3]);
       var g = new T.Group(); g.position.copy(at); g.rotation.y = YAW[face]; group.add(g);
-      var f = { id: keyName + ':' + face + '.' + idx, kind: kind, face: face, name: row[4] || '', group: g, pos: at, dims: d, ready: !!row[5] };
+      var f = { id: keyName + ':' + face + '.' + idx, kind: kind, face: face, name: row[4] || '', group: g, pos: at, dims: d, ready: listed(plan.ready, row[4], row[5]) }; // Site: plan
       if (kind === 'led') {
         var led = circle(pw / 2, M.led); led.position.z = 0.012; g.add(led);
       } else if (kind === 'button') {
@@ -597,14 +501,14 @@ function createMacScene(T, canvas, opts) {
         var hover = new T.Mesh(ringGeometry(pw + 1.0, ph + 1.0, pr + 0.5, 0.08, 4), M.hoverTb);
         hover.position.z = 0.12; hover.visible = false; g.add(hover); f.hover = hover;
       }
-      if (kind === 'tb') {
+      if (kind === 'tb' && listed(plan.ringed, row[4], true)) { // Site: plan
         f.ringDims = [pw + 0.5, ph + 0.5, pr + 0.25, 0.1];
         f.closed = f.ready ? 4 : 0;
         var ring = new T.Mesh(ringGeometry(f.ringDims[0], f.ringDims[1], f.ringDims[2], f.ringDims[3], f.closed), f.ready ? M.ready : M.bridge);
         ring.position.z = 0.1; g.add(ring); f.ring = ring;
         var bloomMat = M.bloom.clone(); bloomMat.opacity = f.ready ? look.bloom : 0;
         var bloom = new T.Mesh(new T.PlaneGeometry(pw + 2.6, ph + 2.6), bloomMat); bloom.position.z = 0.09; bloom.visible = f.ready; g.add(bloom); f.bloom = bloom;
-        if (row[6]) {
+        if (listed(plan.plugged, row[4], row[6])) { // Site: plan
           // A cable is in this one: the plug, and a thread of light running off along the desk.
           var stub = new T.Mesh(new T.BoxGeometry(Math.max(pw - 0.16, 0.12), Math.max(ph - 0.16, 0.12), 0.55), M.stub); stub.position.z = 0.29; stub.castShadow = true; g.add(stub);
           // §4.2's inner ring, "a Mac is here": solid ink, hugging the opening.
@@ -645,8 +549,171 @@ function createMacScene(T, canvas, opts) {
     mats.forEach(function (mm) { if (!shared.has(mm)) mm.dispose(); });
   }
 
+  function dispose() {
+    Object.keys(ringCache).forEach(function (k) { ringCache[k].dispose(); });
+    Object.keys(M).forEach(function (k) { M[k].dispose(); });
+    owned.forEach(function (t) { t.dispose(); });
+  }
+
+  return {
+    MODELS: MODELS, KIND: KIND, YAW: YAW, M: M,
+    theme: themeOf, paint: paint, setAccent: setAccent, environment: environment,
+    srgb: srgb, prism: prism, ringGeometry: ringGeometry,
+    build: build, disposeObject: disposeObject, dispose: dispose
+  };
+}
+
+function createMacScene(T, canvas, opts) {
+  'use strict';
+  // The RDMALink stage, for the web. Geometry is RDMALinkCore's ReceptacleCatalogue
+  // (centimetres), the look is App/Stage. Returns null when WebGL is unavailable.
+  opts = opts || {};
+  var PI = Math.PI;
+  var noop = function () {};
+  var onHover = opts.onHover || noop;
+  var onCursor = opts.onCursor || noop;
+  // onPorts(ports, changed): the Thunderbolt ports of the Mac on show, as
+  // [{ id, name, ready }], after every load and toggle; `changed` is the toggled
+  // port's hover info, or null. onFail(): the WebGL context was lost for good.
+  var onPorts = opts.onPorts || noop;
+  var onFail = opts.onFail || noop;
+  var reduced = !!opts.reducedMotion;
+  // opts.theme: 'dark' (the default) or 'light'; setTheme() switches it in place.
+  // Site: for the hero's stage (hero.js). opts.idle false: no idle turn. opts.plan: how each Mac is set
+  // up, as the kit's build() takes it (the hero's: every port in Thunderbolt Bridge, and no cable, since
+  // its lanes are its cables). opts.pose: where the camera starts, { th, ph, mul }, instead of the model's
+  // rest. opts.backdrop(theme): the backdrop's [edge, lift] colours instead of the theme's, or null.
+  // turnTo(), setReady() and portAt(), at the end, drive it.
+
+  // ---------- renderer ----------
+  // Site: no powerPreference: 'high-performance', which wakes a second GPU where there is one.
+  var renderer;
+  try {
+    renderer = new T.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false });
+  } catch (err) {
+    return null;
+  }
+  if (!renderer || !renderer.getContext()) return null;
+  // Site: three.js r128 reads every shader's log back after linking, which stalls the first frame.
+  renderer.debug.checkShaderErrors = false;
+  // The canvas keeps its WebGL context when the editor re-mounts this view on the
+  // same element; three.js assumes a fresh context, so without this the old
+  // renderer's leftover GL state blows every lit surface out to white.
+  renderer.resetState();
+  renderer.setPixelRatio(pixelRatio(1, 1)); // Site: set again for the canvas's size in resize()
+  renderer.outputEncoding = T.sRGBEncoding;
+  renderer.toneMapping = T.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = T.PCFSoftShadowMap;
+  // The key light is fixed to the model and only the camera turns, so the shadow
+  // is the same every frame: it is redrawn when a Mac loads or the frame is refit.
+  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.needsUpdate = true;
+  // The editor remounts this view and a page can hold several; a context the
+  // browser drops stays blank, so say so rather than leave an empty frame.
+  // Cancelling the event is what lets the browser restore the context later
+  // (viewer.js restarts on webglcontextrestored). three.js's own listener
+  // cancels it too, but only while the renderer is alive.
+  function contextLost(event) {
+    if (event) event.preventDefault();
+    if (disposed) return;
+    lost = true;
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    onFail('lost');
+  }
+  var lost = false;
+  canvas.addEventListener('webglcontextlost', contextLost, false);
+
+  // Site: the Mac, its materials and its light come from a kit (createMacKit, above).
+  var kit = createMacKit(T, renderer);
+  var MODELS = kit.MODELS, KIND = kit.KIND, YAW = kit.YAW, M = kit.M, ringGeometry = kit.ringGeometry;
+
+  var scene = new T.Scene();
+  var camera = new T.PerspectiveCamera(30, 16 / 9, 4, 600);
+  var look = kit.theme(opts.theme);
+
+  // The backdrop and the veil a model swap dips through: one radial lift, drawn
+  // straight into the framebuffer so it matches the page's colour exactly.
+  var backVert = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+  var backFrag = [
+    'uniform vec3 uEdge; uniform vec3 uLift; uniform float uAspect; uniform float uOpacity; varying vec2 vUv;',
+    'void main() {',
+    '  vec2 p = vUv - vec2(0.5, 0.44); p.x *= uAspect;',
+    '  float k = smoothstep(0.62, 0.0, length(p));',
+    '  gl_FragColor = vec4(mix(uEdge, uLift, k * k), uOpacity);',
+    '}'
+  ].join('\n');
+  function backdropMaterial(opacity) {
+    return new T.ShaderMaterial({
+      uniforms: {
+        uEdge: { value: new T.Color(look.edge) }, uLift: { value: new T.Color(look.lift) },
+        uAspect: { value: 16 / 9 }, uOpacity: { value: opacity }
+      },
+      vertexShader: backVert, fragmentShader: backFrag,
+      depthTest: false, depthWrite: false, transparent: opacity < 1
+    });
+  }
+  var quad = new T.PlaneGeometry(2, 2);
+  var backdrop = new T.Mesh(quad, backdropMaterial(1));
+  backdrop.frustumCulled = false; backdrop.renderOrder = -1000; scene.add(backdrop);
+  var veil = new T.Mesh(quad, backdropMaterial(0));
+  veil.frustumCulled = false; veil.renderOrder = 1000; veil.visible = false; scene.add(veil);
+
+  var key = new T.DirectionalLight(0xffffff, look.key);
+  key.castShadow = true;
+  key.shadow.mapSize.set(look.shadowMap, look.shadowMap);
+  key.shadow.bias = -0.0004;
+  key.shadow.normalBias = 0.02;
+  scene.add(key); scene.add(key.target);
+  var rim = new T.DirectionalLight(0xdfe6ff, look.rim); scene.add(rim); scene.add(rim.target);
+  var ground = new T.Mesh(new T.PlaneGeometry(600, 600), new T.ShadowMaterial({ opacity: look.shadow }));
+  ground.rotation.x = -PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+  // Recolours the scene for 'dark' or 'light' in place: nothing is rebuilt.
+  function applyTheme(name) {
+    look = kit.paint(name); // Site: the kit recolours the shared materials
+    var stage = opts.backdrop ? opts.backdrop(look === kit.theme('light') ? 'light' : 'dark') : null; // Site: the hero's stage
+    [backdrop, veil].forEach(function (b) { b.material.uniforms.uEdge.value.set(stage ? stage[0] : look.edge); b.material.uniforms.uLift.value.set(stage ? stage[1] : look.lift); });
+    scene.environment = kit.environment();
+    key.intensity = look.key; rim.intensity = look.rim;
+    ground.material.opacity = look.shadow;
+    if (key.shadow.mapSize.x !== look.shadowMap) {
+      key.shadow.mapSize.set(look.shadowMap, look.shadowMap);
+      if (key.shadow.map) { key.shadow.map.dispose(); key.shadow.map = null; }
+      renderer.shadowMap.needsUpdate = true;
+    }
+    var blending = M.bloom.blending;
+    if (mac) mac.features.forEach(function (f) {
+      if (!f.bloom) return;
+      f.bloom.material.blending = blending;
+      if (f.closed === 4 && !ringAnims.some(function (a) { return a.f === f; })) f.bloom.material.opacity = look.bloom;
+    });
+    blooms();
+  }
+  function setTheme(name) {
+    if (disposed || lost || kit.theme(name) === look) return;
+    applyTheme(name);
+  }
+  // Site: the accent's materials are the kit's (see its setAccent); each port's bloom is its own copy
+  // (its opacity animates), so the stage recolours those.
+  function setAccent(hex) {
+    kit.setAccent(hex);
+    blooms();
+  }
+  function blooms() {
+    if (mac) mac.features.forEach(function (f) { if (f.bloom) f.bloom.material.color.copy(M.bloom.color); });
+    requestFrame();
+  }
+
+  var mac = null;
+
   // ---------- camera ----------
-  var cam = { th: 0, ph: 0.3, base: 60, mul: 1, target: new T.Vector3() };
+  // Site: aim, at and shift are for steer() below: aim (0 to 1) moves the point the camera looks at from
+  // target, the middle of the Mac, to at, the middle of the Thunderbolt ports on one of its faces
+  // (aimPoint); shift moves the picture right by that fraction of the frame's width.
+  var cam = { th: 0, ph: 0.3, base: 60, mul: 1, target: new T.Vector3(), aim: 0, at: new T.Vector3(), shift: 0 };
+  var seen = new T.Vector3();
   var size = { w: 1, h: 1 };
   function fit() {
     if (!mac) return;
@@ -663,25 +730,35 @@ function createMacScene(T, canvas, opts) {
   }
   function placeCamera() {
     var r = cam.base * cam.mul, cp = Math.cos(cam.ph);
-    camera.position.set(cam.target.x + r * Math.sin(cam.th) * cp, cam.target.y + r * Math.sin(cam.ph), cam.target.z + r * Math.cos(cam.th) * cp);
-    camera.lookAt(cam.target);
+    var t = cam.aim ? seen.copy(cam.target).lerp(cam.at, cam.aim) : cam.target; // Site: aim
+    camera.position.set(t.x + r * Math.sin(cam.th) * cp, t.y + r * Math.sin(cam.ph), t.z + r * Math.cos(cam.th) * cp);
+    camera.lookAt(t);
+  }
+  // A tall frame carries its caption under the machine, so the picture sits a little higher.
+  // (Site: and cam.shift moves it sideways.)
+  function lens() {
+    var x = -cam.shift * size.w, y = size.w < size.h * 1.1 ? Math.round(size.h * 0.06) : 0;
+    if (x || y) camera.setViewOffset(size.w, size.h, x, y, size.w, size.h); else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
   }
   function resize() {
     var w = canvas.clientWidth, h = canvas.clientHeight;
     if (!w || !h) return;
     if (w === size.w && h === size.h) return;
     size.w = w; size.h = h;
+    renderer.setPixelRatio(pixelRatio(w, h)); // Site
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
-    // A tall frame carries its caption under the machine, so the picture sits a little higher.
-    if (w < h * 1.1) camera.setViewOffset(w, h, 0, Math.round(h * 0.06), w, h); else camera.clearViewOffset();
-    camera.updateProjectionMatrix();
+    lens();
     backdrop.material.uniforms.uAspect.value = veil.material.uniforms.uAspect.value = w / h;
     fit(); setHover(null); requestFrame();
   }
 
   // ---------- motion ----------
-  var auto = { stopped: reduced, inside: false };
+  var auto = { stopped: reduced || opts.idle === false, inside: false }; // Site: opts.idle
+  // Site: the idle turn runs for IDLE seconds in all, slowing to a stop over the last 1.5, so nothing
+  // moves on its own for longer than five seconds (WCAG 2.2.2) and the scene stops drawing.
+  var IDLE = 5, idled = 0;
   var tween = null;     // camera re-frame
   var swap = null;      // veil dip between models
   var reveal = null;    // rings waking up, left to right
@@ -690,12 +767,20 @@ function createMacScene(T, canvas, opts) {
   function load(keyName, arriving) {
     if (hovered) setHover(null);
     focused = null; pendingHover = null;
-    if (mac) { scene.remove(mac.group); disposeObject(mac.group); }
-    mac = build(keyName); scene.add(mac.group); ringAnims = [];
+    if (mac) { scene.remove(mac.group); kit.disposeObject(mac.group); }
+    mac = kit.build(keyName, opts.plan); scene.add(mac.group); ringAnims = []; // Site: opts.plan
     fit();
+    // Site: the Mac a steered shot is for comes in with the shot's rings, and its camera on the shot. A
+    // shot handed back for another Mac (picked again under the veil) is let go.
+    var steered = !!steering && steering.model === keyName;
+    if (steering && !steered && steering.done) steering = null;
+    aimPoint(steered ? steering.face : 'back', cam.at);
+    if (steered) readyAs(steering.ready, false);
     onPorts(portList(), null);
     var rest = mac.model.rest;
-    if (arriving && !reduced) {
+    if (steered) {
+      take(steering); tween = null; reveal = null;
+    } else if (arriving && !reduced) {
       cam.th = rest.th - 0.6; cam.ph = rest.ph + 0.06; cam.mul = 1.12;
       tween = { t0: performance.now(), dur: 900, th0: cam.th, ph0: cam.ph, mul0: cam.mul, th1: rest.th, ph1: rest.ph };
       var tbs = mac.features.filter(function (f) { return f.ring; });
@@ -707,6 +792,7 @@ function createMacScene(T, canvas, opts) {
   }
   function setModel(keyName) {
     if (!MODELS[keyName]) return;
+    letGo(); // Site
     if (swap) {
       swap.key = keyName;
       // Picked again while the last pick fades in: dip back out from where the veil is.
@@ -739,9 +825,10 @@ function createMacScene(T, canvas, opts) {
     }
     if (tween) {
       busy = true;
-      var e = ease(Math.max(0, Math.min(1, (now - tween.t0) / tween.dur)));
-      var dth = tween.th1 - tween.th0;
-      cam.th = tween.th0 + dth * e; cam.ph = tween.ph0 + (tween.ph1 - tween.ph0) * e; cam.mul = tween.mul0 + (1 - tween.mul0) * e;
+      // Site: turnTo() brings its own easing and end distance; every other tween eases out to the fit.
+      var e = (tween.ease || ease)(Math.max(0, Math.min(1, (now - tween.t0) / tween.dur)));
+      var dth = tween.th1 - tween.th0, mul1 = tween.mul1 || 1;
+      cam.th = tween.th0 + dth * e; cam.ph = tween.ph0 + (tween.ph1 - tween.ph0) * e; cam.mul = tween.mul0 + (mul1 - tween.mul0) * e;
       if (e >= 1) {
         tween = null;
         if (pendingHover) { var shown = pendingHover; pendingHover = null; setHover(shown, true); }
@@ -775,17 +862,94 @@ function createMacScene(T, canvas, opts) {
     f.ring.geometry = ringGeometry(f.ringDims[0], f.ringDims[1], f.ringDims[2], f.ringDims[3], n);
     f.ring.material = n === 0 ? M.bridge : M.ready;
   }
-  function toggleReady(f) {
+  // Site: `quiet` (for steer) reports the change with no port to announce.
+  function toggleReady(f, quiet) {
     f.ready = !f.ready;
     ringAnims = ringAnims.filter(function (a) { return a.f !== f; });
     var to = f.ready ? 4 : 0;
     if (reduced) { setClosed(f, to); f.bloom.material.opacity = to === 4 ? look.bloom : 0; f.bloom.visible = to === 4; }
     else ringAnims.push({ f: f, from: f.closed, to: to, t0: performance.now() });
     requestFrame();
-    onPorts(portList(), info(f));
+    onPorts(portList(), quiet ? null : info(f));
   }
   function portList() {
     return mac ? mac.features.filter(function (f) { return f.kind === 'tb'; }).map(function (f) { return { id: f.id, name: f.name, ready: !!f.ready }; }) : [];
+  }
+
+  // ---------- steering (Site) ----------
+  // Site: for the scroll sequence in viewer.js. steer(shot) takes the camera and the rings over: a shot is
+  // { model, th, ph, mul, aim, face, shift, ready }: model the key of the Mac it is for; th, ph, mul, aim
+  // and shift as in cam above, with face ('back', 'left', 'right') the face whose Thunderbolt ports aim
+  // looks at; and ready the names of the Thunderbolt ports that are Ready for RDMA (every other one is in
+  // Thunderbolt Bridge). With `now` the camera is on the shot at once and the rings are set; otherwise the
+  // camera follows it with a short ease and each ring that changes plays its own animation. Changes are
+  // reported to onPorts with nothing to announce. While steered there is no idle turn, no tween and no
+  // hover. A shot for another Mac than the one on show waits for it: the caller swaps the model
+  // (setModel), the Mac on show holds still while the veil comes down, and the new one comes in on the
+  // shot with its rings (load). steer(null) hands the camera back once it has reached the last shot;
+  // anything the person does before then puts it there at once.
+  var steering = null;
+  function steer(shot, now) {
+    if (disposed || lost) return;
+    if (!shot) { if (steering) { steering.done = true; requestFrame(); } return; }
+    if (!steering) cam.th = shot.th + wrapAngle(cam.th - shot.th); // no turning back round a drag's extra turns
+    steering = shot;
+    auto.stopped = true; tween = null; pendingHover = null; focused = null;
+    if (hovered) setHover(null);
+    if (mac && mac.key === shot.model) {
+      if (now) take(shot);
+      readyAs(shot.ready, !now);
+      if (now) onPorts(portList(), null);
+    }
+    requestFrame();
+  }
+  function take(shot) {
+    cam.th = shot.th; cam.ph = shot.ph; cam.mul = shot.mul; cam.aim = shot.aim; cam.shift = shot.shift;
+    aimPoint(shot.face, cam.at);
+    lens();
+  }
+  // The middle of the Thunderbolt ports on `face`, or the middle of the Mac if it has none there.
+  function aimPoint(face, out) {
+    var on = mac ? mac.features.filter(function (f) { return f.kind === 'tb' && f.face === face; }) : [];
+    if (!on.length) return out.copy(cam.target);
+    out.set(0, 0, 0);
+    on.forEach(function (f) { out.add(f.pos); });
+    return out.divideScalar(on.length);
+  }
+  function readyAs(names, animate) {
+    mac.features.forEach(function (f) {
+      var want = names.indexOf(f.name) >= 0;
+      if (f.kind !== 'tb' || !!f.ready === want) return;
+      if (animate) { toggleReady(f, true); return; }
+      f.ready = want;
+      ringAnims = ringAnims.filter(function (a) { return a.f !== f; });
+      setClosed(f, want ? 4 : 0);
+      f.bloom.material.opacity = want ? look.bloom : 0; f.bloom.visible = want;
+    });
+  }
+  // Each frame the camera closes about 14% of the way to the shot (at 60 frames a second, a time constant
+  // of 110 ms), the point it aims at too; it reports whether it is still on its way. A shot for the next
+  // Mac leaves the camera where it is until that Mac is in.
+  var aimed = new T.Vector3();
+  function follow(dt) {
+    if (!mac || mac.key !== steering.model) return !!swap;
+    var k = 1 - Math.exp(-dt * 9), moving = false;
+    ['th', 'ph', 'mul', 'aim', 'shift'].forEach(function (name) {
+      var d = steering[name] - cam[name];
+      if (Math.abs(d) < 5e-4) cam[name] = steering[name];
+      else { cam[name] += d * k; moving = true; }
+    });
+    aimPoint(steering.face, aimed);
+    if (cam.at.distanceToSquared(aimed) < 1e-6) cam.at.copy(aimed);
+    else { cam.at.lerp(aimed, k); moving = true; }
+    lens();
+    if (!moving && steering.done) steering = null;
+    return moving;
+  }
+  // A shot handed back while its Mac is still on its way (the veil is down) stays for load() to take.
+  function letGo() {
+    if (!steering || !steering.done || (mac && mac.key !== steering.model)) return;
+    take(steering); steering = null;
   }
 
   // ---------- picking ----------
@@ -838,6 +1002,7 @@ function createMacScene(T, canvas, opts) {
   var drag = null;
   function pointerDown(ev) {
     if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+    letGo(); // Site
     try { canvas.setPointerCapture(ev.pointerId); } catch (e) { /* capture is best effort */ }
     drag = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, moved: 0 };
     // Any press ends the idle turn, a tap on touch included; otherwise the port just
@@ -858,7 +1023,7 @@ function createMacScene(T, canvas, opts) {
       }
       return;
     }
-    if (ev.pointerType === 'mouse') { auto.inside = true; if (!swap && !tween) setHover(pick(ev)); }
+    if (ev.pointerType === 'mouse') { auto.inside = true; if (!swap && !tween && !steering) setHover(pick(ev)); } // Site: steering
   }
   function pointerUp(ev) {
     if (!drag || ev.pointerId !== drag.id) return;
@@ -883,6 +1048,7 @@ function createMacScene(T, canvas, opts) {
     var turn = ev.key === 'ArrowLeft' ? 0.35 : ev.key === 'ArrowRight' ? -0.35 : 0;
     if (!turn) return;
     if (ev.preventDefault) ev.preventDefault();
+    letGo(); // Site
     auto.stopped = true; setHover(null); pendingHover = null;
     if (reduced) { cam.th += turn; requestFrame(); return; }
     tween = { t0: performance.now(), dur: 360, th0: cam.th, ph0: cam.ph, mul0: cam.mul, th1: cam.th + turn, ph1: cam.ph };
@@ -895,11 +1061,12 @@ function createMacScene(T, canvas, opts) {
   var focused = null, pendingHover = null;
   function findPort(id) {
     if (!mac) return null;
-    for (var i = 0; i < mac.features.length; i++) if (mac.features[i].id === id && mac.features[i].kind === 'tb') return mac.features[i];
+    for (var i = 0; i < mac.features.length; i++) if (mac.features[i].id === id && mac.features[i].ring) return mac.features[i]; // Site: a ringed Thunderbolt port (opts.plan)
     return null;
   }
   function wrapAngle(a) { a = (a + PI) % (2 * PI); if (a < 0) a += 2 * PI; return a - PI; }
   function focusPort(id) {
+    letGo(); // Site
     var f = swap ? null : findPort(id);
     pendingHover = null;
     if (!f) { if (focused && hovered === focused) setHover(null); focused = null; return; }
@@ -917,6 +1084,7 @@ function createMacScene(T, canvas, opts) {
     setHover(f, true);
   }
   function toggle(id) {
+    letGo(); // Site
     var f = swap ? null : findPort(id);
     if (!f) return;
     if (focused !== f) focusPort(id); // a press without focus first still faces it
@@ -932,8 +1100,12 @@ function createMacScene(T, canvas, opts) {
     if (disposed) return;
     var dt = last ? Math.min(0.05, (now - last) / 1000) : 0; last = now;
     var busy = step(now);
+    if (steering && follow(dt)) busy = true; // Site
     if (!auto.stopped && !auto.inside && !drag && !tween && !swap) {
-      cam.th += dt * 0.16; busy = true;
+      idled = Math.min(IDLE, idled + dt);
+      var slow = Math.min(1, (IDLE - idled) / 1.5); // Site
+      cam.th += dt * 0.16 * slow * slow * (3 - 2 * slow);
+      if (idled >= IDLE) auto.stopped = true; else busy = true;
       if (hovered) setHover(null); // a label cannot follow a turning port
     }
     placeCamera();
@@ -963,12 +1135,10 @@ function createMacScene(T, canvas, opts) {
     if (ro) ro.disconnect();
     if (io) io.disconnect();
     document.removeEventListener('visibilitychange', showing, false);
-    if (mac) disposeObject(mac.group);
-    Object.keys(ringCache).forEach(function (k) { ringCache[k].dispose(); });
-    Object.keys(M).forEach(function (k) { M[k].dispose(); });
+    if (mac) kit.disposeObject(mac.group);
+    kit.dispose(); // Site: the ring geometry, the materials, the textures and the environment
     backdrop.material.dispose(); veil.material.dispose(); quad.dispose();
     ground.geometry.dispose(); ground.material.dispose();
-    owned.forEach(function (t) { t.dispose(); });
     if (key.shadow.map) key.shadow.map.dispose();
     canvas.removeEventListener('webglcontextlost', contextLost, false);
     renderer.dispose();
@@ -982,13 +1152,46 @@ function createMacScene(T, canvas, opts) {
     }, 0);
   }
 
-  accent = opts.accent;
+  kit.setAccent(opts.accent);
   applyTheme(opts.theme);
   load(MODELS[opts.model] ? opts.model : 'studio', false);
+  if (opts.pose) { cam.th = opts.pose.th; cam.ph = opts.pose.ph; cam.mul = opts.pose.mul || 1; } // Site: opts.pose
   resize();
   requestFrame();
 
+  // Site: for the hero. turnTo() moves the camera to `pose` ({ th, ph, mul }) over `ms`, with `easing`
+  // (0..1 to 0..1) or the ease-out the other moves use. setReady() takes a Thunderbolt port out of the
+  // bridge or puts it back, with the ring's own animation, and no label or turn.
+  function turnTo(pose, ms, easing) {
+    if (disposed || lost) return;
+    if (reduced || !ms) { tween = null; cam.th = pose.th; cam.ph = pose.ph; cam.mul = pose.mul || 1; }
+    else tween = { t0: performance.now(), dur: ms, th0: cam.th, ph0: cam.ph, mul0: cam.mul, th1: pose.th, ph1: pose.ph, mul1: pose.mul || 1, ease: easing };
+    requestFrame();
+  }
+  function setReady(id, ready) {
+    var f = swap || disposed || lost ? null : findPort(id);
+    if (f && !!f.ready !== !!ready) toggleReady(f, true);
+  }
+  // Site: where a Thunderbolt port is on the canvas, in CSS pixels from its top left, with the camera at
+  // `pose` ({ th, ph, mul }; where it is now if none), and the way a cable leaves it on screen: its face's
+  // normal, projected, as a unit vector. { x, y, dx, dy }, or null. The camera is put back as it was.
+  function portAt(id, pose) {
+    var f = disposed || lost ? null : findPort(id);
+    if (!f) return null;
+    resize();
+    var was = { th: cam.th, ph: cam.ph, mul: cam.mul };
+    if (pose) { cam.th = pose.th; cam.ph = pose.ph; cam.mul = pose.mul || 1; }
+    placeCamera(); camera.updateMatrixWorld(); mac.group.updateMatrixWorld(true);
+    var a = f.group.localToWorld(new T.Vector3(0, 0, 0)).project(camera);
+    var b = f.group.localToWorld(new T.Vector3(0, 0, 1)).project(camera);
+    cam.th = was.th; cam.ph = was.ph; cam.mul = was.mul; placeCamera();
+    var dx = (b.x - a.x) * size.w / 2, dy = (a.y - b.y) * size.h / 2, n = Math.sqrt(dx * dx + dy * dy) || 1;
+    return { x: (a.x + 1) / 2 * size.w, y: (1 - a.y) / 2 * size.h, dx: dx / n, dy: dy / n };
+  }
+
   return {
+    turnTo: turnTo, setReady: setReady, portAt: portAt, // Site: the hero
+    steer: steer, // Site: the See it sequence
     setModel: setModel,
     setAccent: setAccent,
     setTheme: setTheme,
@@ -999,4 +1202,37 @@ function createMacScene(T, canvas, opts) {
     dispose: dispose,
     debug: function () { return { cam: cam, camera: camera, scene: scene, mac: mac, renderer: renderer, auto: auto, look: function () { return look; }, swap: function () { return swap; }, hovered: function () { return hovered; }, project: function (f) { return info(f); }, pose: function (th, ph) { auto.stopped = true; tween = null; cam.th = th; cam.ph = ph; requestFrame(); } }; }
   };
+}
+
+// Site: how many device pixels a canvas of w x h CSS px draws with: the screen's, up to 2, and no more
+// than keeps it under PIXELS in all (but never under 1). Only the See it viewer's frame, about 1280 x 850
+// at most, is that large; it draws at about 1.5 on a Retina screen, which keeps its share of the GPU's
+// memory near half (with 4x antialiasing, every pixel costs about 40 bytes).
+var pixelRatio = (function () {
+  'use strict';
+  var PIXELS = 2.4e6;
+  return function (w, h) {
+    var screen = Math.min(window.devicePixelRatio || 1, 2);
+    return Math.max(Math.min(screen, 1), Math.min(screen, Math.sqrt(PIXELS / Math.max(1, w * h))));
+  };
+})();
+
+// Site: three.js, assets/vendor/three.r128.min.js, is 600 KB, and hero.js, why3d.js and viewer.js all
+// want it. loadThree(src, done) asks for it once: done(true) once it is in, or done(false) if it does not
+// load, for every caller, however late it asks.
+function loadThree(src, done) {
+  'use strict';
+  if (window.THREE) { done(true); return; }
+  var script = document.querySelector('script[data-three]');
+  if (script && script.getAttribute('data-three') !== 'loading') { done(false); return; } // failed, or in without THREE
+  if (!script) {
+    script = document.createElement('script');
+    script.src = src;
+    script.setAttribute('data-three', 'loading');
+    script.addEventListener('load', function () { script.setAttribute('data-three', 'loaded'); });
+    script.addEventListener('error', function () { script.setAttribute('data-three', 'failed'); });
+    document.head.appendChild(script);
+  }
+  script.addEventListener('load', function () { done(!!window.THREE); });
+  script.addEventListener('error', function () { done(false); });
 }
