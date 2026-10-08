@@ -605,7 +605,31 @@ two animated Why diagrams (`site/tools/why.py`) and stamps the version of the
 newest released section of `CHANGELOG.md`; `python3 site/check.py` then checks
 the result. Both use only the Python standard library, and the same input
 gives byte-identical output. `site/README.md` covers the page, the build and
-where each asset comes from.
+where each asset comes from. The page runs: the hero, How it works, Why, See
+it, Then the other Mac, What it changes, Macs and Install, and the header's
+links follow that order.
+
+The motion is plain JavaScript and CSS, and only `transform`, `opacity` and the
+hero lanes' `stroke-dashoffset` move. Four scripts drive it: `motion.js` (the
+hero's opening cue, the section reveals and the pinned How it works story),
+`hero.js` (a Mac Studio in 3D that turns to its back as the logo's lanes run
+into its ports), `why3d.js` (the two Why diagrams in 3D) and `viewer.js` (the
+3D viewer, which See it first plays as a pinned scroll sequence through the Mac
+Studio, the MacBook Pro and the Mac mini, with the picker as its progress
+indicator). The 3D parts share `mac-scene.js`, the canvas's three.js scene
+split into a kit (`createMacKit`) and a stage (`createMacScene`), and with it
+one request for three.js; `motion.js` makes the one WebGL check: before the
+first paint from 1024 px without reduced motion, where the hero's layout
+depends on it, and otherwise when the first script asks. They hold at most
+three WebGL contexts (the hero, the viewer, and one for both Why diagrams),
+draw only while on screen with the tab showing, and stop drawing once nothing
+moves. The 3D hero is there from 1024 px; narrower, How it works, right under
+the hero, opens on the app's own picture of the Mac. Without JavaScript or
+WebGL the page is complete: the hero is the centred copy with the static lanes
+behind the headline, the diagrams are why.py's drawings and the viewer shows
+its fallback picture. With reduced motion the hero is the centred one, the Why
+diagrams hold one frame, See it is the plain viewer and How it works changes
+step at once.
 
 Nothing is fetched from another origin. The fonts, three.js r128 and the
 screenshots are served from the site, every URL on the page is relative (so

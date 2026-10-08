@@ -32,8 +32,11 @@
 <link rel="preload" href="assets/fonts/geist-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
+<script src="motion.js"></script>
 <script src="site.js" defer></script>
 <script src="mac-scene.js" defer></script>
+<script src="hero.js" defer></script>
+<script src="why3d.js" defer></script>
 <script src="viewer.js" defer></script>
 </head>
 <body>
@@ -44,9 +47,9 @@
 <a class="brand" href="#top"><img src="assets/icon-64.png" alt="" width="32" height="32"><span>RDMALink</span></a>
 <a class="gh-top" href="https://github.com/dev7a/rdmalink">GitHub</a>
 <nav class="nav" aria-label="Sections">
+<a href="#how">How it works</a>
 <a href="#why">Why</a>
 <a href="#see">See it</a>
-<a href="#how">How it works</a>
 <a href="#macs">Macs</a>
 <a href="#install">Install</a>
 <a class="gh-nav" href="https://github.com/dev7a/rdmalink">GitHub</a>
@@ -58,8 +61,24 @@
 <main>
 
 <section id="top" class="hero wrap">
+<div class="hero-copy">
 <div class="hero-eyebrow"><span class="dot" aria-hidden="true"></span><span>A small utility for Macs with Thunderbolt 5</span></div>
+<div class="hero-title">
+<svg class="hero-lanes" viewBox="0 0 1440 440" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+<defs>
+<linearGradient id="lanes-a" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1440" y2="0"><stop offset="0" class="ls-dim ls-off"></stop><stop offset="0.06" class="ls-dim"></stop><stop offset="0.3" class="ls-a-mid"></stop><stop offset="0.5" class="ls-a-hi ls-under"></stop><stop offset="0.8" class="ls-a-hi"></stop><stop offset="0.9" class="ls-a-end"></stop><stop offset="1" class="ls-a-end ls-off"></stop></linearGradient>
+<linearGradient id="lanes-b" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1440" y2="0"><stop offset="0" class="ls-dim ls-off"></stop><stop offset="0.06" class="ls-dim"></stop><stop offset="0.3" class="ls-b-mid"></stop><stop offset="0.5" class="ls-b-hi ls-under"></stop><stop offset="0.8" class="ls-b-hi"></stop><stop offset="0.9" class="ls-b-end"></stop><stop offset="1" class="ls-b-end ls-off"></stop></linearGradient>
+<linearGradient id="lanes-core" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1440" y2="0"><stop offset="0.5" class="ls-core ls-off"></stop><stop offset="0.8" class="ls-core"></stop><stop offset="0.9" class="ls-core"></stop><stop offset="1" class="ls-core ls-off"></stop></linearGradient>
+<linearGradient id="lanes-pulse" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="360" y2="0"><stop offset="0" class="ls-pulse ls-off"></stop><stop offset="0.5" class="ls-pulse"></stop><stop offset="1" class="ls-pulse ls-off"></stop></linearGradient>
+</defs>
+<g class="lane-halo"><path class="lane-a" d="M0 80H90C350 80 350 212 610 212H1440" pathLength="1"></path><path class="lane-b" d="M0 360H90C350 360 350 228 610 228H1440" pathLength="1"></path></g>
+<g class="lane-glow"><path class="lane-a" d="M0 80H90C350 80 350 212 610 212H1440" pathLength="1"></path><path class="lane-b" d="M0 360H90C350 360 350 228 610 228H1440" pathLength="1"></path></g>
+<g class="lane-body"><path class="lane-a" d="M0 80H90C350 80 350 212 610 212H1440" pathLength="1"></path><path class="lane-b" d="M0 360H90C350 360 350 228 610 228H1440" pathLength="1"></path></g>
+<g class="lane-core"><path class="lane-a" d="M0 80H90C350 80 350 212 610 212H1440" pathLength="1"></path><path class="lane-b" d="M0 360H90C350 360 350 228 610 228H1440" pathLength="1"></path></g>
+<g class="lane-pulse"><path class="pulse-glow" d="M0 212H360M0 228H360"></path><path class="pulse-core" d="M0 212H360M0 228H360"></path></g>
+</svg>
 <h1>Cable your Macs together without a&#160;loop.</h1>
+</div>
 <p class="hero-lede">With RDMALink you choose which Thunderbolt ports stay in Thunderbolt Bridge and which leave it. A port that leaves gets an IPv6 link-local address of its own, and you can cable it to another Mac for RDMA without creating a network loop.</p>
 <div class="cta">
 <a class="download" href="https://github.com/dev7a/rdmalink/releases/latest">
@@ -69,30 +88,84 @@
 <code class="cmd">brew install --cask dev7a/tap/rdmalink</code>
 </div>
 <p class="hero-meta">Free and open source · Signed and notarized by Apple · Version <!-- build:version --></p>
-<picture>
-<source media="(prefers-color-scheme: light)" srcset="assets/shots/1000/hub-light.jpg 1000w, assets/shots/hub-light.jpg 2000w" sizes="(min-width: 1200px) 1120px, calc(100vw - 32px)">
-<img class="shot hero-shot" src="assets/shots/hub-dark.jpg" srcset="assets/shots/1000/hub-dark.jpg 1000w, assets/shots/hub-dark.jpg 2000w" sizes="(min-width: 1200px) 1120px, calc(100vw - 32px)" width="2000" height="1433" alt="The RDMALink window on a Mac Studio: the back of the Mac in 3D with its Thunderbolt ports ringed, and under the heading “Five ports are ready for RDMA”, a list of every port and its state." decoding="async" fetchpriority="high">
-</picture>
+</div>
+<div class="hero-stage" aria-hidden="true" data-three-src="assets/vendor/three.r128.min.js"><canvas class="hero-canvas"></canvas></div>
+<svg class="hero-link" aria-hidden="true" focusable="false">
+<defs>
+<linearGradient id="link-a" gradientUnits="userSpaceOnUse"><stop class="ls-dim ls-off"></stop><stop class="ls-dim"></stop><stop class="ls-a-mid ls-under"></stop><stop class="ls-a-hi ls-under"></stop><stop class="ls-a-hi"></stop><stop class="ls-a-end"></stop></linearGradient>
+<linearGradient id="link-b" gradientUnits="userSpaceOnUse"><stop class="ls-dim ls-off"></stop><stop class="ls-dim"></stop><stop class="ls-b-mid ls-under"></stop><stop class="ls-b-hi ls-under"></stop><stop class="ls-b-hi"></stop><stop class="ls-b-end"></stop></linearGradient>
+<linearGradient id="link-core" gradientUnits="userSpaceOnUse"><stop class="ls-core ls-off"></stop><stop class="ls-core ls-off"></stop><stop class="ls-core ls-off"></stop><stop class="ls-core ls-off"></stop><stop class="ls-core"></stop><stop class="ls-core"></stop></linearGradient>
+</defs>
+<g class="lane-halo"><path class="lane-a" pathLength="1"></path><path class="lane-b" pathLength="1"></path></g>
+<g class="lane-glow"><path class="lane-a" pathLength="1"></path><path class="lane-b" pathLength="1"></path></g>
+<g class="lane-body"><path class="lane-a" pathLength="1"></path><path class="lane-b" pathLength="1"></path></g>
+<g class="lane-core"><path class="lane-a" pathLength="1"></path><path class="lane-b" pathLength="1"></path></g>
+<g class="link-pulse pulse-1"><path class="lane-a" pathLength="1"></path><path class="lane-b" pathLength="1"></path></g>
+<g class="link-pulse pulse-2"><path class="lane-a" pathLength="1"></path><path class="lane-b" pathLength="1"></path></g>
+<g class="link-pulse pulse-3"><path class="lane-a" pathLength="1"></path><path class="lane-b" pathLength="1"></path></g>
+<g class="link-pulse pulse-4"><path class="lane-a" pathLength="1"></path><path class="lane-b" pathLength="1"></path></g>
+</svg>
 </section>
 
 <div class="wrap"><div class="beam" aria-hidden="true"></div></div>
 
-<section id="why" class="section wrap" data-paused="false" aria-labelledby="why-title">
+<section id="how" class="section how wrap" aria-labelledby="how-title">
+<div class="how-stage">
+<div class="head" data-reveal>
+<div class="eyebrow">How it works</div>
+<h2 class="h2" id="how-title">Three steps for each cable.</h2>
+</div>
+<div class="grid-3">
+<article class="step panel" data-reveal>
+<picture>
+<source media="(prefers-color-scheme: light)" srcset="assets/shots/1000/choose-light.jpg 1000w, assets/shots/choose-light.jpg 2000w" sizes="(min-width: 1200px) and (min-height: 560px) and (min-aspect-ratio: 1/1) 900px, (min-width: 1024px) and (min-height: 560px) and (min-aspect-ratio: 1/1) 60vw, (min-width: 1200px) 410px, (min-width: 1024px) 30vw, calc(100vw - 60px)">
+<img class="shot" src="assets/shots/choose-dark.jpg" srcset="assets/shots/1000/choose-dark.jpg 1000w, assets/shots/choose-dark.jpg 2000w" sizes="(min-width: 1200px) and (min-height: 560px) and (min-aspect-ratio: 1/1) 900px, (min-width: 1024px) and (min-height: 560px) and (min-aspect-ratio: 1/1) 60vw, (min-width: 1200px) 410px, (min-width: 1024px) 30vw, calc(100vw - 60px)" width="2000" height="1433" alt="Step 1 of 3, “Which port should carry RDMA?”: the Mac Studio in 3D beside a list of its ports, with Identify Port… above the list." decoding="async">
+</picture>
+<div class="step-text">
+<div class="step-title"><span class="step-num">01</span><h3>Choose</h3></div>
+<p>Click the port on the picture of your Mac, or pick it from the list. Identify Port… finds the one your cable is in.</p>
+</div>
+</article>
+<article class="step panel" data-reveal>
+<picture>
+<source media="(prefers-color-scheme: light)" srcset="assets/shots/1000/review-light.jpg 1000w, assets/shots/review-light.jpg 2000w" sizes="(min-width: 1200px) and (min-height: 560px) and (min-aspect-ratio: 1/1) 900px, (min-width: 1024px) and (min-height: 560px) and (min-aspect-ratio: 1/1) 60vw, (min-width: 1200px) 410px, (min-width: 1024px) 30vw, calc(100vw - 60px)">
+<img class="shot" src="assets/shots/review-dark.jpg" srcset="assets/shots/1000/review-dark.jpg 1000w, assets/shots/review-dark.jpg 2000w" sizes="(min-width: 1200px) and (min-height: 560px) and (min-aspect-ratio: 1/1) 900px, (min-width: 1024px) and (min-height: 560px) and (min-aspect-ratio: 1/1) 60vw, (min-width: 1200px) 410px, (min-width: 1024px) 30vw, calc(100vw - 60px)" width="2000" height="1433" alt="“Here's what will change” for one port: save how to undo this, leave Thunderbolt Bridge, get its own network service, and turn IPv4 off with IPv6 link-local only, each with its before and after, above the Set Up Port button." loading="lazy" decoding="async">
+</picture>
+<div class="step-text">
+<div class="step-title"><span class="step-num">02</span><h3>Review</h3></div>
+<p>Every change with its before and after. Set Up Port asks for an administrator's password once.</p>
+</div>
+</article>
+<article class="step panel" data-reveal>
+<picture>
+<source media="(prefers-color-scheme: light)" srcset="assets/shots/1000/ready-light.jpg 1000w, assets/shots/ready-light.jpg 2000w" sizes="(min-width: 1200px) and (min-height: 560px) and (min-aspect-ratio: 1/1) 900px, (min-width: 1024px) and (min-height: 560px) and (min-aspect-ratio: 1/1) 60vw, (min-width: 1200px) 410px, (min-width: 1024px) 30vw, calc(100vw - 60px)">
+<img class="shot" src="assets/shots/ready-dark.jpg" srcset="assets/shots/1000/ready-dark.jpg 1000w, assets/shots/ready-dark.jpg 2000w" sizes="(min-width: 1200px) and (min-height: 560px) and (min-aspect-ratio: 1/1) 900px, (min-width: 1024px) and (min-height: 560px) and (min-aspect-ratio: 1/1) 60vw, (min-width: 1200px) 410px, (min-width: 1024px) 30vw, calc(100vw - 60px)" width="2000" height="1433" alt="“Back, far right is ready and waiting”: a checklist with RDMA over Thunderbolt on, the RDMA device ready and the other Mac not set up yet, and the What to Do on the Other Mac button." loading="lazy" decoding="async">
+</picture>
+<div class="step-text">
+<div class="step-title"><span class="step-num">03</span><h3>Ready</h3></div>
+<p>Once another Mac is connected, the port has its own link-local address. Copy it, then set up the other end.</p>
+</div>
+</article>
+</div>
+</div>
+</section>
+
+<section id="why" class="section wrap" data-paused="false" data-three-src="assets/vendor/three.r128.min.js" aria-labelledby="why-title">
 <div class="intro">
-<div class="head">
+<div class="head" data-reveal>
 <div class="eyebrow">Why</div>
 <h2 class="h2" id="why-title">With Thunderbolt Bridge, a second cable makes a loop.</h2>
 </div>
-<div class="leads">
+<div class="leads" data-reveal>
 <p class="lead">macOS puts all your Thunderbolt ports in one bridge, and the bridge passes traffic from each port on to the others. Join two Macs with two cables, or three Macs in a ring, and the same traffic can keep going round, using up processor time and slowing the network down.</p>
 <p class="lead"><a class="accent-link" href="https://developer.apple.com/documentation/technotes/tn3205-low-latency-communication-with-rdma-over-thunderbolt">Apple's technote TN3205</a> says to turn Thunderbolt Bridge off for Macs connected in a loop. RDMALink lets you choose instead: the ports you cable to other Macs leave the bridge, and the rest stay in it.</p>
 </div>
 </div>
-<div class="why-figs">
+<div class="why-figs" data-reveal>
 <!-- build:why-bridge -->
 <!-- build:why-rdmalink -->
 </div>
-<figure class="explainer panel">
+<figure class="explainer panel" data-reveal>
 <figcaption class="explainer-text">
 <span class="explainer-title">The app explains this too.</span>
 <span class="explainer-body">What This All Means, under the port list (or Help › RDMALink Help), draws both bridges with the RDMA port outside each one. It also says why two Macs should share one cable while their ports are still in the bridge.</span>
@@ -106,13 +179,13 @@
 
 <section id="see" class="section wrap" aria-labelledby="see-title">
 <div class="intro">
-<div class="head">
+<div class="head" data-reveal>
 <div class="eyebrow">See it</div>
 <h2 class="h2" id="see-title">The Macs it knows, port by port.</h2>
 </div>
-<p class="lead">Pick a Mac, drag to turn it, and hover over a port for its name. A ring of four arcs marks a Thunderbolt 5 port in Thunderbolt Bridge; a solid, brighter ring marks one set up for RDMA. Click a Thunderbolt port to see the change RDMALink makes.</p>
+<p class="lead" data-reveal>Pick a Mac, drag to turn it, and hover over a port for its name. A ring of four arcs marks a Thunderbolt 5 port in Thunderbolt Bridge; a solid, brighter ring marks one set up for RDMA. Click a Thunderbolt port to see the change RDMALink makes.</p>
 </div>
-<div class="viewer-block is-failed">
+<div class="viewer-block is-failed" data-reveal>
 <div class="legend">
 <span class="key"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect class="key-bridge" x="3" y="2" width="20" height="12" rx="6" fill="none" stroke-opacity="0.7" stroke-width="2" stroke-dasharray="8.59 4.83" stroke-dashoffset="7"></rect></svg>In Thunderbolt Bridge</span>
 <span class="key"><svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true"><rect class="key-ready" x="3" y="2" width="20" height="12" rx="6" fill-opacity="0.16" stroke-width="2"></rect></svg>Ready for RDMA</span>
@@ -129,15 +202,15 @@
 <div class="mv-label" hidden><span class="mv-label-title"></span><span class="mv-label-sub"><span class="mv-label-dot"></span><span class="mv-label-text"></span></span></div>
 <div class="mv-info mv-plate">
 <div data-info="studio">
-<div class="mv-info-title">Mac Studio <span>· M3 Ultra or M5 Ultra</span></div>
+<div class="mv-info-title">Mac Studio <span><span class="mv-sep">· </span>M3 Ultra or M5 Ultra</span></div>
 <div class="mv-info-sub">Six Thunderbolt 5 ports: four on the back, two on the front.</div>
 </div>
 <div data-info="mbp" hidden>
-<div class="mv-info-title">MacBook Pro 14-inch <span>· M4 or M5, Pro or Max</span></div>
+<div class="mv-info-title">MacBook Pro 14-inch <span><span class="mv-sep">· </span>M4 or M5, Pro or Max</span></div>
 <div class="mv-info-sub">Three Thunderbolt 5 ports: two on the left, one on the right.</div>
 </div>
 <div data-info="mini" hidden>
-<div class="mv-info-title">Mac mini <span>· M4 Pro or M5 Pro</span></div>
+<div class="mv-info-title">Mac mini <span><span class="mv-sep">· </span>M4 Pro or M5 Pro</span></div>
 <div class="mv-info-sub">Three Thunderbolt 5 ports on the back. The two on the front are USB-C, not Thunderbolt.</div>
 </div>
 </div>
@@ -169,69 +242,30 @@
 </div>
 </section>
 
-<section id="how" class="section how wrap" aria-labelledby="how-title">
-<div class="head">
-<div class="eyebrow">How it works</div>
-<h2 class="h2" id="how-title">Three steps for each cable.</h2>
-</div>
-<div class="grid-3">
-<article class="step panel">
-<picture>
-<source media="(prefers-color-scheme: light)" srcset="assets/shots/1000/choose-light.jpg 1000w, assets/shots/choose-light.jpg 2000w" sizes="(min-width: 1200px) 410px, (min-width: 1024px) 30vw, calc(100vw - 60px)">
-<img class="shot" src="assets/shots/choose-dark.jpg" srcset="assets/shots/1000/choose-dark.jpg 1000w, assets/shots/choose-dark.jpg 2000w" sizes="(min-width: 1200px) 410px, (min-width: 1024px) 30vw, calc(100vw - 60px)" width="2000" height="1433" alt="Step 1 of 3, “Which port should carry RDMA?”: the Mac Studio in 3D beside a list of its ports, with Identify Port… above the list." loading="lazy" decoding="async">
-</picture>
-<div class="step-text">
-<div class="step-title"><span class="step-num">01</span><h3>Choose</h3></div>
-<p>Click the port on the picture of your Mac, or pick it from the list. Identify Port… finds the one your cable is in.</p>
-</div>
-</article>
-<article class="step panel">
-<picture>
-<source media="(prefers-color-scheme: light)" srcset="assets/shots/1000/review-light.jpg 1000w, assets/shots/review-light.jpg 2000w" sizes="(min-width: 1200px) 410px, (min-width: 1024px) 30vw, calc(100vw - 60px)">
-<img class="shot" src="assets/shots/review-dark.jpg" srcset="assets/shots/1000/review-dark.jpg 1000w, assets/shots/review-dark.jpg 2000w" sizes="(min-width: 1200px) 410px, (min-width: 1024px) 30vw, calc(100vw - 60px)" width="2000" height="1433" alt="“Here's what will change” for one port: save how to undo this, leave Thunderbolt Bridge, get its own network service, and turn IPv4 off with IPv6 link-local only, each with its before and after, above the Set Up Port button." loading="lazy" decoding="async">
-</picture>
-<div class="step-text">
-<div class="step-title"><span class="step-num">02</span><h3>Review</h3></div>
-<p>Every change with its before and after. Set Up Port asks for an administrator's password once.</p>
-</div>
-</article>
-<article class="step panel">
-<picture>
-<source media="(prefers-color-scheme: light)" srcset="assets/shots/1000/ready-light.jpg 1000w, assets/shots/ready-light.jpg 2000w" sizes="(min-width: 1200px) 410px, (min-width: 1024px) 30vw, calc(100vw - 60px)">
-<img class="shot" src="assets/shots/ready-dark.jpg" srcset="assets/shots/1000/ready-dark.jpg 1000w, assets/shots/ready-dark.jpg 2000w" sizes="(min-width: 1200px) 410px, (min-width: 1024px) 30vw, calc(100vw - 60px)" width="2000" height="1433" alt="“Back, far right is ready and waiting”: a checklist with RDMA over Thunderbolt on, the RDMA device ready and the other Mac not set up yet, and the What to Do on the Other Mac button." loading="lazy" decoding="async">
-</picture>
-<div class="step-text">
-<div class="step-title"><span class="step-num">03</span><h3>Ready</h3></div>
-<p>Once another Mac is connected, the port has its own link-local address. Copy it, then set up the other end.</p>
-</div>
-</article>
-</div>
-</section>
-
 <section id="other-mac" class="section other wrap" aria-labelledby="other-title">
 <div class="intro">
-<div class="head">
+<div class="head" data-reveal>
 <div class="eyebrow">Then the other Mac</div>
 <h2 class="h2" id="other-title">RDMALink only changes the Mac it runs on.</h2>
 </div>
-<p class="lead">So each end of a cable is set up on its own Mac. What to Do on the Other Mac lists the steps and draws that Mac beside this one, with the cable between them. Pick Mac Studio, MacBook Pro or Mac mini. Until both ends are set up, keep that cable the only one between the pair; then plug in the next.</p>
+<p class="lead" data-reveal>So each end of a cable is set up on its own Mac. What to Do on the Other Mac lists the steps and draws that Mac beside this one, with the cable between them. Pick Mac Studio, MacBook Pro or Mac mini. Until both ends are set up, keep that cable the only one between the pair; then plug in the next.</p>
 </div>
 <div class="grid-3">
-<figure class="other-shot">
+<figure class="other-shot" data-reveal>
 <picture>
 <source media="(prefers-color-scheme: light)" srcset="assets/shots/1000/other-mac-studio-light.jpg 1000w, assets/shots/other-mac-studio-light.jpg 2000w" sizes="(min-width: 1200px) 410px, (min-width: 1024px) 30vw, 100vw">
 <img class="shot" src="assets/shots/other-mac-studio-dark.jpg" srcset="assets/shots/1000/other-mac-studio-dark.jpg 1000w, assets/shots/other-mac-studio-dark.jpg 2000w" sizes="(min-width: 1200px) 410px, (min-width: 1024px) 30vw, 100vw" width="2000" height="1433" alt="“Now the other Mac”, with a second Mac Studio drawn as a ghost, a cable to it from the chosen port, and the steps to follow over there." loading="lazy" decoding="async">
 </picture>
 <figcaption>Another Mac Studio</figcaption>
 </figure>
-<figure class="other-shot">
+<figure class="other-shot" data-reveal>
 <picture>
 <source media="(prefers-color-scheme: light)" srcset="assets/shots/1000/other-mac-macbookpro-light.jpg 1000w, assets/shots/other-mac-macbookpro-light.jpg 2000w" sizes="(min-width: 1200px) 410px, (min-width: 1024px) 30vw, 100vw">
 <img class="shot" src="assets/shots/other-mac-macbookpro-dark.jpg" srcset="assets/shots/1000/other-mac-macbookpro-dark.jpg 1000w, assets/shots/other-mac-macbookpro-dark.jpg 2000w" sizes="(min-width: 1200px) 410px, (min-width: 1024px) 30vw, 100vw" width="2000" height="1433" alt="“Now the other Mac”, with a MacBook Pro drawn as a ghost, a cable to it from the chosen port, and the steps to follow over there." loading="lazy" decoding="async">
 </picture>
 <figcaption>A MacBook Pro</figcaption>
 </figure>
-<figure class="other-shot">
+<figure class="other-shot" data-reveal>
 <picture>
 <source media="(prefers-color-scheme: light)" srcset="assets/shots/1000/other-mac-mini-light.jpg 1000w, assets/shots/other-mac-mini-light.jpg 2000w" sizes="(min-width: 1200px) 410px, (min-width: 1024px) 30vw, 100vw">
 <img class="shot" src="assets/shots/other-mac-mini-dark.jpg" srcset="assets/shots/1000/other-mac-mini-dark.jpg 1000w, assets/shots/other-mac-mini-dark.jpg 2000w" sizes="(min-width: 1200px) 410px, (min-width: 1024px) 30vw, 100vw" width="2000" height="1433" alt="“Now the other Mac”, with a Mac mini drawn as a ghost, a cable to it from the chosen port, and the steps to follow over there." loading="lazy" decoding="async">
@@ -242,24 +276,24 @@
 </section>
 
 <section id="changes" class="section changes wrap" aria-labelledby="changes-title">
-<div class="head">
+<div class="head" data-reveal>
 <div class="eyebrow">What it changes</div>
 <h2 class="h2" id="changes-title">It changes only the ports you choose, and it can undo that.</h2>
 </div>
 <div class="grid-2">
-<article class="change">
+<article class="change" data-reveal>
 <h3>Out of the bridge</h3>
 <p>The port leaves Thunderbolt Bridge. The bridge and its other ports stay as they are.</p>
 </article>
-<article class="change">
+<article class="change" data-reveal>
 <h3>Its own address</h3>
 <p>The port gets a network service of its own, with IPv4 off and IPv6 link-local only.</p>
 </article>
-<article class="change">
+<article class="change" data-reveal>
 <h3>Undo</h3>
 <p>Before it changes anything, it writes down how the port looked. Restore… puts it back.</p>
 </article>
-<article class="change">
+<article class="change" data-reveal>
 <h3>A private interface</h3>
 <p>Bridge membership has no public API, so RDMALink uses an undocumented one in macOS. If that is missing, the change is rolled back. On a Mac it doesn't recognize, it changes nothing.</p>
 </article>
@@ -267,12 +301,12 @@
 </section>
 
 <section id="macs" class="section macs wrap" aria-labelledby="macs-title">
-<div class="head">
+<div class="head" data-reveal>
 <div class="eyebrow">Macs</div>
 <h2 class="h2" id="macs-title">Works on Macs with Thunderbolt 5.</h2>
 </div>
 <div class="grid-3">
-<article class="mac panel">
+<article class="mac panel" data-reveal>
 <div class="mac-head">
 <h3>Mac Studio</h3>
 <ul class="chips" aria-label="Chips">
@@ -303,7 +337,7 @@
 </div>
 <p>Four Thunderbolt 5 ports on the back, plus two on the front on Ultra models.</p>
 </article>
-<article class="mac panel">
+<article class="mac panel" data-reveal>
 <div class="mac-head">
 <h3>Mac mini</h3>
 <ul class="chips" aria-label="Chips">
@@ -323,7 +357,7 @@
 </div>
 <p>Three Thunderbolt 5 ports, all on the back. The two on the front are USB-C.</p>
 </article>
-<article class="mac panel">
+<article class="mac panel" data-reveal>
 <div class="mac-head">
 <h3>MacBook Pro</h3>
 <ul class="chips" aria-label="Chips">
@@ -351,7 +385,7 @@
 <p>The 14-inch and the 16-inch each have three Thunderbolt 5 ports: two on the left, one on the right.</p>
 </article>
 </div>
-<div class="req">
+<div class="req" data-reveal>
 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle class="req-icon-line" cx="10" cy="10" r="8.25" stroke-width="1.5"></circle><path class="req-icon-line" d="M10 9v5" stroke-width="1.6" stroke-linecap="round"></path><circle class="req-icon-dot" cx="10" cy="6.2" r="1"></circle></svg>
 <div class="req-text">
 <p>RDMA over Thunderbolt needs Thunderbolt 5.</p>
@@ -361,7 +395,7 @@
 </section>
 
 <section id="install" class="section wrap" aria-labelledby="install-title">
-<div class="install panel">
+<div class="install panel" data-reveal>
 <img class="install-icon" src="assets/icon-512.png" alt="The RDMALink app icon." width="160" height="160" loading="lazy" decoding="async">
 <div class="install-body">
 <h2 id="install-title">Install</h2>

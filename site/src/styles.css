@@ -108,6 +108,10 @@
   --mv-dot-tb: #e4e5e8;
   --mv-dot-ready: rgb(96, 160, 255);
 
+  /* The hero's stage: the 3D scene's backdrop, the page's background at the rim and a lift in the middle. */
+  --stage-edge: var(--site-bg);
+  --stage-lift: #24262b;
+
   color-scheme: dark;
 }
 
@@ -180,6 +184,8 @@
     --mv-dot: #a1a3aa;
     --mv-dot-tb: #1c1d20;
     --mv-dot-ready: rgb(59, 133, 244);
+
+    --stage-lift: #ffffff;
 
     color-scheme: light;
   }
@@ -288,13 +294,7 @@ code { font: inherit; }
 .download:hover { color: #07080a; }
 .download:focus-visible { outline-offset: 3px; border-radius: 12px; }
 .hero .cmd { height: 52px; padding: 0 20px; background: var(--site-code-bg); font-size: 15px; }
-.hero-meta { font-size: 14px; color: var(--site-secondary); }
-.hero-shot {
-  width: 1120px; max-width: 100%;
-  margin-top: calc(16px + var(--fluid) * 32 / 720);        /* 16 → 48 */
-  border-radius: 16px;
-  box-shadow: var(--site-shot-shadow);
-}
+.hero-meta { font-size: 14px; color: var(--site-secondary); text-wrap: balance; }
 @media (max-width: 639px) {
   .hero { align-items: stretch; text-align: left; }
   /* Main's longer eyebrow wraps below about 380 px: balance the two lines, and keep the dot on the first. */
@@ -304,12 +304,212 @@ code { font: inherit; }
   .cta { flex-direction: column; align-items: stretch; gap: inherit; margin-top: 0; }
   .hero .cmd { height: auto; padding: 14px 16px; font-size: 13px; }
   .hero-meta { font-size: 13px; line-height: 1.5; }
-  .hero-shot { width: 100%; border-radius: 5px; }
 }
 @media (max-width: 480px) { .hero-lede { line-height: 1.55; } }
 
+/* The lanes: the app icon's two lanes (App/AppIcon.icon), drawn as light. They come in dim and apart from the
+   left, curve together, and run side by side to the right, cyan above and blue below, behind the headline,
+   between its first and second lines. The glow is four strokes of each path, widest and faintest first
+   (halo, glow, body, a white core on the bright part), not a blur filter. There are two drawings:
+   - svg.hero-lanes, behind the plain, centred headline: the hero below 1024 px, and the hero at any width
+     without JavaScript, with reduced motion, without WebGL, or in print. It is 1440 x 440 and made for the
+     desktop headline, 100 px: there one unit is one pixel. It scales with the headline (4.4em tall, in the
+     headline's font size) and is cropped at the sides (slice), so the pair stays between the first two
+     lines at every width. The pair, at y = 220, sits 0.98em (one line) below the top of the h1. Below
+     1200 px the drawing also slides left, by up to 216 px on phones, so the curves stay clear of the
+     eyebrow and the lede and a phone shows only the pair. The colours fade in from the left edge and out
+     at the right one, so the drawing has no hard edge where the page is wider than the hero (1440 px).
+   - svg.hero-link, from 1024 px beside the Mac (hero.js): the same lanes, built in CSS pixels for the
+     headline on the left, which come in from the window's left edge (hero.js moves the drawing out past
+     the hero's own edge where the window is wider) and run on out of the headline and into two of the
+     Mac's back Thunderbolt ports. hero.js sets the paths, the drawing's left and width, the colours' stops
+     and --k, the headline's font size over 100 px, which scales the strokes as the drawing above is
+     scaled. */
+.hero { isolation: isolate; }   /* the lanes' z-index: -1 puts them behind the hero's text, not behind the page */
+.hero-title { position: relative; align-self: stretch; }
+.hero-title h1 { margin-inline: auto; }
+.hero-lanes, .hero-link {
+  --lane-dim: #8fa6cf;
+  --lane-a-mid: #4e8fe8; --lane-a-hi: #18b8ff; --lane-a-end: #22c8ff;   /* the icon's top lane */
+  --lane-b-mid: #3a64d8; --lane-b-hi: #1f5bff; --lane-b-end: #2a70ff;   /* and its bottom lane */
+  --lane-core: #ffffff; --lane-core-o: 0.45;
+  --lane-pulse: #ffffff;
+  pointer-events: none;
+  fill: none; stroke-linecap: round;
+}
+.hero-lanes {
+  --lanes-shift: calc((720px - var(--fluid)) * 0.3);                    /* 216 → 0 */
+  position: absolute; z-index: -1;
+  left: calc(-1 * var(--gutter) - var(--lanes-shift));
+  width: calc(100% + 2 * var(--gutter) + var(--lanes-shift));
+  font-size: calc(54px + var(--fluid) * 46 / 720);                      /* the h1's */
+  top: calc(0.98em - 2.2em); height: 4.4em;
+}
+/* On the light ground the cyan is a step deeper, and the pulse is the blue of the lanes: white would not show. */
+@media (prefers-color-scheme: light) {
+  .hero-lanes, .hero-link { --lane-a-hi: #0ea4f0; --lane-a-end: #17aef6; --lane-pulse: #1f6bff; }
+}
+@media (forced-colors: active) { .hero-lanes, .hero-link { display: none !important; } }
+:is(.hero-lanes, .hero-link) .ls-dim { stop-color: var(--lane-dim); stop-opacity: 0.4; }
+:is(.hero-lanes, .hero-link) .ls-a-mid { stop-color: var(--lane-a-mid); stop-opacity: 0.8; }
+:is(.hero-lanes, .hero-link) .ls-a-hi { stop-color: var(--lane-a-hi); }
+:is(.hero-lanes, .hero-link) .ls-a-end { stop-color: var(--lane-a-end); }
+:is(.hero-lanes, .hero-link) .ls-b-mid { stop-color: var(--lane-b-mid); stop-opacity: 0.85; }
+:is(.hero-lanes, .hero-link) .ls-b-hi { stop-color: var(--lane-b-hi); }
+:is(.hero-lanes, .hero-link) .ls-b-end { stop-color: var(--lane-b-end); }
+:is(.hero-lanes, .hero-link) .ls-under { stop-opacity: 0.5; }   /* half strength behind the middle of the headline */
+:is(.hero-lanes, .hero-link) .ls-core { stop-color: var(--lane-core); stop-opacity: var(--lane-core-o); }
+:is(.hero-lanes, .hero-link) .ls-pulse { stop-color: var(--lane-pulse); }
+:is(.hero-lanes, .hero-link) .ls-off { stop-opacity: 0; }
+.hero-lanes .lane-a { stroke: url(#lanes-a); }
+.hero-lanes .lane-b { stroke: url(#lanes-b); }
+.hero-link .lane-a { stroke: url(#link-a); }
+.hero-link .lane-b { stroke: url(#link-b); }
+.lane-halo { stroke-width: 28px; opacity: 0.05; }
+.lane-glow { stroke-width: 10px; opacity: 0.22; }
+.lane-body { stroke-width: 4px; }
+.hero-lanes .lane-core path { stroke: url(#lanes-core); stroke-width: 1.25px; }
+.hero-lanes .lane-pulse { opacity: 0; }   /* seen only while it runs */
+.hero-lanes .pulse-glow { stroke: url(#lanes-pulse); stroke-width: 18px; opacity: 0.3; }
+.hero-lanes .pulse-core { stroke: url(#lanes-pulse); stroke-width: 2.5px; }
+.hero-link .lane-halo { stroke-width: calc(28px * var(--k, 1)); }
+.hero-link .lane-glow { stroke-width: calc(10px * var(--k, 1)); }
+.hero-link .lane-body { stroke-width: calc(4px * var(--k, 1)); }
+.hero-link .lane-core path { stroke: url(#link-core); stroke-width: calc(1.25px * var(--k, 1)); }
+/* The pulse is four dashes of each lane's own path that hero.js runs along it, so it follows the curves,
+   all centred on one point: the longer a dash, the wider and fainter it is (hero.js has the lengths), so
+   the pulse is brightest in the middle and fades out at both ends. Seen only while it runs. */
+.hero-link .link-pulse path { stroke: var(--lane-pulse); opacity: 0; }
+.hero-link .pulse-1 { stroke-width: calc(16px * var(--k, 1)); opacity: 0.1; }
+.hero-link .pulse-2 { stroke-width: calc(9px * var(--k, 1)); opacity: 0.18; }
+.hero-link .pulse-3 { stroke-width: calc(4.5px * var(--k, 1)); opacity: 0.45; }
+.hero-link .pulse-4 { stroke-width: calc(2.25px * var(--k, 1)); }
+
+/* The hero's stage (hero.js): the Mac Studio in 3D, beside the copy. It is there only on a screen 1024 px
+   and wider, under html.gl (motion.js: the browser has WebGL, known before the first paint), without
+   reduced motion, and while hero.js has not marked the hero .is-static (three.js did not load, the
+   context was lost). Narrower, the copy takes the width, and How it works, right under the hero, opens
+   on the app's own picture of the same Mac. Otherwise .hero-copy is display: contents and the hero is
+   the plain one above: the copy, centred, with the static lanes behind the headline.
+   The stage's pool of light is the scene's backdrop (mac-scene.js, backFrag) drawn in CSS, so it is there
+   before three.js is: a circle 0.62 of the stage's height in radius, centred 56% down, from --stage-lift
+   in the middle to --stage-edge (the page's background) at the rim, eased by smoothstep squared. Its
+   closest side is 0.44 of the height away, so the rim is at 140.91%. hero.js gives the scene the same two
+   colours, and the canvas fades in over the pool when the turn starts: only the Mac appears. */
+.hero-copy { display: contents; }
+.hero-stage, .hero-link { display: none; }
+@media screen and (prefers-reduced-motion: no-preference) {
+  .hero-stage::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(circle closest-side at 50% 56%,
+      var(--stage-lift) 0%,
+      color-mix(in srgb, var(--stage-lift) 94.5%, var(--stage-edge)) 14.09%,
+      color-mix(in srgb, var(--stage-lift) 80.3%, var(--stage-edge)) 28.18%,
+      color-mix(in srgb, var(--stage-lift) 61.5%, var(--stage-edge)) 42.27%,
+      color-mix(in srgb, var(--stage-lift) 42%, var(--stage-edge)) 56.36%,
+      color-mix(in srgb, var(--stage-lift) 25%, var(--stage-edge)) 70.45%,
+      color-mix(in srgb, var(--stage-lift) 12.4%, var(--stage-edge)) 84.55%,
+      color-mix(in srgb, var(--stage-lift) 4.7%, var(--stage-edge)) 98.64%,
+      color-mix(in srgb, var(--stage-lift) 1.1%, var(--stage-edge)) 112.73%,
+      var(--stage-edge) 140.91%);
+  }
+  /* The canvas's edges are feathered: mid-turn the contact shadow reaches past the frame, and the backdrop
+     alone cannot hide where it is cut. The Mac itself stays clear of the feather. */
+  .hero-canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+    opacity: 0; transition: opacity 1.4s cubic-bezier(0.4, 0, 0.2, 1);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent), linear-gradient(transparent, #000 6%, #000 94%, transparent);
+    -webkit-mask-composite: source-in;
+    mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent), linear-gradient(transparent, #000 6%, #000 94%, transparent);
+    mask-composite: intersect;
+  }
+  .hero-stage.is-on .hero-canvas { opacity: 1; }
+}
+/* From 1024 px: the copy on the left, the stage on the right, and the lanes over the stage and under the
+   copy, from the headline into the Mac. The columns are even up to 1199 px, so the eyebrow keeps to one
+   line; from 1200 px the stage takes a little more. The lanes are hidden until hero.js has built them and
+   starts to draw them in (.is-linked). */
+@media screen and (prefers-reduced-motion: no-preference) and (min-width: 1024px) {
+  html.gl .hero:not(.is-static) {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "copy stage";
+    align-items: center; gap: 0 32px;
+    padding-top: 40px;
+    text-align: left;
+  }
+  html.gl .hero:not(.is-static) .hero-copy {
+    grid-area: copy; position: relative; z-index: 2;
+    display: flex; flex-direction: column; align-items: flex-start;
+    gap: calc(22px + var(--fluid) * 6 / 720);              /* as the plain hero's */
+  }
+  html.gl .hero:not(.is-static) .hero-stage {
+    display: block; position: relative; grid-area: stage; width: 100%;
+    height: clamp(440px, 100svh - 210px, 760px);
+    pointer-events: none;
+  }
+  html.gl .hero:not(.is-static) h1 { font-size: clamp(60px, 6.4vw, 96px); margin-inline: 0; }
+  html.gl .hero:not(.is-static) .hero-lanes { display: none; }
+  html.gl .hero:not(.is-static) .hero-link {
+    display: block; position: absolute; z-index: 1; left: 0; top: 0; width: 100%; height: 0;
+    visibility: hidden;
+  }
+  html.gl .hero.is-linked:not(.is-static) .hero-link { visibility: visible; }
+  html.gl .hero:not(.is-static) .hero-lede { font-size: 19px; }
+  html.gl .hero:not(.is-static) .cta { justify-content: flex-start; }
+}
+@media screen and (prefers-reduced-motion: no-preference) and (min-width: 1200px) {
+  html.gl .hero:not(.is-static) { grid-template-columns: minmax(0, 11fr) minmax(0, 13fr); }
+}
+/* In the even columns the lanes leave the headline for the Mac across the lede's line ends: keep them clear. */
+@media screen and (prefers-reduced-motion: no-preference) and (min-width: 1024px) and (max-width: 1199px) {
+  html.gl .hero:not(.is-static) .hero-lede { max-width: calc(100% - 48px); }
+}
+
+/* The hero's opening. motion.js adds html.hero-go once the DOM is ready, the headline's font has loaded
+   (700 ms at most) and the tab is showing; until then, under html.js and without reduced motion, the parts
+   below wait unseen. Then:
+     0    → 1.26 s  the eyebrow, the headline, the lede, the buttons and the line under them fade up 18 px,
+                    one after another, while the stage's pool of light comes up (1.6 s);
+   and in the plain hero the lanes behind the headline fade in (0.4 s); where it is plain only for being
+   narrower than 1024 px, they also draw in from the left (1 s, stroke-dashoffset on pathLength 1) and a
+   soft pulse of light runs once along the pair (0.8 → 1.55 s). From 1024 px hero.js plays the rest, once
+   three.js is in and the stage is in view: the Mac turns (2.8 s) while the lanes draw in to its ports with the same easing, the
+   ports leave the bridge as the lanes arrive, and a pulse runs along the lanes into them (1.1 s).
+   The fills are backwards only: when an animation ends, nothing it set stays behind. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  html.js:not(.hero-go) :is(.hero-eyebrow, .hero-title h1, .hero-lede, .hero .cta, .hero-meta, .hero-lanes),
+  html.js:not(.hero-go) .hero-stage::before { opacity: 0; }
+
+  html.hero-go :is(.hero-eyebrow, .hero-title h1, .hero-lede, .hero .cta, .hero-meta) {
+    animation: hero-rise 0.8s cubic-bezier(0.22, 0.61, 0.36, 1) var(--hero-delay) backwards;
+  }
+  .hero-eyebrow { --hero-delay: 0.08s; }
+  .hero-title h1 { --hero-delay: 0.16s; }
+  .hero-lede { --hero-delay: 0.28s; }
+  .hero .cta { --hero-delay: 0.38s; }
+  .hero-meta { --hero-delay: 0.46s; }
+  html.hero-go .hero-stage::before { animation: hero-fade 1.6s cubic-bezier(0.4, 0, 0.2, 1) 0.1s backwards; }
+
+  html.hero-go .hero-lanes { animation: hero-fade 0.4s ease-out backwards; }
+  html.hero-go .hero:not(.is-static) .hero-lanes g:not(.lane-pulse) path { animation: lane-draw 1s cubic-bezier(0.45, 0, 0.25, 1) backwards; }
+  html.hero-go .hero:not(.is-static) .hero-lanes .lane-pulse { animation: lane-pulse 0.75s cubic-bezier(0.35, 0, 0.25, 1) 0.8s backwards; }
+}
+@keyframes hero-fade { from { opacity: 0; } }
+@keyframes hero-rise { from { opacity: 0; transform: translateY(18px); } }
+@keyframes lane-draw {
+  from { stroke-dasharray: 1 2; stroke-dashoffset: 1.02; }
+  to { stroke-dasharray: 1 2; stroke-dashoffset: 0; }
+}
+/* The pulse is 360 units long with its brightest point in the middle; it travels from where the lanes meet
+   (x = 610) to x = 1340, near the right end. In an SVG, CSS pixels are the drawing's units. */
+@keyframes lane-pulse {
+  0% { opacity: 0; transform: translateX(430px); }
+  25%, 70% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(1160px); }
+}
 .beam {
-  position: relative; /* drawn above the hero screenshot's shadow, as on the canvas */
   margin-top: calc(64px + var(--fluid) * 56 / 720);        /* 64 → 120 */
   height: 4px; border-radius: 2px;
   background: linear-gradient(90deg, var(--accent-clear) 0%, var(--accent) 14%, var(--beam-middle) 50%, var(--accent) 86%, var(--accent-clear) 100%);
@@ -320,7 +520,14 @@ code { font: inherit; }
 /* ---------- sections ---------- */
 
 .section { padding-top: var(--section-top); display: flex; flex-direction: column; gap: var(--section-gap); }
-#why { padding-top: calc(64px + var(--fluid) * 56 / 720); }
+/* How it works comes right after the beam, so its top is the beam's own margin. Its story (below) reads
+   --section-top as the section's padding. A link to #how lands a little way into that padding, so the
+   beam's glow (its spread and blur: 22 → 34 px) stays above the screen; where the story pins, motion.js
+   sets the landing instead. */
+#how {
+  --section-top: calc(64px + var(--fluid) * 56 / 720);          /* 64 → 120 */
+  scroll-margin-top: calc(-24px - var(--fluid) * 12 / 720);     /* -24 → -36 */
+}
 /* A section's eyebrow and heading, and beside them (desktop) or under them its lead paragraphs. */
 .intro { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 80px; align-items: end; }
 .head { display: flex; flex-direction: column; gap: calc(24px - var(--fluid) * 6 / 720); }   /* 24 → 18 */
@@ -348,6 +555,20 @@ code { font: inherit; }
   .h2 { letter-spacing: 0; }
 }
 
+/* Every section after the hero fades up as it comes into view: its heading, its lead and its main blocks,
+   each marked [data-reveal]. motion.js sets html.js before the first paint and gives a block .is-in when
+   it comes into view; --reveal-delay staggers blocks that come in together. Until then a block is clear
+   and 16 px low. Without JavaScript, with reduced motion, or in print, nothing is hidden. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  html.js [data-reveal] {
+    transition: opacity 0.7s cubic-bezier(0.22, 0.61, 0.36, 1), transform 0.7s cubic-bezier(0.22, 0.61, 0.36, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+  html.js [data-reveal]:not(.is-in) { opacity: 0; transform: translateY(16px); }
+  /* Keyboard focus can reach a link before its block has come in: show the block, and the focus ring, now. */
+  html.js [data-reveal]:focus-within { opacity: 1; transform: none; transition-duration: 0.2s; transition-delay: 0s; }
+}
+
 /* ---------- why ---------- */
 
 .why-figs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
@@ -362,6 +583,53 @@ code { font: inherit; }
 .why-title { font-size: 16px; font-weight: 600; color: var(--site-title); }
 .why-caption { font-size: 15px; color: var(--site-secondary); }
 @media (max-width: 1023px) { .why-figs { grid-template-columns: minmax(0, 1fr); } }
+/* The diagrams in 3D (why3d.js): a stage takes the drawing's place once the figure is .is-3d, in a figure
+   whose drawing is at least 360 px wide (why3d.js, NARROW): narrower, on a phone, the 3D would be too
+   small to read and its labels would crowd it, so the phone drawing stays. Its labels are HTML, placed
+   by why3d.js.
+   The stage has a height of its own rather than a shape, so it stays close to the drawing's 240 px:
+   about 245 px in the desktop columns (562 px wide), 280 px at most in one wide column, 190 px at least.
+   While the 3D is on its way (#why.why-3d-soon, set by why3d.js where WebGL is likely), the drawing
+   already takes that height, centred in it, so nothing below moves when the 3D takes its place. */
+.why-fig { --why-stage-h: 245px; --why-stage-h: clamp(190px, 124px + 21.6cqi, 280px); }
+/* The stage runs into the figure's padding, so the Macs run off at the panel's edges; why3d.js keeps the
+   cables and the labels within the drawing's width. */
+.why-stage { display: none; position: relative; height: var(--why-stage-h); margin-inline: calc(-1 * var(--why-pad)); }
+@container (min-width: 360px) {
+  .why-3d-soon .why-fig .why-wide, .why-3d-soon .why-fig .why-narrow { height: var(--why-stage-h); }
+  .why-fig.is-3d .why-stage { display: block; }
+  .why-fig.is-3d .why-wide, .why-fig.is-3d .why-narrow { display: none; }
+}
+/* Its sides are feathered, as the hero's canvas is, so a Mac that runs off the panel's edge fades out
+   rather than looking cut off. */
+.why-canvas {
+  position: absolute; inset: 0; display: block; width: 100%; height: 100%;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+}
+/* why3d.js keeps every label inside the frame, but places them again only when the figure is on screen:
+   after a resize off screen a label can be left past the frame's edge until then, so the frame clips. */
+.why-tags { position: absolute; inset: 0; overflow: hidden; pointer-events: none; font-family: var(--mono); }
+.why-tag, .why-count { position: absolute; left: 0; top: 0; white-space: nowrap; }
+.why-tag { font-size: 12px; line-height: 1.2; color: var(--site-muted); }
+.why-tag-mac { font-size: 13px; }
+/* The interfaces' names, bridge0 and the fe80:: addresses, sit on the Macs or by the cables: a solid chip
+   in the panel's colour, with the secondary text tone, keeps them legible over anything (#a1a3aa on
+   #16171a is 7.1:1, #5b5e66 on #ffffff 6.5:1). */
+.why-tag-bridge, .why-tag-addr {
+  padding: 2px 6px; border-radius: 6px;
+  background: var(--site-panel); color: var(--site-secondary);
+  border: 1px solid var(--site-panel-line);
+}
+.why-count { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.why-num { min-height: 28px; font-size: 28px; font-weight: 500; line-height: 1; color: var(--site-loop-text); }
+.why-count-right .why-num { color: var(--accent-text); }
+.why-going { font-size: 12px; color: var(--site-secondary); }
+@container (max-width: 479.98px) {
+  .why-tag, .why-tag-mac, .why-going { font-size: 11px; }
+  .why-tag-bridge, .why-tag-addr { padding: 1px 5px; border-radius: 5px; }
+  .why-num { min-height: 24px; font-size: 24px; }
+}
 @media (max-width: 480px) {
   .why-figs { margin-top: 8px; }
   .why-fig { border-radius: 16px; }
@@ -496,6 +764,90 @@ code { font: inherit; }
 /* Below 360 px the compact hint takes two lines: move the caption up to keep the canvas's 8 px gap. */
 @media (max-width: 359px) { .mv-info { bottom: 50px; } }
 
+/* The sequence. At 1024 x 600 and larger, with motion, once viewer.js has marked the section .is-scroll
+   (it does when WebGL is there): the section is 3.8 viewports tall, and .viewer-block, the stage, is
+   pinned for 2.8 of them while the scroll shows the Mac Studio, the MacBook Pro and the Mac mini
+   (viewer.js). The intro shares the stage's grid area and is pinned with it, on the frame's left beside
+   the Mac, so it never crosses the frame's edge where the frame is shorter than the window; viewer.js
+   fades it out as the Mac turns away from it. It lets clicks through to the picker under it, and,
+   faded out, to the whole frame. The
+   captions over the stage, shown by its data-caption, are the legend's two lines on the Mac Studio and
+   the frame's own caption (.mv-info) on the other two. While the stage is .is-driven the picker stays, as
+   a progress indicator, the viewer's other controls are hidden and the canvas takes no pointer; a control
+   reached by the keyboard ends the sequence (viewer.js). The frame keeps the wide layout down to 1024 px.
+   The frame fills the stage unless that would make it narrower than 3:2; then it is shorter, and centred.
+   The scene fits the Mac to the frame's height and shifts it by a share of its width, so at 3:2 and wider
+   the words over it have room if they scale with its width, through container units: the intro takes the
+   left 44% (the Mac starts at about 48%), its heading at most 64 px, and the captions stay inside the
+   left 35% (the shots in viewer.js keep every Mac, close up, to the right of it). */
+@media screen and (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  #see.is-scroll { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 380svh; gap: 0; }
+  #see.is-scroll > .intro, #see.is-scroll > .viewer-block { grid-area: 1 / 1; align-self: start; }
+  #see.is-scroll > .intro {
+    position: sticky; top: 0; z-index: 1; height: 100svh; width: 44%; padding-left: 56px;
+    display: flex; flex-direction: column; justify-content: center; align-items: stretch; gap: 24px;
+    container-type: inline-size; pointer-events: none;
+  }
+  #see.is-scroll > .intro > * { pointer-events: auto; }
+  #see.is-scroll > .intro.is-gone > * { pointer-events: none; }   /* faded out (viewer.js) */
+  #see.is-scroll > .intro .h2 { font-size: min(64px, 15cqw); }
+  #see.is-scroll > .viewer-block {
+    position: sticky; top: 0; height: 100svh; padding: 24px 0; gap: 0; justify-content: center;
+    container-type: inline-size;
+  }
+  #see.is-scroll .mv-root { flex: none; height: min(100%, 100cqw * 2 / 3); aspect-ratio: auto; border-radius: 18px; }
+  #see.is-scroll .mv-canvas { border-radius: 17px; }
+  #see.is-scroll .mv-picker { top: 20px; }
+  #see.is-scroll .mv-seg { min-height: 34px; padding: 0 16px; font-size: 14px; }
+  #see.is-scroll .mv-info { left: 28px; right: auto; bottom: 26px; align-items: flex-start; text-align: left; }
+  #see.is-scroll .mv-info-title { font-size: 15px; }
+  #see.is-scroll .mv-info-sub { font-size: 13px; }
+  #see.is-scroll .mv-legend { display: flex; }
+  #see.is-scroll .mv-hint-compact { display: none; }
+
+  #see.is-scroll :is(.mv-picker, .mv-info, .mv-legend) { transition: opacity 0.4s ease; }
+  #see.is-scroll .is-driven :is(.mv-info, .mv-legend) { opacity: 0; pointer-events: none; }
+  #see.is-scroll .is-driven .mv-canvas { pointer-events: none; }
+
+  /* The MacBook Pro's and the Mac mini's caption: the frame's own (.mv-info), where the legend's lines sit
+     and at their size, its chips and its sentence under the name. It is laid out there for as long as the
+     stage is driven, so it never moves while it shows; at the hand-back it has faded out, and it comes
+     back in its own place. No plate: nothing runs under it there. */
+  #see.is-scroll .is-driven .mv-info { left: 56px; right: auto; top: 50%; bottom: auto; translate: 0 -50%; width: calc(35cqw - 56px); }
+  #see.is-scroll .is-driven .mv-info::before { display: none; }
+  #see.is-scroll .is-driven .mv-info > div { gap: 0.8em; }
+  #see.is-scroll .is-driven .mv-info-title {
+    display: flex; flex-direction: column; gap: 0.3em;
+    font-family: var(--serif); font-size: min(44px, 3.4cqw); font-weight: 400; line-height: 1.1; color: var(--site-heading);
+  }
+  #see.is-scroll .is-driven :is(.mv-info-title span, .mv-info-sub) { font-family: var(--sans); font-size: clamp(14px, 1.3cqw, 17px); line-height: 1.45; }
+  #see.is-scroll .is-driven .mv-info-title .mv-sep { display: none; }
+  #see.is-scroll .is-driven[data-caption="info"] .mv-info { opacity: 1; }
+  #see.is-scroll .is-cut .mv-info { transition: none; }
+
+  /* The captions: a line comes up when its moment comes; once both are up, the bridge's steps back. */
+  #see.is-scroll .legend {
+    position: absolute; z-index: 1; left: 56px; top: 50%; translate: 0 -50%;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 0.4em;
+    font-family: var(--serif); font-size: min(44px, 3.4cqw);
+    line-height: 1.1; color: var(--site-heading); pointer-events: none;
+  }
+  #see.is-scroll .legend .key {
+    gap: 0.4em; opacity: 0; visibility: hidden; transform: translateY(14px);
+    transition: opacity 0.45s ease, transform 0.6s cubic-bezier(0.22, 0.61, 0.36, 1), visibility 0s linear 0.6s;
+  }
+  #see.is-scroll .legend svg { width: 1.05em; height: 0.64em; }
+  #see.is-scroll [data-caption="bridge"] .key:first-child,
+  #see.is-scroll [data-caption="ready"] .key {
+    opacity: 1; visibility: visible; transform: none; transition-delay: 0s;
+  }
+  #see.is-scroll [data-caption="ready"] .key:first-child { opacity: 0.55; }   /* 3:1 or more, as large text, in both themes */
+}
+/* On the frame's light ground the eyebrow takes one more 5% step toward the ink: 4.6:1 on #efefec. */
+@media screen and (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) and (prefers-color-scheme: light) {
+  #see.is-scroll .eyebrow { color: rgb(51, 106, 188); }
+}
+
 /* ---------- how it works ---------- */
 
 .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
@@ -526,6 +878,150 @@ code { font: inherit; }
 @media (max-width: 480px) {
   .how .grid-3 { gap: 14px; }
   .step { border-radius: 16px; }
+}
+
+/* The story. At 1024 px and wider, on a landscape screen at least 560 px tall, once motion.js has marked the
+   section .is-story, the section is one screen that stays put while the reader scrolls through its three
+   steps. (A portrait screen keeps the cards: there the frame could fill only a third of the height.)
+   .how-stage (the heading and the steps; display: contents everywhere else, so the cards keep the
+   section's flex layout) is sticky. Under it, the ::after adds three slots of --how-step to the section's
+   height: that is how far the stage stays pinned, a step a slot. motion.js adds an empty .how-track
+   with a slot for each step, placed so that the top of slot k reaches the middle of the viewport (where
+   motion.js looks) when the stage has been pinned for k slots; the step whose slot reached it last is
+   .is-active.
+   Each article and its .step-text become display: contents, so the pictures, titles and paragraphs are
+   grid items of .grid-3 and the markup, with its reading order (picture, title, text, step by step),
+   stays as it is.
+   On the left, the three titles are stacked as a stepper with the active step's paragraph under its
+   title. All three paragraphs share one slot below the titles (the tallest decides its height, --how-p),
+   and transforms move things into place: the titles after the active one go down by the active
+   paragraph's height (--how-pa), and the slot comes up by a title (--how-t) for each title after the
+   active one. motion.js measures all three. Nothing changes size when the step changes, so nothing is
+   laid out again. The paragraphs that do not show take no pointer, so a drag selects the one that does.
+   On the right, the three screenshots fill the same grid area, one on top of another; the one showing is
+   the active step's. The frame is as wide as the column beside the text allows (the text keeps 280 px or
+   26 %), and no taller than 75 % of the screen or what is left under the heading. The rows above and below
+   the stepper share what the frame is taller by, so the stepper sits level with the frame's middle.
+   The stage pins where it sits centred in the viewport, but never lower than 12 % from the top, so on a
+   tall screen the frame stays up near the heading instead of floating in the middle. It starts at least
+   48 px more than that below the section's top (--how-in), so where it pins, the beam right above the
+   section, glow and all, is off screen: a link to #how lands there (motion.js). */
+.how-stage { display: contents; }
+.how-track { display: none; }
+@media screen and (min-width: 1024px) and (min-height: 560px) and (min-aspect-ratio: 1/1) {
+  .how.is-story {
+    --how-step: 28svh;
+    --how-gap: calc(40px + var(--fluid) * 24 / 720);        /* 58 at 1024 → 64 */
+    --how-pin: 32px;
+    --how-rail: 28px;
+    --how-num: 40px;
+    --how-hmax: min(75svh, 100svh - 2 * var(--how-pin) - var(--how-head, 104px) - var(--section-gap));
+    --how-stepper: calc(3 * var(--how-t, 64px) + var(--how-p, 128px));
+    /* 100cqw is the section's content width: these resolve where they are used, inside the section. */
+    --how-w: min(100cqw - max(280px, 26cqw) - var(--how-gap), var(--how-hmax) * 2000 / 1433);
+    --how-h: calc(var(--how-w) * 1433 / 2000);
+    --how-s: calc(var(--how-head, 104px) + var(--section-gap) + max(var(--how-h), var(--how-stepper)));
+    --how-top: clamp(var(--how-pin), (100svh - var(--how-s)) / 2, 12svh);
+    --how-in: max(var(--section-top), var(--how-top) + 48px);   /* the stage's top, from the section's */
+    position: relative;
+    display: block;
+    container-type: inline-size;
+  }
+  .how.is-story::after { content: ''; display: block; height: calc(3 * var(--how-step)); }
+  .how.is-story .how-stage {
+    position: sticky; top: var(--how-top);
+    margin-top: calc(var(--how-in) - var(--section-top));
+    display: flex; flex-direction: column; gap: var(--section-gap);
+  }
+  .how.is-story .how-track {
+    display: block; position: absolute; left: 0; width: 1px; height: 0; visibility: hidden; pointer-events: none;
+    top: calc(var(--how-in) + 50svh - var(--how-top));
+  }
+  /* Every slot runs on to the same end, well past the section, so its top is the only edge that crosses
+     the middle line while the section shows. A jump (Space, End, a fast fling) that carries a slot's top
+     past the line changes whether it crosses it, so the observer hears of it however far the jump. */
+  .how.is-story .how-track > div { position: absolute; left: 0; top: 0; width: 1px; bottom: calc(-3 * var(--how-step) - 150svh); }
+  .how.is-story .how-track > div:nth-child(2) { top: var(--how-step); }
+  .how.is-story .how-track > div:nth-child(3) { top: calc(2 * var(--how-step)); }
+
+  .how.is-story .grid-3 {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr) var(--how-w);
+    grid-template-rows: 1fr auto auto auto auto 1fr;
+    gap: 0 var(--how-gap);
+  }
+  .how.is-story .step, .how.is-story .step-text { display: contents; }
+  .how.is-story .step .shot {
+    grid-column: 2; grid-row: 1 / -1; align-self: center;
+    border-radius: 12px; box-shadow: var(--site-shot-shadow);
+    opacity: 0;
+  }
+  .how.is-story .step.is-active .shot { z-index: 1; opacity: 1; }
+
+  .how.is-story .step-title {
+    grid-column: 1; flex-direction: row; align-items: baseline; gap: 0;
+    padding: 20px 0 0 var(--how-rail);
+  }
+  .how.is-story .step:nth-child(1) .step-title { grid-row: 2; }
+  .how.is-story .step:nth-child(2) .step-title { grid-row: 3; }
+  .how.is-story .step:nth-child(3) .step-title { grid-row: 4; }
+  .how.is-story .step-num { flex: 0 0 var(--how-num); }
+  .how.is-story .step h3 { font-size: calc(30px + var(--fluid) * 10 / 720); line-height: 1.1; }   /* 38 at 1024 → 40 */
+  .how.is-story .step-text p {
+    grid-column: 1; grid-row: 5; align-self: start; max-width: calc(var(--how-rail) + var(--how-num) + 32em);
+    padding: 10px 0 12px calc(var(--how-rail) + var(--how-num));
+    font-size: 17px; text-wrap: pretty;
+    opacity: 0; pointer-events: none;
+    transform: translateY(calc((var(--how-k, 0) - 2) * var(--how-t, 64px)));
+  }
+  .how.is-story .step.is-active .step-text p { opacity: 1; pointer-events: auto; }
+  .how.is-story .step.is-active ~ .step .step-title { transform: translateY(var(--how-pa, var(--how-p, 128px))); }
+
+  /* The rail: a hairline down the left of the stepper, and on it an accent bar beside the active step's
+     title and paragraph. Both are absolutely placed in the stepper's rows, so they size nothing. The bar
+     is as long as the tallest paragraph needs, and scaled (--how-bar-s, from motion.js) to end with the
+     active one's last line. */
+  .how.is-story .grid-3::before, .how.is-story .grid-3::after {
+    content: ''; position: absolute; grid-column: 1; grid-row: 2 / 6; left: 0; top: 20px;
+  }
+  .how.is-story .grid-3::before { bottom: 0; width: 1px; background: var(--site-edge); }
+  .how.is-story .grid-3::after {
+    left: -0.5px; width: 2px; height: calc(var(--how-t, 64px) + var(--how-p, 128px) - 20px - 12px);
+    border-radius: 1px; background: var(--accent); box-shadow: 0 0 12px 1px var(--accent-glow);
+    transform-origin: top;
+    transform: translateY(calc(var(--how-k, 0) * var(--how-t, 64px))) scaleY(var(--how-bar-s, 1));
+  }
+}
+/* With motion, the titles away from the active one recede, and a change of step plays in three beats: the
+   old paragraph fades out, the titles, the paragraph slot and the accent bar slide to their places, and the
+   new paragraph fades in, so the paragraph and a passing title never cross while both show. The titles
+   recede only as far as keeps 4.5:1 (0.64 of the heading colour; light needs 0.62): their numbers, which
+   the accent passes 4.5:1 with only at full strength, turn grey instead (--site-muted, 5.8:1 dark, 5.1:1
+   light). The active one's accent number is a copy laid over it on the ground's colour (a counter, with
+   empty alt text so it is not read twice), which fades in, so the number changes colour by opacity alone;
+   a browser without alt text for content leaves the number grey. The shot of a step that becomes active
+   fades in over the one before. That one stays opaque underneath until the fade is done, so the frame
+   never dims on the way. With reduced motion the titles and numbers stay at full strength and everything
+   changes at once. */
+@media screen and (min-width: 1024px) and (min-height: 560px) and (min-aspect-ratio: 1/1) and (prefers-reduced-motion: no-preference) {
+  .how.is-story .grid-3 { counter-reset: how-num; }
+  .how.is-story .step h3 { opacity: 0.64; }
+  .how.is-story .step.is-active h3 { opacity: 1; }
+  .how.is-story .step-num { position: relative; color: var(--site-muted); counter-increment: how-num; }
+  .how.is-story .step-num::after {
+    content: counter(how-num, decimal-leading-zero) / "";
+    position: absolute; inset: 0;
+    background: var(--site-bg); color: var(--accent-text);
+    opacity: 0;
+  }
+  .how.is-story .step.is-active .step-num::after { opacity: 1; }
+  .how.is-story.is-live .step-title { transition: transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.12s; }
+  .how.is-story.is-live .step h3, .how.is-story.is-live .step-num::after { transition: opacity 0.4s ease; }
+  .how.is-story.is-live .step-text p { transition: opacity 0.15s ease, transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.12s; }
+  .how.is-story.is-live .step.is-active .step-text p { transition: opacity 0.35s ease 0.42s, transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.12s; }
+  .how.is-story.is-live .grid-3::after { transition: transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.12s; }
+  .how.is-story.is-live .step .shot { transition: opacity 0s linear 0.6s; }
+  .how.is-story.is-live .step.is-active .shot { transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
 }
 
 /* ---------- then the other Mac ---------- */
